@@ -29,13 +29,33 @@ class ClusterRegistration(BaseModel):
 
 
 class ClusterMetrics(BaseModel):
-    """Cluster metrics from agent"""
+    """Cluster metrics from agent — accepts both basic and comprehensive payloads."""
     cluster_name: str
     timestamp: str
-    nodes: Dict[str, Any]
-    namespaces: Dict[str, Any]
-    pods: Dict[str, Any]
-    resources: Dict[str, Any]
+    nodes: Dict[str, Any] = {}
+    namespaces: Dict[str, Any] = {}
+    pods: Dict[str, Any] = {}
+    resources: Dict[str, Any] = {}
+    # Extended domains sent by agent v2+
+    cluster_id: Optional[str] = None
+    collection_type: Optional[str] = None
+    agent_version: Optional[str] = None
+    provider: Optional[str] = None
+    region: Optional[str] = None
+    k8s_version: Optional[str] = None
+    environment: Optional[str] = None
+    workloads: Optional[Dict[str, Any]] = None
+    storage: Optional[Dict[str, Any]] = None
+    network: Optional[Dict[str, Any]] = None
+    security: Optional[Dict[str, Any]] = None
+    compliance: Optional[Dict[str, Any]] = None
+    observability: Optional[Dict[str, Any]] = None
+    finops: Optional[Dict[str, Any]] = None
+    platform: Optional[Dict[str, Any]] = None
+    teams: Optional[Dict[str, Any]] = None
+    hpa: Optional[Dict[str, Any]] = None
+    pdb: Optional[Dict[str, Any]] = None
+    service_accounts: Optional[List[Any]] = None
 
 
 class HeartbeatRequest(BaseModel):
@@ -43,6 +63,7 @@ class HeartbeatRequest(BaseModel):
     cluster_name: str
     timestamp: str
     status: str
+    cluster_id: Optional[str] = None
 
 
 def verify_token(authorization: str = Header(None)) -> str:
@@ -132,16 +153,34 @@ async def receive_metrics(
                 detail=f"Cluster {cluster_name} not registered"
             )
         
-        # Store metrics in database
+        # Build full metrics dict — base fields + all extended domains
         metrics_data = {
-            "cluster_name": cluster_name,
-            "timestamp": metrics.timestamp,
-            "nodes": metrics.nodes,
-            "namespaces": metrics.namespaces,
-            "pods": metrics.pods,
-            "resources": metrics.resources
+            "cluster_name":   cluster_name,
+            "timestamp":      metrics.timestamp,
+            "nodes":          metrics.nodes,
+            "namespaces":     metrics.namespaces,
+            "pods":           metrics.pods,
+            "resources":      metrics.resources,
+            # Extended v2 fields (None values silently dropped by insert)
+            "workloads":      metrics.workloads,
+            "storage":        metrics.storage,
+            "network":        metrics.network,
+            "security":       metrics.security,
+            "compliance":     metrics.compliance,
+            "observability":  metrics.observability,
+            "finops":         metrics.finops,
+            "platform":       metrics.platform,
+            "teams":          metrics.teams,
+            "hpa":            metrics.hpa,
+            "pdb":            metrics.pdb,
+            "service_accounts": metrics.service_accounts,
+            "agent_version":  metrics.agent_version,
+            "collection_type": metrics.collection_type,
+            "k8s_version":    metrics.k8s_version,
+            "provider":       metrics.provider,
+            "region":         metrics.region,
         }
-        
+
         success = db_manager.insert_metrics(metrics_data)
         
         if not success:

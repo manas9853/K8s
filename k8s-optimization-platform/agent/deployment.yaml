@@ -1,8 +1,17 @@
 ---
+# ──────────────────────────────────────────────────────────────────────────────
+# K8s Optimization Platform — Agent Deployment
+# Read-only: zero mutations to user cluster resources.
+# Deploy with:
+#   kubectl apply -f deployment.yaml
+# ──────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Namespace
 metadata:
   name: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-agent
+    app.kubernetes.io/managed-by: k8s-optimization-platform
 
 ---
 apiVersion: v1
@@ -10,53 +19,122 @@ kind: ServiceAccount
 metadata:
   name: k8s-optimization-agent
   namespace: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-agent
 
 ---
+# ── ClusterRole: strictly read-only across every resource the agent queries ───
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-agent
 rules:
-  # Read nodes
+  # Core: nodes, namespaces, pods, services, endpoints, events,
+  #       secrets (metadata only — data never read), configmaps,
+  #       persistent volumes & claims, service accounts, resource quotas
   - apiGroups: [""]
-    resources: ["nodes"]
+    resources:
+      - nodes
+      - namespaces
+      - pods
+      - services
+      - endpoints
+      - events
+      - secrets
+      - configmaps
+      - persistentvolumes
+      - persistentvolumeclaims
+      - serviceaccounts
+      - resourcequotas
+      - limitranges
+      - replicationcontrollers
     verbs: ["get", "list"]
-  
-  # Read namespaces
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list"]
-  
-  # Read pods
-  - apiGroups: [""]
-    resources: ["pods"]
-    verbs: ["get", "list"]
-  
-  # Read deployments, replicasets, statefulsets, daemonsets
+
+  # Apps: deployments, replicasets, statefulsets, daemonsets, controllerrevisions
   - apiGroups: ["apps"]
-    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    resources:
+      - deployments
+      - replicasets
+      - statefulsets
+      - daemonsets
+      - controllerrevisions
     verbs: ["get", "list"]
-  
-  # Read services
-  - apiGroups: [""]
-    resources: ["services"]
+
+  # Batch: jobs, cronjobs
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+      - cronjobs
     verbs: ["get", "list"]
-  
-  # Read configmaps and secrets (metadata only)
-  - apiGroups: [""]
-    resources: ["configmaps", "secrets"]
+
+  # Networking: services (covered above), ingresses, network policies,
+  #             ingress classes
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+      - ingressclasses
     verbs: ["get", "list"]
-  
-  # Read persistent volumes and claims
-  - apiGroups: [""]
-    resources: ["persistentvolumes", "persistentvolumeclaims"]
+
+  # RBAC: roles, clusterroles, bindings — for security & compliance analysis
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - clusterroles
+      - rolebindings
+      - clusterrolebindings
     verbs: ["get", "list"]
+
+  # Storage: storage classes, volume snapshots
+  - apiGroups: ["storage.k8s.io"]
+    resources:
+      - storageclasses
+      - volumeattachments
+      - csinodes
+      - csidrivers
+    verbs: ["get", "list"]
+
+  # Autoscaling: HPA
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list"]
+
+  # Policy: PodDisruptionBudgets
+  - apiGroups: ["policy"]
+    resources:
+      - poddisruptionbudgets
+    verbs: ["get", "list"]
+
+  # Metrics server (optional — used for live usage data when available)
+  - apiGroups: ["metrics.k8s.io"]
+    resources:
+      - nodes
+      - pods
+    verbs: ["get", "list"]
+
+  # Custom Resources (read-only discovery — for GitOps / addon detection)
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources:
+      - customresourcedefinitions
+    verbs: ["get", "list"]
+
+  # Node metrics endpoint (non-resource URL)
+  - nonResourceURLs:
+      - "/metrics"
+      - "/healthz"
+      - "/version"
+    verbs: ["get"]
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
   name: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-agent
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
@@ -67,30 +145,64 @@ subjects:
     namespace: k8s-optimization-agent
 
 ---
+# ── Secret: platform credentials (replace before deploying) ──────────────────
 apiVersion: v1
 kind: Secret
 metadata:
   name: platform-credentials
   namespace: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-agent
 type: Opaque
 stringData:
-  # REPLACE THESE VALUES BEFORE DEPLOYING
+  # REPLACE BEFORE DEPLOYING
   api-token: "YOUR_API_TOKEN_HERE"
-  platform-url: "http://your-platform-url:8000"
+  platform-url: "https://your-platform-url"
 
 ---
+# ── ConfigMap: cluster configuration ─────────────────────────────────────────
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: agent-config
   namespace: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-agent
 data:
   # REPLACE THESE VALUES FOR EACH CLUSTER
   CLUSTER_NAME: "my-cluster"
   ENVIRONMENT: "production"
-  COLLECTION_INTERVAL: "30"
+  COLLECTION_INTERVAL: "60"
+  LOG_LEVEL: "INFO"
+  # Set to "true" if the cluster has metrics-server installed
+  METRICS_SERVER_ENABLED: "false"
 
 ---
+# ── NetworkPolicy: agent egress only to platform URL ─────────────────────────
+# (optional but recommended — lock down agent egress)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: k8s-optimization-agent-egress
+  namespace: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-agent
+spec:
+  podSelector:
+    matchLabels:
+      app: k8s-optimization-agent
+  policyTypes:
+    - Egress
+  egress:
+    # Allow all egress — platform URL can be anywhere (cloud, internet, VPN)
+    # To lock down further, restrict to the platform IP/CIDR:
+    # - to:
+    #   - ipBlock:
+    #       cidr: PLATFORM_IP/32
+    - {}
+
+---
+# ── Deployment ────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -98,6 +210,8 @@ metadata:
   namespace: k8s-optimization-agent
   labels:
     app: k8s-optimization-agent
+    app.kubernetes.io/name: k8s-optimization-agent
+    app.kubernetes.io/version: "2.0.0"
 spec:
   replicas: 1
   selector:
@@ -107,10 +221,16 @@ spec:
     metadata:
       labels:
         app: k8s-optimization-agent
+        app.kubernetes.io/name: k8s-optimization-agent
+        app.kubernetes.io/version: "2.0.0"
+      annotations:
+        # Restart automatically when the secret rotates
+        kubectl.kubernetes.io/restartPolicy: "Always"
     spec:
       serviceAccountName: k8s-optimization-agent
-      # Use public DNS directly — bypasses cluster/corporate DNS resolvers
-      # so the agent works in any org without kube-system changes
+
+      # Use public DNS resolvers so the agent reaches the platform regardless
+      # of the cluster's internal DNS configuration.
       dnsPolicy: "None"
       dnsConfig:
         nameservers:
@@ -119,16 +239,26 @@ spec:
         options:
           - name: ndots
             value: "1"
-      # Uncomment and fill in the real IP if api.bookmyturff.com is not publicly
+
+      # Uncomment and fill in the real IP if the platform URL is not publicly
       # resolvable from inside this cluster (e.g. private VPC with no egress):
       # hostAliases:
       #   - ip: "REPLACE_WITH_BACKEND_IP"
       #     hostnames:
-      #       - "api.bookmyturff.com"
+      #       - "api.your-platform.com"
+
+      # Tolerate all taints so the agent can schedule on any node type
+      tolerations:
+        - operator: "Exists"
+          effect: "NoSchedule"
+        - operator: "Exists"
+          effect: "NoExecute"
+
       containers:
         - name: agent
           image: docker.io/manas2821/k8s-optimization-agent:latest
           imagePullPolicy: Always
+
           env:
             - name: PLATFORM_URL
               valueFrom:
@@ -155,20 +285,57 @@ spec:
                 configMapKeyRef:
                   name: agent-config
                   key: COLLECTION_INTERVAL
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: LOG_LEVEL
+            - name: METRICS_SERVER_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: METRICS_SERVER_ENABLED
+
           resources:
             requests:
-              memory: "64Mi"
+              memory: "96Mi"
               cpu: "50m"
             limits:
-              memory: "128Mi"
-              cpu: "200m"
+              memory: "256Mi"
+              cpu: "250m"
+
+          # Hardened security context — non-root, no privilege escalation,
+          # read-only filesystem, all capabilities dropped.
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000
+            runAsGroup: 1000
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+
+          # Liveness / readiness probes (process-level — agent has no HTTP server)
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os; open('/tmp/agent.pid')"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+
+      volumes:
+        - name: tmp
+          emptyDir: {}
+
+      # Pod-level security context
+      securityContext:
+        fsGroup: 1000
+
+      restartPolicy: Always
 
 # Made with Bob

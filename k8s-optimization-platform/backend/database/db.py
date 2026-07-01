@@ -97,16 +97,59 @@ class DatabaseManager:
                 """)
                 cur.execute("""
                     CREATE TABLE IF NOT EXISTS agent_metrics (
-                        id            BIGSERIAL PRIMARY KEY,
-                        cluster_name  TEXT NOT NULL REFERENCES agent_clusters(cluster_name) ON DELETE CASCADE,
-                        timestamp     TIMESTAMPTZ NOT NULL,
-                        nodes         JSONB DEFAULT '{}',
-                        namespaces    JSONB DEFAULT '{}',
-                        pods          JSONB DEFAULT '{}',
-                        resources     JSONB DEFAULT '{}',
-                        received_at   TIMESTAMPTZ DEFAULT NOW()
+                        id               BIGSERIAL PRIMARY KEY,
+                        cluster_name     TEXT NOT NULL REFERENCES agent_clusters(cluster_name) ON DELETE CASCADE,
+                        timestamp        TIMESTAMPTZ NOT NULL,
+                        nodes            JSONB DEFAULT '{}',
+                        namespaces       JSONB DEFAULT '{}',
+                        pods             JSONB DEFAULT '{}',
+                        resources        JSONB DEFAULT '{}',
+                        workloads        JSONB DEFAULT '{}',
+                        storage          JSONB DEFAULT '{}',
+                        network          JSONB DEFAULT '{}',
+                        security         JSONB DEFAULT '{}',
+                        compliance       JSONB DEFAULT '{}',
+                        observability    JSONB DEFAULT '{}',
+                        finops           JSONB DEFAULT '{}',
+                        platform         JSONB DEFAULT '{}',
+                        teams            JSONB DEFAULT '{}',
+                        hpa              JSONB DEFAULT '{}',
+                        pdb              JSONB DEFAULT '{}',
+                        service_accounts JSONB DEFAULT '[]',
+                        agent_version    TEXT,
+                        collection_type  TEXT,
+                        k8s_version      TEXT,
+                        provider         TEXT,
+                        region           TEXT,
+                        received_at      TIMESTAMPTZ DEFAULT NOW()
                     )
                 """)
+                # Add extended columns to existing tables (idempotent migration)
+                for col, typ in [
+                    ("workloads",        "JSONB DEFAULT '{}'"),
+                    ("storage",          "JSONB DEFAULT '{}'"),
+                    ("network",          "JSONB DEFAULT '{}'"),
+                    ("security",         "JSONB DEFAULT '{}'"),
+                    ("compliance",       "JSONB DEFAULT '{}'"),
+                    ("observability",    "JSONB DEFAULT '{}'"),
+                    ("finops",           "JSONB DEFAULT '{}'"),
+                    ("platform",         "JSONB DEFAULT '{}'"),
+                    ("teams",            "JSONB DEFAULT '{}'"),
+                    ("hpa",              "JSONB DEFAULT '{}'"),
+                    ("pdb",              "JSONB DEFAULT '{}'"),
+                    ("service_accounts", "JSONB DEFAULT '[]'"),
+                    ("agent_version",    "TEXT"),
+                    ("collection_type",  "TEXT"),
+                    ("k8s_version",      "TEXT"),
+                    ("provider",         "TEXT"),
+                    ("region",           "TEXT"),
+                ]:
+                    try:
+                        cur.execute(
+                            f"ALTER TABLE agent_metrics ADD COLUMN IF NOT EXISTS {col} {typ}"
+                        )
+                    except Exception:
+                        pass  # column already exists in older Postgres versions
                 cur.execute("""
                     CREATE INDEX IF NOT EXISTS idx_agent_metrics_cluster_ts
                     ON agent_metrics(cluster_name, timestamp DESC)
@@ -256,16 +299,49 @@ class DatabaseManager:
         try:
             with conn.cursor() as cur:
                 cur.execute("""
-                    INSERT INTO agent_metrics
-                        (cluster_name, timestamp, nodes, namespaces, pods, resources, received_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO agent_metrics (
+                        cluster_name, timestamp,
+                        nodes, namespaces, pods, resources,
+                        workloads, storage, network, security,
+                        compliance, observability, finops, platform,
+                        teams, hpa, pdb, service_accounts,
+                        agent_version, collection_type, k8s_version,
+                        provider, region,
+                        received_at
+                    ) VALUES (
+                        %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s, %s,
+                        %s, %s, %s,
+                        %s, %s,
+                        %s
+                    )
                 """, (
                     metrics_data['cluster_name'],
                     metrics_data['timestamp'],
-                    json.dumps(metrics_data.get('nodes', {})),
-                    json.dumps(metrics_data.get('namespaces', {})),
-                    json.dumps(metrics_data.get('pods', {})),
-                    json.dumps(metrics_data.get('resources', {})),
+                    json.dumps(metrics_data.get('nodes') or {}),
+                    json.dumps(metrics_data.get('namespaces') or {}),
+                    json.dumps(metrics_data.get('pods') or {}),
+                    json.dumps(metrics_data.get('resources') or {}),
+                    json.dumps(metrics_data.get('workloads') or {}),
+                    json.dumps(metrics_data.get('storage') or {}),
+                    json.dumps(metrics_data.get('network') or {}),
+                    json.dumps(metrics_data.get('security') or {}),
+                    json.dumps(metrics_data.get('compliance') or {}),
+                    json.dumps(metrics_data.get('observability') or {}),
+                    json.dumps(metrics_data.get('finops') or {}),
+                    json.dumps(metrics_data.get('platform') or {}),
+                    json.dumps(metrics_data.get('teams') or {}),
+                    json.dumps(metrics_data.get('hpa') or {}),
+                    json.dumps(metrics_data.get('pdb') or {}),
+                    json.dumps(metrics_data.get('service_accounts') or []),
+                    metrics_data.get('agent_version'),
+                    metrics_data.get('collection_type'),
+                    metrics_data.get('k8s_version'),
+                    metrics_data.get('provider'),
+                    metrics_data.get('region'),
                     datetime.utcnow(),
                 ))
             conn.commit()
@@ -295,9 +371,18 @@ class DatabaseManager:
                 if cached:
                     data = json.loads(cached)
                     # Ensure nested fields are dicts (may be double-encoded)
-                    for field in ('nodes', 'namespaces', 'pods', 'resources'):
+                    _all_json_fields = (
+                        'nodes', 'namespaces', 'pods', 'resources',
+                        'workloads', 'storage', 'network', 'security',
+                        'compliance', 'observability', 'finops', 'platform',
+                        'teams', 'hpa', 'pdb', 'service_accounts',
+                    )
+                    for field in _all_json_fields:
                         if isinstance(data.get(field), str):
-                            data[field] = json.loads(data[field])
+                            try:
+                                data[field] = json.loads(data[field])
+                            except Exception:
+                                pass
                     return data
             except Exception as e:
                 logger.warning(f"Redis get failed, falling back to DB: {e}")
@@ -316,9 +401,18 @@ class DatabaseManager:
                 if not row:
                     return None
                 data = dict(row)
-                for field in ('nodes', 'namespaces', 'pods', 'resources'):
+                _all_json_fields = (
+                    'nodes', 'namespaces', 'pods', 'resources',
+                    'workloads', 'storage', 'network', 'security',
+                    'compliance', 'observability', 'finops', 'platform',
+                    'teams', 'hpa', 'pdb', 'service_accounts',
+                )
+                for field in _all_json_fields:
                     if isinstance(data.get(field), str):
-                        data[field] = json.loads(data[field])
+                        try:
+                            data[field] = json.loads(data[field])
+                        except Exception:
+                            pass
                 # Back-fill Redis
                 if r:
                     try:
