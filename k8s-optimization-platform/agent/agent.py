@@ -1443,7 +1443,7 @@ class ClusterAgent:
             "region":          payload.get("region",   self._region),
             "k8s_version":     payload.get("k8s_version", self._k8s_version),
         }
-        # Try both canonical and legacy route
+        # Try both canonical and legacy route; re-register on 404 and retry once
         for path in ["/api/agents/metrics", "/api/agent/metrics"]:
             try:
                 resp = self._session.post(
@@ -1455,6 +1455,18 @@ class ClusterAgent:
                 if resp.status_code == 200:
                     logger.info("Metrics sent via %s", path)
                     return True
+                if resp.status_code == 404 and "not registered" in resp.text.lower():
+                    logger.warning("Cluster not registered — re-registering and retrying %s", path)
+                    self._register()
+                    resp = self._session.post(
+                        self.platform_url + path,
+                        json=compact,
+                        timeout=60,
+                        verify=False,
+                    )
+                    if resp.status_code == 200:
+                        logger.info("Metrics sent via %s (after re-register)", path)
+                        return True
                 logger.warning("POST %s → %d: %.200s", path, resp.status_code, resp.text)
             except Exception as exc:
                 logger.error("send error (%s): %s", path, exc)

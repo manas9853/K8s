@@ -1,6 +1,6 @@
 """
 Workloads API - Kubernetes workload management endpoints
-Operations > Workloads section with real K8s data
+Reads workload data from agent_metrics stored in Supabase/Postgres (db_manager).
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict, Any
@@ -8,24 +8,17 @@ from pydantic import BaseModel
 from datetime import datetime
 import logging
 
-# Import Kubernetes client
-try:
-    from services.k8s_client import k8s_client
-    K8S_AVAILABLE = k8s_client is not None and k8s_client.is_connected()
-except Exception as e:
-    K8S_AVAILABLE = False
-    k8s_client = None
-    logging.warning(f"Kubernetes client not available: {e}")
-
-from utils.dummy_data import get_dummy_data
+from database.db import db_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# Models
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
 class DeploymentInfo(BaseModel):
-    """Deployment information model"""
     name: str
     namespace: str
     replicas_desired: int
@@ -39,11 +32,10 @@ class DeploymentInfo(BaseModel):
     selector: Dict[str, str]
     containers: List[Dict[str, Any]]
     conditions: List[Dict[str, Any]]
-    created_at: datetime
+    created_at: str
 
 
 class StatefulSetInfo(BaseModel):
-    """StatefulSet information model"""
     name: str
     namespace: str
     replicas_desired: int
@@ -55,11 +47,10 @@ class StatefulSetInfo(BaseModel):
     selector: Dict[str, str]
     containers: List[Dict[str, Any]]
     volume_claim_templates: List[Dict[str, Any]]
-    created_at: datetime
+    created_at: str
 
 
 class DaemonSetInfo(BaseModel):
-    """DaemonSet information model"""
     name: str
     namespace: str
     desired_number_scheduled: int
@@ -71,11 +62,10 @@ class DaemonSetInfo(BaseModel):
     labels: Dict[str, str]
     selector: Dict[str, str]
     containers: List[Dict[str, Any]]
-    created_at: datetime
+    created_at: str
 
 
 class JobInfo(BaseModel):
-    """Job information model"""
     name: str
     namespace: str
     completions: Optional[int]
@@ -83,405 +73,242 @@ class JobInfo(BaseModel):
     active: int
     succeeded: int
     failed: int
-    start_time: Optional[datetime]
-    completion_time: Optional[datetime]
+    start_time: Optional[str]
+    completion_time: Optional[str]
     duration: Optional[str]
     age: str
     labels: Dict[str, str]
     selector: Dict[str, str]
     containers: List[Dict[str, Any]]
     conditions: List[Dict[str, Any]]
-    created_at: datetime
+    created_at: str
 
 
 class CronJobInfo(BaseModel):
-    """CronJob information model"""
     name: str
     namespace: str
     schedule: str
     suspend: bool
     active: int
-    last_schedule_time: Optional[datetime]
-    last_successful_time: Optional[datetime]
+    last_schedule_time: Optional[str]
+    last_successful_time: Optional[str]
     age: str
     labels: Dict[str, str]
     job_template: Dict[str, Any]
-    created_at: datetime
+    created_at: str
 
 
-# Helper functions
-def _calculate_age(created_at: datetime) -> str:
-    """Calculate age from creation timestamp"""
-    if not created_at:
-        return "Unknown"
-    
-    now = datetime.now(created_at.tzinfo)
-    delta = now - created_at
-    
-    days = delta.days
-    hours = delta.seconds // 3600
-    minutes = (delta.seconds % 3600) // 60
-    
-    if days > 0:
-        return f"{days}d"
-    elif hours > 0:
-        return f"{hours}h"
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _get_workloads_domain(cluster_id: Optional[str] = None) -> dict:
+    """Return the workloads JSONB domain from the latest agent_metrics row."""
+    if cluster_id:
+        cluster_name = cluster_id
     else:
-        return f"{minutes}m"
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return {}
+        cluster_name = clusters[0]["cluster_name"]
+
+    metrics = db_manager.get_latest_metrics(cluster_name)
+    if not metrics:
+        return {}
+
+    wl = metrics.get("workloads") or {}
+    if isinstance(wl, str):
+        import json
+        wl = json.loads(wl)
+    return wl
 
 
-def _extract_containers(pod_spec) -> List[Dict[str, Any]]:
-    """Extract container information from pod spec"""
-    containers = []
-    for container in pod_spec.containers:
-        container_info = {
-            "name": container.name,
-            "image": container.image,
-            "ports": [{"containerPort": p.container_port, "protocol": p.protocol} 
-                     for p in (container.ports or [])],
-            "resources": {}
-        }
-        
-        if container.resources:
-            if container.resources.requests:
-                container_info["resources"]["requests"] = dict(container.resources.requests)
-            if container.resources.limits:
-                container_info["resources"]["limits"] = dict(container.resources.limits)
-        
-        containers.append(container_info)
-    
-    return containers
-
-
+# ---------------------------------------------------------------------------
 # Endpoints
+# ---------------------------------------------------------------------------
 
 @router.get("/deployments", response_model=List[DeploymentInfo])
 async def list_deployments(
-    namespace: Optional[str] = Query(None, description="Filter by namespace"),
-    label_selector: Optional[str] = Query(None, description="Label selector"),
-    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
+    namespace: Optional[str] = Query(None),
+    label_selector: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """
-    List all Deployments from the real Kubernetes cluster.
-    Falls back to generated data when Kubernetes is not connected.
-    """
-    if not K8S_AVAILABLE or k8s_client is None:
-        return get_dummy_data("deployments", cluster_id)
-    
+    """List Deployments from agent_metrics workloads domain."""
     try:
-        apps_v1 = k8s_client.get_apps_api()
-        
-        # Get deployments
-        if namespace:
-            deployments = apps_v1.list_namespaced_deployment(
-                namespace=namespace,
-                label_selector=label_selector
-            )
-        else:
-            deployments = apps_v1.list_deployment_for_all_namespaces(
-                label_selector=label_selector
-            )
-        
+        wl = _get_workloads_domain(cluster_id)
+        items = (wl.get("deployments") or {}).get("items", [])
+
         result = []
-        for deploy in deployments.items:
-            age = _calculate_age(deploy.metadata.creation_timestamp)
-            
-            # Extract conditions
-            conditions = []
-            if deploy.status.conditions:
-                for cond in deploy.status.conditions:
-                    conditions.append({
-                        "type": cond.type,
-                        "status": cond.status,
-                        "reason": cond.reason,
-                        "message": cond.message,
-                        "last_update_time": cond.last_update_time
-                    })
-            
-            # Extract containers
-            containers = _extract_containers(deploy.spec.template.spec)
-            
-            deployment_info = DeploymentInfo(
-                name=deploy.metadata.name,
-                namespace=deploy.metadata.namespace,
-                replicas_desired=deploy.spec.replicas or 0,
-                replicas_current=deploy.status.replicas or 0,
-                replicas_ready=deploy.status.ready_replicas or 0,
-                replicas_available=deploy.status.available_replicas or 0,
-                replicas_unavailable=deploy.status.unavailable_replicas or 0,
-                strategy=deploy.spec.strategy.type if deploy.spec.strategy else "RollingUpdate",
-                age=age,
-                labels=deploy.metadata.labels or {},
-                selector=deploy.spec.selector.match_labels or {},
-                containers=containers,
-                conditions=conditions,
-                created_at=deploy.metadata.creation_timestamp
-            )
-            result.append(deployment_info)
-        
+        for d in items:
+            if namespace and d.get("namespace") != namespace:
+                continue
+            result.append(DeploymentInfo(
+                name=d.get("name", ""),
+                namespace=d.get("namespace", ""),
+                replicas_desired=d.get("replicas_desired", 0),
+                replicas_current=d.get("replicas_current", 0),
+                replicas_ready=d.get("replicas_ready", 0),
+                replicas_available=d.get("replicas_available", 0),
+                replicas_unavailable=d.get("replicas_unavailable", 0),
+                strategy=d.get("strategy", "RollingUpdate"),
+                age=d.get("age", ""),
+                labels=d.get("labels", {}),
+                selector=d.get("selector", {}),
+                containers=d.get("containers", []),
+                conditions=d.get("conditions", []),
+                created_at=d.get("created_at", ""),
+            ))
         logger.info(f"Found {len(result)} deployments")
         return result
-        
     except Exception as e:
         logger.error(f"Error fetching deployments: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching deployments: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/statefulsets", response_model=List[StatefulSetInfo])
 async def list_statefulsets(
-    namespace: Optional[str] = Query(None, description="Filter by namespace"),
-    label_selector: Optional[str] = Query(None, description="Label selector"),
-    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
+    namespace: Optional[str] = Query(None),
+    label_selector: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """List all StatefulSets from the real Kubernetes cluster."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        return get_dummy_data("statefulsets", cluster_id)
-    
+    """List StatefulSets from agent_metrics workloads domain."""
     try:
-        apps_v1 = k8s_client.get_apps_api()
-        
-        # Get statefulsets
-        if namespace:
-            statefulsets = apps_v1.list_namespaced_stateful_set(
-                namespace=namespace,
-                label_selector=label_selector
-            )
-        else:
-            statefulsets = apps_v1.list_stateful_set_for_all_namespaces(
-                label_selector=label_selector
-            )
-        
+        wl = _get_workloads_domain(cluster_id)
+        items = (wl.get("statefulsets") or {}).get("items", [])
+
         result = []
-        for sts in statefulsets.items:
-            age = _calculate_age(sts.metadata.creation_timestamp)
-            
-            # Extract containers
-            containers = _extract_containers(sts.spec.template.spec)
-            
-            # Extract volume claim templates
-            volume_claims = []
-            if sts.spec.volume_claim_templates:
-                for vct in sts.spec.volume_claim_templates:
-                    volume_claims.append({
-                        "name": vct.metadata.name,
-                        "storage_class": vct.spec.storage_class_name,
-                        "access_modes": vct.spec.access_modes,
-                        "storage": vct.spec.resources.requests.get("storage") if vct.spec.resources and vct.spec.resources.requests else None
-                    })
-            
-            statefulset_info = StatefulSetInfo(
-                name=sts.metadata.name,
-                namespace=sts.metadata.namespace,
-                replicas_desired=sts.spec.replicas or 0,
-                replicas_current=sts.status.replicas or 0,
-                replicas_ready=sts.status.ready_replicas or 0,
-                service_name=sts.spec.service_name,
-                age=age,
-                labels=sts.metadata.labels or {},
-                selector=sts.spec.selector.match_labels or {},
-                containers=containers,
-                volume_claim_templates=volume_claims,
-                created_at=sts.metadata.creation_timestamp
-            )
-            result.append(statefulset_info)
-        
+        for s in items:
+            if namespace and s.get("namespace") != namespace:
+                continue
+            result.append(StatefulSetInfo(
+                name=s.get("name", ""),
+                namespace=s.get("namespace", ""),
+                replicas_desired=s.get("replicas_desired", 0),
+                replicas_current=s.get("replicas_current", 0),
+                replicas_ready=s.get("replicas_ready", 0),
+                service_name=s.get("service_name", ""),
+                age=s.get("age", ""),
+                labels=s.get("labels", {}),
+                selector=s.get("selector", {}),
+                containers=s.get("containers", []),
+                volume_claim_templates=s.get("volume_claim_templates", []),
+                created_at=s.get("created_at", ""),
+            ))
         logger.info(f"Found {len(result)} statefulsets")
         return result
-        
     except Exception as e:
         logger.error(f"Error fetching statefulsets: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching statefulsets: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/daemonsets", response_model=List[DaemonSetInfo])
 async def list_daemonsets(
-    namespace: Optional[str] = Query(None, description="Filter by namespace"),
-    label_selector: Optional[str] = Query(None, description="Label selector"),
-    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
+    namespace: Optional[str] = Query(None),
+    label_selector: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """List all DaemonSets from the real Kubernetes cluster."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        return get_dummy_data("daemonsets", cluster_id)
-    
+    """List DaemonSets from agent_metrics workloads domain."""
     try:
-        apps_v1 = k8s_client.get_apps_api()
-        
-        # Get daemonsets
-        if namespace:
-            daemonsets = apps_v1.list_namespaced_daemon_set(
-                namespace=namespace,
-                label_selector=label_selector
-            )
-        else:
-            daemonsets = apps_v1.list_daemon_set_for_all_namespaces(
-                label_selector=label_selector
-            )
-        
+        wl = _get_workloads_domain(cluster_id)
+        items = (wl.get("daemonsets") or {}).get("items", [])
+
         result = []
-        for ds in daemonsets.items:
-            age = _calculate_age(ds.metadata.creation_timestamp)
-            
-            # Extract containers
-            containers = _extract_containers(ds.spec.template.spec)
-            
-            daemonset_info = DaemonSetInfo(
-                name=ds.metadata.name,
-                namespace=ds.metadata.namespace,
-                desired_number_scheduled=ds.status.desired_number_scheduled or 0,
-                current_number_scheduled=ds.status.current_number_scheduled or 0,
-                number_ready=ds.status.number_ready or 0,
-                number_available=ds.status.number_available or 0,
-                number_misscheduled=ds.status.number_misscheduled or 0,
-                age=age,
-                labels=ds.metadata.labels or {},
-                selector=ds.spec.selector.match_labels or {},
-                containers=containers,
-                created_at=ds.metadata.creation_timestamp
-            )
-            result.append(daemonset_info)
-        
+        for ds in items:
+            if namespace and ds.get("namespace") != namespace:
+                continue
+            result.append(DaemonSetInfo(
+                name=ds.get("name", ""),
+                namespace=ds.get("namespace", ""),
+                desired_number_scheduled=ds.get("desired_number_scheduled", 0),
+                current_number_scheduled=ds.get("current_number_scheduled", 0),
+                number_ready=ds.get("number_ready", 0),
+                number_available=ds.get("number_available", 0),
+                number_misscheduled=ds.get("number_misscheduled", 0),
+                age=ds.get("age", ""),
+                labels=ds.get("labels", {}),
+                selector=ds.get("selector", {}),
+                containers=ds.get("containers", []),
+                created_at=ds.get("created_at", ""),
+            ))
         logger.info(f"Found {len(result)} daemonsets")
         return result
-        
     except Exception as e:
         logger.error(f"Error fetching daemonsets: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching daemonsets: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/jobs", response_model=List[JobInfo])
 async def list_jobs(
-    namespace: Optional[str] = Query(None, description="Filter by namespace"),
-    label_selector: Optional[str] = Query(None, description="Label selector"),
-    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
+    namespace: Optional[str] = Query(None),
+    label_selector: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """List all Jobs from the real Kubernetes cluster."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        return get_dummy_data("jobs", cluster_id)
-    
+    """List Jobs from agent_metrics workloads domain."""
     try:
-        batch_v1 = k8s_client.get_batch_api()
-        
-        # Get jobs
-        if namespace:
-            jobs = batch_v1.list_namespaced_job(
-                namespace=namespace,
-                label_selector=label_selector
-            )
-        else:
-            jobs = batch_v1.list_job_for_all_namespaces(
-                label_selector=label_selector
-            )
-        
+        wl = _get_workloads_domain(cluster_id)
+        items = (wl.get("jobs") or {}).get("items", [])
+
         result = []
-        for job in jobs.items:
-            age = _calculate_age(job.metadata.creation_timestamp)
-            
-            # Calculate duration
-            duration = None
-            if job.status.start_time and job.status.completion_time:
-                delta = job.status.completion_time - job.status.start_time
-                duration = f"{delta.seconds}s"
-            
-            # Extract conditions
-            conditions = []
-            if job.status.conditions:
-                for cond in job.status.conditions:
-                    conditions.append({
-                        "type": cond.type,
-                        "status": cond.status,
-                        "reason": cond.reason,
-                        "message": cond.message,
-                        "last_transition_time": cond.last_transition_time
-                    })
-            
-            # Extract containers
-            containers = _extract_containers(job.spec.template.spec)
-            
-            job_info = JobInfo(
-                name=job.metadata.name,
-                namespace=job.metadata.namespace,
-                completions=job.spec.completions,
-                parallelism=job.spec.parallelism,
-                active=job.status.active or 0,
-                succeeded=job.status.succeeded or 0,
-                failed=job.status.failed or 0,
-                start_time=job.status.start_time,
-                completion_time=job.status.completion_time,
-                duration=duration,
-                age=age,
-                labels=job.metadata.labels or {},
-                selector=job.spec.selector.match_labels or {} if job.spec.selector else {},
-                containers=containers,
-                conditions=conditions,
-                created_at=job.metadata.creation_timestamp
-            )
-            result.append(job_info)
-        
+        for j in items:
+            if namespace and j.get("namespace") != namespace:
+                continue
+            result.append(JobInfo(
+                name=j.get("name", ""),
+                namespace=j.get("namespace", ""),
+                completions=j.get("completions"),
+                parallelism=j.get("parallelism"),
+                active=j.get("active", 0),
+                succeeded=j.get("succeeded", 0),
+                failed=j.get("failed", 0),
+                start_time=j.get("start_time"),
+                completion_time=j.get("completion_time"),
+                duration=j.get("duration"),
+                age=j.get("age", ""),
+                labels=j.get("labels", {}),
+                selector=j.get("selector", {}),
+                containers=j.get("containers", []),
+                conditions=j.get("conditions", []),
+                created_at=j.get("created_at", ""),
+            ))
         logger.info(f"Found {len(result)} jobs")
         return result
-        
     except Exception as e:
         logger.error(f"Error fetching jobs: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching jobs: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/cronjobs", response_model=List[CronJobInfo])
 async def list_cronjobs(
-    namespace: Optional[str] = Query(None, description="Filter by namespace"),
-    label_selector: Optional[str] = Query(None, description="Label selector"),
-    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID"),
+    namespace: Optional[str] = Query(None),
+    label_selector: Optional[str] = Query(None),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """List all CronJobs from the real Kubernetes cluster."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        return get_dummy_data("cronjobs", cluster_id)
-    
+    """List CronJobs from agent_metrics workloads domain."""
     try:
-        batch_v1 = k8s_client.get_batch_api()
-        
-        # Get cronjobs
-        if namespace:
-            cronjobs = batch_v1.list_namespaced_cron_job(
-                namespace=namespace,
-                label_selector=label_selector
-            )
-        else:
-            cronjobs = batch_v1.list_cron_job_for_all_namespaces(
-                label_selector=label_selector
-            )
-        
+        wl = _get_workloads_domain(cluster_id)
+        items = (wl.get("cronjobs") or {}).get("items", [])
+
         result = []
-        for cj in cronjobs.items:
-            age = _calculate_age(cj.metadata.creation_timestamp)
-            
-            # Extract job template info
-            job_template = {
-                "completions": cj.spec.job_template.spec.completions,
-                "parallelism": cj.spec.job_template.spec.parallelism,
-                "backoff_limit": cj.spec.job_template.spec.backoff_limit,
-                "containers": _extract_containers(cj.spec.job_template.spec.template.spec)
-            }
-            
-            cronjob_info = CronJobInfo(
-                name=cj.metadata.name,
-                namespace=cj.metadata.namespace,
-                schedule=cj.spec.schedule,
-                suspend=cj.spec.suspend or False,
-                active=len(cj.status.active) if cj.status.active else 0,
-                last_schedule_time=cj.status.last_schedule_time,
-                last_successful_time=cj.status.last_successful_time,
-                age=age,
-                labels=cj.metadata.labels or {},
-                job_template=job_template,
-                created_at=cj.metadata.creation_timestamp
-            )
-            result.append(cronjob_info)
-        
+        for cj in items:
+            if namespace and cj.get("namespace") != namespace:
+                continue
+            result.append(CronJobInfo(
+                name=cj.get("name", ""),
+                namespace=cj.get("namespace", ""),
+                schedule=cj.get("schedule", ""),
+                suspend=cj.get("suspend", False),
+                active=cj.get("active", 0),
+                last_schedule_time=cj.get("last_schedule_time"),
+                last_successful_time=cj.get("last_successful_time"),
+                age=cj.get("age", ""),
+                labels=cj.get("labels", {}),
+                job_template=cj.get("job_template", {}),
+                created_at=cj.get("created_at", ""),
+            ))
         logger.info(f"Found {len(result)} cronjobs")
         return result
-        
     except Exception as e:
         logger.error(f"Error fetching cronjobs: {e}")
-        raise HTTPException(status_code=500, detail=f"Error fetching cronjobs: {str(e)}")
-
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Made with Bob

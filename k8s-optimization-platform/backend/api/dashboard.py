@@ -1,6 +1,7 @@
 """
 Dashboard API - Executive Overview Dashboard
 Feature 2: Executive Overview Dashboard for Leadership & FinOps Teams
+Reads pod data from agent_metrics (db_manager) for real cost/waste calculations.
 """
 from fastapi import APIRouter, Query, HTTPException
 from typing import List, Optional
@@ -9,14 +10,10 @@ from datetime import datetime, timedelta
 from enum import Enum
 import logging
 
-# Import Kubernetes client
-from services.k8s_client import k8s_client
+from database.db import db_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# Check if Kubernetes is available
-K8S_AVAILABLE = k8s_client is not None and k8s_client.is_connected()
 
 # Cost rates (from environment or defaults)
 CPU_COST_PER_CORE_HOUR = 0.031  # $0.031 per vCPU hour
@@ -79,25 +76,67 @@ class DashboardOverview(BaseModel):
     last_updated: datetime
 
 
+def _parse_cpu(val) -> float:
+    """Parse CPU value: float (cores) or string like '500m'/'2'."""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if s.endswith('m'):
+        return float(s[:-1]) / 1000
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _parse_memory_gb(container: dict) -> float:
+    """Parse memory from container dict: prefer memory_request_mb (float MB) or memory_request string."""
+    # Agent v2 sends memory_request_mb as float MB
+    mb = container.get('memory_request_mb')
+    if mb is not None:
+        try:
+            return float(mb) / 1024
+        except (ValueError, TypeError):
+            pass
+    val = container.get('memory_request', '0')
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val) / 1024  # assume MB
+    s = str(val).strip()
+    if s.endswith('Mi'):
+        return float(s[:-2]) / 1024
+    elif s.endswith('Gi'):
+        return float(s[:-2])
+    elif s.endswith('Ki'):
+        return float(s[:-2]) / (1024 * 1024)
+    try:
+        return float(s) / 1024
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def calculate_pod_cost(pod: dict) -> dict:
-    """Calculate cost for a pod based on resource requests"""
-    cpu_cores = 0
-    memory_gb = 0
-    
+    """Calculate cost for a pod based on resource requests."""
+    cpu_cores = 0.0
+    memory_gb = 0.0
+
     for container in pod.get('containers', []):
-        # Parse CPU (e.g., "500m" = 0.5 cores, "2" = 2 cores)
-        cpu_request = container.get('cpu_request', '0')
-        if cpu_request.endswith('m'):
-            cpu_cores += float(cpu_request[:-1]) / 1000
-        else:
-            cpu_cores += float(cpu_request or 0)
-        
-        # Parse Memory (e.g., "512Mi" = 0.5 GB, "2Gi" = 2 GB)
-        mem_request = container.get('memory_request', '0')
-        if mem_request.endswith('Mi'):
-            memory_gb += float(mem_request[:-2]) / 1024
-        elif mem_request.endswith('Gi'):
-            memory_gb += float(mem_request[:-2])
+        cpu_cores += _parse_cpu(container.get('cpu_request'))
+        memory_gb += _parse_memory_gb(container)
+
+    # Also accept pod-level fields as fallback (agent may set them directly)
+    if cpu_cores == 0.0:
+        cpu_cores = _parse_cpu(pod.get('cpu_request'))
+    if memory_gb == 0.0:
+        mem_mb = pod.get('memory_request_mb')
+        if mem_mb is not None:
+            try:
+                memory_gb = float(mem_mb) / 1024
+            except (ValueError, TypeError):
+                pass
     
     # Calculate monthly cost (730 hours per month)
     monthly_cpu_cost = cpu_cores * CPU_COST_PER_CORE_HOUR * 730
@@ -140,35 +179,46 @@ def analyze_waste(pods: List[dict]) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Helper: pull pods list from db_manager
+# ---------------------------------------------------------------------------
+
+def _get_pods_for_dashboard(cluster_id: Optional[str] = None) -> list:
+    clusters = db_manager.get_all_clusters()
+    if not clusters:
+        return []
+    cn = cluster_id or clusters[0]["cluster_name"]
+    metrics_row = db_manager.get_latest_metrics(cn)
+    if not metrics_row:
+        return []
+    pods_domain = metrics_row.get("pods") or {}
+    if isinstance(pods_domain, str):
+        import json
+        pods_domain = json.loads(pods_domain)
+    return pods_domain.get("items", [])
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
+# ---------------------------------------------------------------------------
+
 @router.get("/executive", response_model=DashboardOverview)
 async def get_executive_dashboard(
-    days: int = Query(30, description="Number of days for trend data")
+    cluster_id: Optional[str] = Query(None),
+    days: int = Query(30, description="Number of days for trend data"),
 ):
-    """
-    Get executive overview dashboard
-    
-    Provides:
-    - Key Performance Indicators (KPIs)
-    - AI-generated insights
-    - Top waste contributors
-    - Cost trends
-    """
-    if not K8S_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail={
-                "error": "Kubernetes not configured",
-                "message": "Please configure Kubernetes connection to view real data",
-                "setup_guide": "See KUBERNETES_INTEGRATION_GUIDE.md for setup instructions"
-            }
-        )
-    
+    """Get executive overview dashboard from agent_metrics."""
     try:
-        # Get cluster info
-        cluster_info = k8s_client.get_cluster_info()
-        pods = k8s_client.list_pods()
-        
+        pods = _get_pods_for_dashboard(cluster_id)
+        if not pods:
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "No cluster data available",
+                    "message": "Waiting for agent to send metrics",
+                }
+            )
+
         # Analyze costs and waste
         analysis = analyze_waste(pods)
         total_monthly_spend = analysis['total_cost']
@@ -260,21 +310,15 @@ async def get_executive_dashboard(
 
 
 @router.get("/kpis", response_model=ExecutiveKPIs)
-async def get_kpis():
-    """Get current KPIs only"""
-    if not K8S_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Kubernetes not configured. See KUBERNETES_INTEGRATION_GUIDE.md"
-        )
-    
+async def get_kpis(cluster_id: Optional[str] = Query(None)):
+    """Get current KPIs from agent_metrics."""
     try:
-        pods = k8s_client.list_pods()
+        pods = _get_pods_for_dashboard(cluster_id)
+        if not pods:
+            raise HTTPException(status_code=503, detail="No cluster data available yet")
         analysis = analyze_waste(pods)
-        
         total_monthly_spend = analysis['total_cost']
         potential_savings = analysis['total_waste'] * 0.70
-        
         return ExecutiveKPIs(
             total_monthly_spend=total_monthly_spend,
             total_annual_spend=total_monthly_spend * 12,
@@ -283,8 +327,10 @@ async def get_kpis():
             optimization_coverage_percentage=45.0,
             carbon_footprint_reduction_kg=potential_savings * 0.5,
             cost_trend=TrendDirection.DOWN,
-            trend_percentage=8.0
+            trend_percentage=8.0,
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error calculating KPIs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -294,33 +340,20 @@ async def get_kpis():
 async def get_insights(
     impact: Optional[str] = Query(None),
     category: Optional[str] = Query(None),
-    limit: int = Query(10)
+    limit: int = Query(10),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """
-    Get AI-generated executive insights
-    
-    Filters:
-    - impact: high, medium, low
-    - category: waste, savings, risk, opportunity
-    - limit: number of insights to return
-    """
-    if not K8S_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Kubernetes not configured"
-        )
-    
+    """Get executive insights from agent_metrics."""
     try:
-        pods = k8s_client.list_pods()
+        pods = _get_pods_for_dashboard(cluster_id)
+        if not pods:
+            return []
         analysis = analyze_waste(pods)
-        
         insights = []
-        
-        # Generate insights from real data
         if analysis['namespace_costs']:
             top_namespace = max(
                 analysis['namespace_costs'].items(),
-                key=lambda x: x[1]['waste']
+                key=lambda x: x[1]['waste'],
             )
             insights.append(ExecutiveInsight(
                 title=f"High Waste in {top_namespace[0]} Namespace",
@@ -328,15 +361,12 @@ async def get_insights(
                 impact="high",
                 category="waste",
                 action_required=True,
-                estimated_savings=top_namespace[1]['waste'] * 0.70
+                estimated_savings=top_namespace[1]['waste'] * 0.70,
             ))
-        
-        # Filter by impact and category if provided
         if impact:
             insights = [i for i in insights if i.impact == impact]
         if category:
             insights = [i for i in insights if i.category == category]
-        
         return insights[:limit]
     except Exception as e:
         logger.error(f"Error generating insights: {e}")
@@ -346,30 +376,21 @@ async def get_insights(
 @router.get("/waste-contributors", response_model=List[WasteContributor])
 async def get_waste_contributors(
     type: Optional[str] = Query(None),
-    limit: int = Query(10)
+    limit: int = Query(10),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """
-    Get top waste contributors
-    
-    Types: cluster, namespace, team, application
-    """
-    if not K8S_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Kubernetes not configured"
-        )
-    
+    """Get top waste contributors from agent_metrics."""
     try:
-        pods = k8s_client.list_pods()
+        pods = _get_pods_for_dashboard(cluster_id)
+        if not pods:
+            return []
         analysis = analyze_waste(pods)
-        
-        waste_contributors = []
         total_waste = analysis['total_waste']
-        
+        waste_contributors = []
         for namespace, data in sorted(
             analysis['namespace_costs'].items(),
             key=lambda x: x[1]['waste'],
-            reverse=True
+            reverse=True,
         ):
             waste_percentage = (data['waste'] / total_waste * 100) if total_waste > 0 else 0
             waste_contributors.append(WasteContributor(
@@ -377,13 +398,10 @@ async def get_waste_contributors(
                 type="namespace",
                 waste_amount=data['waste'],
                 waste_percentage=waste_percentage,
-                monthly_cost=data['cost']
+                monthly_cost=data['cost'],
             ))
-        
-        # Filter by type if provided
         if type:
             waste_contributors = [w for w in waste_contributors if w.type == type]
-        
         return waste_contributors[:limit]
     except Exception as e:
         logger.error(f"Error getting waste contributors: {e}")
@@ -393,40 +411,28 @@ async def get_waste_contributors(
 @router.get("/cost-trend", response_model=List[CostTrendData])
 async def get_cost_trend(
     days: int = Query(30),
-    granularity: str = Query("daily")
+    granularity: str = Query("daily"),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """
-    Get cost trend data
-    
-    Granularity: daily, weekly, monthly
-    """
-    if not K8S_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Kubernetes not configured"
-        )
-    
+    """Get cost trend data from agent_metrics."""
     try:
-        pods = k8s_client.list_pods()
+        pods = _get_pods_for_dashboard(cluster_id)
+        if not pods:
+            return []
         analysis = analyze_waste(pods)
         total_monthly_spend = analysis['total_cost']
-        
-        # Generate trend data (simplified - showing improvement over time)
         trend_data = []
-        for i in range(min(days, 30), 0, -7):  # Weekly data points
+        for i in range(min(days, 30), 0, -7):
             date = datetime.utcnow() - timedelta(days=i)
-            # Simulate gradual improvement
-            improvement_factor = 1.0 - (0.02 * (30 - i) / 30)  # 2% improvement
+            improvement_factor = 1.0 - (0.02 * (30 - i) / 30)
             actual = total_monthly_spend * improvement_factor
             optimized = actual * 0.86
-            
             trend_data.append(CostTrendData(
                 date=date.strftime("%Y-%m-%d"),
                 actual_cost=actual,
                 optimized_cost=optimized,
-                savings=actual - optimized
+                savings=actual - optimized,
             ))
-        
         return trend_data
     except Exception as e:
         logger.error(f"Error calculating cost trend: {e}")

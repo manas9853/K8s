@@ -1,28 +1,23 @@
 """
 Storage API - PVCs, PVs, Storage Classes, and Storage Analytics
+Reads storage data from agent_metrics stored in Supabase/Postgres (db_manager).
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
-from datetime import datetime
 import logging
-from utils.dummy_data import get_dummy_data
 
-# Import Kubernetes client
-try:
-    from services.k8s_client import k8s_client
-    K8S_AVAILABLE = k8s_client is not None and k8s_client.is_connected()
-except Exception as e:
-    K8S_AVAILABLE = False
-    k8s_client = None
-    logging.warning(f"Kubernetes client not available: {e}")
+from database.db import db_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
 class PVCModel(BaseModel):
-    """Persistent Volume Claim model"""
     name: str
     namespace: str
     status: str
@@ -38,7 +33,6 @@ class PVCModel(BaseModel):
 
 
 class PVModel(BaseModel):
-    """Persistent Volume model"""
     name: str
     status: str
     claim: Optional[str]
@@ -53,7 +47,6 @@ class PVModel(BaseModel):
 
 
 class StorageClassModel(BaseModel):
-    """Storage Class model"""
     name: str
     provisioner: str
     reclaim_policy: str
@@ -64,64 +57,62 @@ class StorageClassModel(BaseModel):
     created_at: str
 
 
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _get_storage_domain(cluster_id: Optional[str] = None) -> dict:
+    if cluster_id:
+        cluster_name = cluster_id
+    else:
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return {}
+        cluster_name = clusters[0]["cluster_name"]
+
+    metrics = db_manager.get_latest_metrics(cluster_name)
+    if not metrics:
+        return {}
+
+    st = metrics.get("storage") or {}
+    if isinstance(st, str):
+        import json
+        st = json.loads(st)
+    return st
+
+
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
+
 @router.get("/pvcs", response_model=List[PVCModel])
 async def get_pvcs(
     namespace: Optional[str] = None,
     cluster_id: Optional[str] = Query(None),
 ):
-    """Get all Persistent Volume Claims — cluster-scoped."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        raw = get_dummy_data("pvcs", cluster_id)
-        return [PVCModel(**d) for d in raw]
-    
+    """Get all Persistent Volume Claims from agent_metrics storage domain."""
     try:
-        v1 = k8s_client.get_core_api()
-        
-        if namespace:
-            pvcs = v1.list_namespaced_persistent_volume_claim(namespace)
-        else:
-            pvcs = v1.list_persistent_volume_claim_for_all_namespaces()
-        
+        st = _get_storage_domain(cluster_id)
+        items = (st.get("pvcs") or {}).get("items", [])
+
         result = []
-        for pvc in pvcs.items:
-            created = pvc.metadata.creation_timestamp
-            age_delta = datetime.now(created.tzinfo) - created
-            age = f"{age_delta.days}d"
-            
-            bound_pod = None
-            if pvc.status.phase == "Bound":
-                try:
-                    pods = v1.list_namespaced_pod(pvc.metadata.namespace)
-                    for pod in pods.items:
-                        if pod.spec.volumes:
-                            for volume in pod.spec.volumes:
-                                if (volume.persistent_volume_claim and
-                                    volume.persistent_volume_claim.claim_name == 
-                                    pvc.metadata.name):
-                                    bound_pod = pod.metadata.name
-                                    break
-                except Exception as e:
-                    logger.debug(f"Error finding bound pod: {e}")
-            
-            capacity_str = 'Pending'
-            if pvc.status.capacity:
-                capacity_str = str(pvc.status.capacity.get('storage', 'N/A'))
-            
+        for pvc in items:
+            if namespace and pvc.get("namespace") != namespace:
+                continue
             result.append(PVCModel(
-                name=pvc.metadata.name,
-                namespace=pvc.metadata.namespace,
-                status=pvc.status.phase,
-                volume_name=pvc.spec.volume_name,
-                storage_class=pvc.spec.storage_class_name,
-                capacity=capacity_str,
-                access_modes=pvc.spec.access_modes or [],
-                volume_mode=pvc.spec.volume_mode or 'Filesystem',
-                age=age,
-                bound_to_pod=bound_pod,
-                labels=pvc.metadata.labels or {},
-                created_at=created.isoformat()
+                name=pvc.get("name", ""),
+                namespace=pvc.get("namespace", ""),
+                status=pvc.get("status", "Unknown"),
+                volume_name=pvc.get("volume_name"),
+                storage_class=pvc.get("storage_class"),
+                capacity=pvc.get("capacity", "N/A"),
+                access_modes=pvc.get("access_modes", []),
+                volume_mode=pvc.get("volume_mode", "Filesystem"),
+                age=pvc.get("age", ""),
+                bound_to_pod=pvc.get("bound_to_pod"),
+                labels=pvc.get("labels", {}),
+                created_at=pvc.get("created_at", ""),
             ))
-        
         logger.info(f"Found {len(result)} PVCs")
         return result
     except Exception as e:
@@ -131,42 +122,26 @@ async def get_pvcs(
 
 @router.get("/pvs", response_model=List[PVModel])
 async def get_pvs(cluster_id: Optional[str] = Query(None)):
-    """Get all Persistent Volumes — cluster-scoped."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        raw = get_dummy_data("pvs", cluster_id)
-        return [PVModel(**d) for d in raw]
-    
+    """Get all Persistent Volumes from agent_metrics storage domain."""
     try:
-        v1 = k8s_client.get_core_api()
-        pvs = v1.list_persistent_volume()
-        
+        st = _get_storage_domain(cluster_id)
+        items = (st.get("pvs") or {}).get("items", [])
+
         result = []
-        for pv in pvs.items:
-            created = pv.metadata.creation_timestamp
-            age_delta = datetime.now(created.tzinfo) - created
-            age = f"{age_delta.days}d"
-            
-            claim = None
-            if pv.spec.claim_ref:
-                claim = (f"{pv.spec.claim_ref.namespace}/"
-                        f"{pv.spec.claim_ref.name}")
-            
-            reclaim = pv.spec.persistent_volume_reclaim_policy or 'Retain'
-            
+        for pv in items:
             result.append(PVModel(
-                name=pv.metadata.name,
-                status=pv.status.phase,
-                claim=claim,
-                storage_class=pv.spec.storage_class_name,
-                capacity=str(pv.spec.capacity.get('storage', 'N/A')),
-                access_modes=pv.spec.access_modes or [],
-                reclaim_policy=reclaim,
-                volume_mode=pv.spec.volume_mode or 'Filesystem',
-                age=age,
-                labels=pv.metadata.labels or {},
-                created_at=created.isoformat()
+                name=pv.get("name", ""),
+                status=pv.get("status", "Unknown"),
+                claim=pv.get("claim"),
+                storage_class=pv.get("storage_class"),
+                capacity=pv.get("capacity", "N/A"),
+                access_modes=pv.get("access_modes", []),
+                reclaim_policy=pv.get("reclaim_policy", "Retain"),
+                volume_mode=pv.get("volume_mode", "Filesystem"),
+                age=pv.get("age", ""),
+                labels=pv.get("labels", {}),
+                created_at=pv.get("created_at", ""),
             ))
-        
         logger.info(f"Found {len(result)} PVs")
         return result
     except Exception as e:
@@ -175,34 +150,24 @@ async def get_pvs(cluster_id: Optional[str] = Query(None)):
 
 
 @router.get("/storage-classes", response_model=List[StorageClassModel])
-async def get_storage_classes():
-    """Get all Storage Classes"""
-    if not K8S_AVAILABLE or k8s_client is None:
-        logger.warning("Kubernetes not available")
-        return []
-    
+async def get_storage_classes(cluster_id: Optional[str] = Query(None)):
+    """Get all Storage Classes from agent_metrics storage domain."""
     try:
-        from kubernetes import client
-        storage_v1 = client.StorageV1Api()
-        storage_classes = storage_v1.list_storage_class()
-        
+        st = _get_storage_domain(cluster_id)
+        items = (st.get("storage_classes") or {}).get("items", [])
+
         result = []
-        for sc in storage_classes.items:
-            created = sc.metadata.creation_timestamp
-            age_delta = datetime.now(created.tzinfo) - created
-            age = f"{age_delta.days}d"
-            
+        for sc in items:
             result.append(StorageClassModel(
-                name=sc.metadata.name,
-                provisioner=sc.provisioner,
-                reclaim_policy=sc.reclaim_policy or 'Delete',
-                volume_binding_mode=sc.volume_binding_mode or 'Immediate',
-                allow_volume_expansion=sc.allow_volume_expansion or False,
-                parameters=sc.parameters or {},
-                age=age,
-                created_at=created.isoformat()
+                name=sc.get("name", ""),
+                provisioner=sc.get("provisioner", ""),
+                reclaim_policy=sc.get("reclaim_policy", "Delete"),
+                volume_binding_mode=sc.get("volume_binding_mode", "Immediate"),
+                allow_volume_expansion=sc.get("allow_volume_expansion", False),
+                parameters=sc.get("parameters", {}),
+                age=sc.get("age", ""),
+                created_at=sc.get("created_at", ""),
             ))
-        
         logger.info(f"Found {len(result)} storage classes")
         return result
     except Exception as e:
@@ -211,134 +176,87 @@ async def get_storage_classes():
 
 
 @router.get("/consumption")
-async def get_storage_consumption():
-    """Get storage consumption by namespace"""
-    if not K8S_AVAILABLE or k8s_client is None:
-        logger.warning("Kubernetes not available")
-        return []
-    
+async def get_storage_consumption(cluster_id: Optional[str] = Query(None)):
+    """Get storage consumption by namespace from agent_metrics."""
     try:
-        v1 = k8s_client.get_core_api()
-        pvcs = v1.list_persistent_volume_claim_for_all_namespaces()
-        
+        st = _get_storage_domain(cluster_id)
+        pvcs = (st.get("pvcs") or {}).get("items", [])
+
         namespace_storage: Dict[str, Dict[str, Any]] = {}
-        
-        for pvc in pvcs.items:
-            ns = pvc.metadata.namespace
+        for pvc in pvcs:
+            ns = pvc.get("namespace", "default")
             if ns not in namespace_storage:
-                namespace_storage[ns] = {
-                    'total_capacity': 0,
-                    'pvc_count': 0
-                }
-            
-            namespace_storage[ns]['pvc_count'] += 1
-            
-            if pvc.status.capacity:
-                capacity_str = pvc.status.capacity.get('storage', '0Gi')
-                try:
-                    if 'Gi' in capacity_str:
-                        capacity = float(capacity_str.replace('Gi', ''))
-                    elif 'Mi' in capacity_str:
-                        capacity = float(capacity_str.replace('Mi', '')) / 1024
-                    elif 'Ti' in capacity_str:
-                        capacity = float(capacity_str.replace('Ti', '')) * 1024
-                    else:
-                        capacity = 0
-                    namespace_storage[ns]['total_capacity'] += capacity
-                except ValueError:
-                    pass
-        
+                namespace_storage[ns] = {"total_capacity": 0.0, "pvc_count": 0}
+            namespace_storage[ns]["pvc_count"] += 1
+
+            cap_str = pvc.get("capacity", "0Gi")
+            try:
+                if "Gi" in cap_str:
+                    cap = float(cap_str.replace("Gi", ""))
+                elif "Mi" in cap_str:
+                    cap = float(cap_str.replace("Mi", "")) / 1024
+                elif "Ti" in cap_str:
+                    cap = float(cap_str.replace("Ti", "")) * 1024
+                else:
+                    cap = 0.0
+                namespace_storage[ns]["total_capacity"] += cap
+            except (ValueError, AttributeError):
+                pass
+
         result = []
         for ns, data in namespace_storage.items():
-            total_capacity = data['total_capacity']
-            total_used = total_capacity * 0.7
-            utilization = 70.0 if total_capacity > 0 else 0
-            
+            tc = data["total_capacity"]
             result.append({
                 "namespace": ns,
-                "total_capacity": f"{total_capacity:.2f}Gi",
-                "total_used": f"{total_used:.2f}Gi",
-                "pvc_count": data['pvc_count'],
-                "utilization_percentage": utilization
+                "total_capacity": f"{tc:.2f}Gi",
+                "total_used": f"{tc * 0.7:.2f}Gi",
+                "pvc_count": data["pvc_count"],
+                "utilization_percentage": 70.0 if tc > 0 else 0.0,
             })
-        
-        return sorted(result, key=lambda x: x['pvc_count'], reverse=True)
+        return sorted(result, key=lambda x: x["pvc_count"], reverse=True)
     except Exception as e:
         logger.error(f"Error calculating storage consumption: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/orphaned")
-async def get_orphaned_volumes():
-    """Detect orphaned volumes"""
-    if not K8S_AVAILABLE or k8s_client is None:
-        logger.warning("Kubernetes not available")
-        return []
-    
+async def get_orphaned_volumes(cluster_id: Optional[str] = Query(None)):
+    """Detect orphaned PVs and PVCs from agent_metrics."""
     try:
-        v1 = k8s_client.get_core_api()
+        st = _get_storage_domain(cluster_id)
+        pvs = (st.get("pvs") or {}).get("items", [])
+        pvcs = (st.get("pvcs") or {}).get("items", [])
         orphaned = []
-        
-        # Check PVs without claims
-        pvs = v1.list_persistent_volume()
-        for pv in pvs.items:
-            if (pv.status.phase == "Released" or 
-                (pv.status.phase == "Available" and not pv.spec.claim_ref)):
-                created = pv.metadata.creation_timestamp
-                age_delta = datetime.now(created.tzinfo) - created
-                age = f"{age_delta.days}d"
-                
-                capacity = str(pv.spec.capacity.get('storage', 'N/A'))
-                reason = ("No active claim" if pv.status.phase == "Available" 
-                         else "Released but not reclaimed")
-                
+
+        for pv in pvs:
+            phase = pv.get("status", "")
+            if phase in ("Released", "Available") and not pv.get("claim"):
+                reason = (
+                    "No active claim" if phase == "Available"
+                    else "Released but not reclaimed"
+                )
                 orphaned.append({
-                    "name": pv.metadata.name,
+                    "name": pv.get("name", ""),
                     "type": "PV",
                     "namespace": None,
-                    "capacity": capacity,
-                    "age": age,
+                    "capacity": pv.get("capacity", "N/A"),
+                    "age": pv.get("age", ""),
                     "reason": reason,
-                    "cost_impact": "$50/month"
+                    "cost_impact": "$50/month",
                 })
-        
-        # Check PVCs without pods
-        pvcs = v1.list_persistent_volume_claim_for_all_namespaces()
-        for pvc in pvcs.items:
-            if pvc.status.phase == "Bound":
-                pods = v1.list_namespaced_pod(pvc.metadata.namespace)
-                is_used = False
-                
-                for pod in pods.items:
-                    if pod.spec.volumes:
-                        for volume in pod.spec.volumes:
-                            if (volume.persistent_volume_claim and
-                                volume.persistent_volume_claim.claim_name == 
-                                pvc.metadata.name):
-                                is_used = True
-                                break
-                    if is_used:
-                        break
-                
-                if not is_used:
-                    created = pvc.metadata.creation_timestamp
-                    age_delta = datetime.now(created.tzinfo) - created
-                    age = f"{age_delta.days}d"
-                    
-                    capacity_str = 'N/A'
-                    if pvc.status.capacity:
-                        capacity_str = str(pvc.status.capacity.get('storage', 'N/A'))
-                    
-                    orphaned.append({
-                        "name": pvc.metadata.name,
-                        "type": "PVC",
-                        "namespace": pvc.metadata.namespace,
-                        "capacity": capacity_str,
-                        "age": age,
-                        "reason": "No pod using this PVC",
-                        "cost_impact": "$30/month"
-                    })
-        
+
+        for pvc in pvcs:
+            if pvc.get("bound_to_pod") is None and pvc.get("status") == "Bound":
+                orphaned.append({
+                    "name": pvc.get("name", ""),
+                    "type": "PVC",
+                    "namespace": pvc.get("namespace"),
+                    "capacity": pvc.get("capacity", "N/A"),
+                    "age": pvc.get("age", ""),
+                    "reason": "No pod using this PVC",
+                    "cost_impact": "$30/month",
+                })
+
         logger.info(f"Found {len(orphaned)} orphaned volumes")
         return orphaned
     except Exception as e:
@@ -347,55 +265,41 @@ async def get_orphaned_volumes():
 
 
 @router.get("/forecast")
-async def get_storage_forecast():
-    """Forecast storage growth"""
-    if not K8S_AVAILABLE or k8s_client is None:
-        logger.warning("Kubernetes not available")
-        return {"error": "Kubernetes not available"}
-    
+async def get_storage_forecast(cluster_id: Optional[str] = Query(None)):
+    """Forecast storage growth from current agent_metrics."""
     try:
-        v1 = k8s_client.get_core_api()
-        pvcs = v1.list_persistent_volume_claim_for_all_namespaces()
-        
-        total_capacity = 0
-        for pvc in pvcs.items:
-            if pvc.status.capacity:
-                capacity_str = pvc.status.capacity.get('storage', '0Gi')
-                try:
-                    if 'Gi' in capacity_str:
-                        capacity = float(capacity_str.replace('Gi', ''))
-                    elif 'Mi' in capacity_str:
-                        capacity = float(capacity_str.replace('Mi', '')) / 1024
-                    elif 'Ti' in capacity_str:
-                        capacity = float(capacity_str.replace('Ti', '')) * 1024
-                    else:
-                        capacity = 0
-                    total_capacity += capacity
-                except ValueError:
-                    pass
-        
-        forecast = {
+        st = _get_storage_domain(cluster_id)
+        pvcs = (st.get("pvcs") or {}).get("items", [])
+
+        total_capacity = 0.0
+        for pvc in pvcs:
+            cap_str = pvc.get("capacity", "0Gi")
+            try:
+                if "Gi" in cap_str:
+                    total_capacity += float(cap_str.replace("Gi", ""))
+                elif "Mi" in cap_str:
+                    total_capacity += float(cap_str.replace("Mi", "")) / 1024
+                elif "Ti" in cap_str:
+                    total_capacity += float(cap_str.replace("Ti", "")) * 1024
+            except (ValueError, AttributeError):
+                pass
+
+        return {
             "current_capacity_gi": round(total_capacity, 2),
             "current_utilization_percentage": 70,
             "monthly_growth_rate": 10,
             "forecast": [
-                {"month": "Current", "capacity_gi": round(total_capacity, 2), 
-                 "utilization": 70},
-                {"month": "+1 month", "capacity_gi": round(total_capacity * 1.1, 2), 
-                 "utilization": 77},
-                {"month": "+2 months", "capacity_gi": round(total_capacity * 1.2, 2), 
-                 "utilization": 84},
-                {"month": "+3 months", "capacity_gi": round(total_capacity * 1.3, 2), 
-                 "utilization": 91}
+                {"month": "Current", "capacity_gi": round(total_capacity, 2), "utilization": 70},
+                {"month": "+1 month", "capacity_gi": round(total_capacity * 1.1, 2), "utilization": 77},
+                {"month": "+2 months", "capacity_gi": round(total_capacity * 1.2, 2), "utilization": 84},
+                {"month": "+3 months", "capacity_gi": round(total_capacity * 1.3, 2), "utilization": 91},
             ],
             "recommendations": [
                 "Consider provisioning additional storage in 2 months",
                 "Review storage class policies for auto-expansion",
-                "Implement storage cleanup policies for unused PVCs"
-            ]
+                "Implement storage cleanup policies for unused PVCs",
+            ],
         }
-        
-        return forecast
     except Exception as e:
         logger.error(f"Error forecasting storage: {e}")
         raise HTTPException(status_code=500, detail=str(e))

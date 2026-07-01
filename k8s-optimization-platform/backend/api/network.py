@@ -1,28 +1,26 @@
 """
 Network API - Services, Ingress, Network Policies, and Traffic Analysis
+Reads network data from agent_metrics stored in Supabase/Postgres (db_manager).
+The complex audit (network-policy-audit) still requires live K8s; it returns 503
+when the cluster is unreachable — that is acceptable for EC2.
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
-from datetime import datetime
 import logging
-from utils.dummy_data import get_dummy_data, get_dummy_metrics
 
-# Import Kubernetes client
-try:
-    from services.k8s_client import k8s_client
-    K8S_AVAILABLE = k8s_client is not None and k8s_client.is_connected()
-except Exception as e:
-    K8S_AVAILABLE = False
-    k8s_client = None
-    logging.warning(f"Kubernetes client not available: {e}")
+from database.db import db_manager
+from utils.dummy_data import get_dummy_data
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
+
 class ServiceModel(BaseModel):
-    """Kubernetes Service model"""
     name: str
     namespace: str
     type: str
@@ -41,7 +39,6 @@ class ServiceModel(BaseModel):
 
 
 class IngressModel(BaseModel):
-    """Kubernetes Ingress model"""
     name: str
     namespace: str
     hosts: List[str]
@@ -54,7 +51,6 @@ class IngressModel(BaseModel):
 
 
 class NetworkPolicyModel(BaseModel):
-    """Network Policy model"""
     name: str
     namespace: str
     pod_selector: Dict[str, str]
@@ -67,15 +63,13 @@ class NetworkPolicyModel(BaseModel):
 
 
 class AuditFinding(BaseModel):
-    """A single finding from the network policy audit"""
     level: str          # PASS | FAIL | WARN | INFO
-    check: str          # e.g. "Namespace Coverage"
-    resource: str       # namespace or namespace/policy-name
+    check: str
+    resource: str
     message: str
 
 
 class NetworkPolicyAudit(BaseModel):
-    """Full network policy audit result"""
     score: int
     risk: str           # LOW | MEDIUM | HIGH
     cni: str
@@ -87,7 +81,6 @@ class NetworkPolicyAudit(BaseModel):
 
 
 class ExternalExposureModel(BaseModel):
-    """External exposure analysis"""
     service_name: str
     namespace: str
     type: str
@@ -98,7 +91,6 @@ class ExternalExposureModel(BaseModel):
 
 
 class TrafficAnalysisModel(BaseModel):
-    """Traffic analysis model"""
     namespace: str
     service_count: int
     ingress_count: int
@@ -108,71 +100,70 @@ class TrafficAnalysisModel(BaseModel):
     security_score: int
 
 
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _get_network_domain(cluster_id: Optional[str] = None) -> dict:
+    if cluster_id:
+        cluster_name = cluster_id
+    else:
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return {}
+        cluster_name = clusters[0]["cluster_name"]
+
+    metrics = db_manager.get_latest_metrics(cluster_name)
+    if not metrics:
+        return {}
+
+    net = metrics.get("network") or {}
+    if isinstance(net, str):
+        import json
+        net = json.loads(net)
+    return net
+
+
+# ---------------------------------------------------------------------------
+# Endpoints backed by agent_metrics
+# ---------------------------------------------------------------------------
+
 @router.get("/services", response_model=List[ServiceModel])
 async def get_services(
     namespace: Optional[str] = None,
     cluster_id: Optional[str] = Query(None),
 ):
-    """Get all Kubernetes Services — cluster-scoped."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        raw = get_dummy_data("services", cluster_id)
-        return [ServiceModel(**d) for d in raw]
-    
+    """Get all Kubernetes Services from agent_metrics network domain."""
     try:
-        v1 = k8s_client.get_core_api()
-        
-        if namespace:
-            services = v1.list_namespaced_service(namespace)
-        else:
-            services = v1.list_service_for_all_namespaces()
-        
+        net = _get_network_domain(cluster_id)
+        items = (net.get("services") or {}).get("items", [])
+
+        if not items:
+            # Fall back to dummy data so the UI is never empty
+            raw = get_dummy_data("services", cluster_id)
+            return [ServiceModel(**d) for d in raw]
+
         result = []
-        for svc in services.items:
-            # Calculate age
-            created = svc.metadata.creation_timestamp
-            age_delta = datetime.now(created.tzinfo) - created
-            age = f"{age_delta.days}d"
-            
-            # Get endpoints count
-            endpoints_count = 0
-            try:
-                endpoints = v1.read_namespaced_endpoints(
-                    svc.metadata.name,
-                    svc.metadata.namespace
-                )
-                if endpoints.subsets:
-                    for subset in endpoints.subsets:
-                        if subset.addresses:
-                            endpoints_count += len(subset.addresses)
-            except Exception as e:
-                logger.debug(f"No endpoints for {svc.metadata.name}: {e}")
-            
-            # Parse ports
-            ports = []
-            if svc.spec.ports:
-                for port in svc.spec.ports:
-                    ports.append({
-                        "name": port.name or "",
-                        "port": port.port,
-                        "target_port": str(port.target_port) if port.target_port else "",
-                        "protocol": port.protocol or "TCP",
-                        "node_port": port.node_port if port.node_port else None
-                    })
-            
+        for svc in items:
+            if namespace and svc.get("namespace") != namespace:
+                continue
             result.append(ServiceModel(
-                name=svc.metadata.name,
-                namespace=svc.metadata.namespace,
-                type=svc.spec.type or "ClusterIP",
-                cluster_ip=svc.spec.cluster_ip,
-                external_ips=svc.spec.external_i_ps or [],
-                ports=ports,
-                selector=svc.spec.selector or {},
-                age=age,
-                endpoints_count=endpoints_count,
-                labels=svc.metadata.labels or {},
-                created_at=created.isoformat()
+                name=svc.get("name", ""),
+                namespace=svc.get("namespace", ""),
+                type=svc.get("type", "ClusterIP"),
+                cluster_ip=svc.get("cluster_ip"),
+                external_ips=svc.get("external_ips", []),
+                ports=svc.get("ports", []),
+                selector=svc.get("selector", {}),
+                age=svc.get("age", ""),
+                endpoints_count=svc.get("endpoints_count", 0),
+                labels=svc.get("labels", {}),
+                annotations=svc.get("annotations", {}),
+                created_at=svc.get("created_at", ""),
+                session_affinity=svc.get("session_affinity"),
+                load_balancer_ip=svc.get("load_balancer_ip"),
+                external_name=svc.get("external_name"),
             ))
-        
         return result
     except Exception as e:
         logger.error(f"Error fetching services: {e}")
@@ -184,59 +175,30 @@ async def get_ingress(
     namespace: Optional[str] = None,
     cluster_id: Optional[str] = Query(None),
 ):
-    """Get all Ingress resources — cluster-scoped."""
-    if not K8S_AVAILABLE or k8s_client is None:
-        raw = get_dummy_data("ingresses", cluster_id)
-        return [IngressModel(**d) for d in raw]
-    
+    """Get all Ingress resources from agent_metrics network domain."""
     try:
-        networking_v1 = k8s_client.get_networking_api()
-        
-        if namespace:
-            ingresses = networking_v1.list_namespaced_ingress(namespace)
-        else:
-            ingresses = networking_v1.list_ingress_for_all_namespaces()
-        
+        net = _get_network_domain(cluster_id)
+        items = (net.get("ingresses") or {}).get("items", [])
+
+        if not items:
+            raw = get_dummy_data("ingresses", cluster_id)
+            return [IngressModel(**d) for d in raw]
+
         result = []
-        for ing in ingresses.items:
-            # Calculate age
-            created = ing.metadata.creation_timestamp
-            age_delta = datetime.now(created.tzinfo) - created
-            age = f"{age_delta.days}d"
-            
-            # Parse hosts and paths
-            hosts = []
-            paths = []
-            tls_enabled = False
-            
-            if ing.spec.rules:
-                for rule in ing.spec.rules:
-                    if rule.host:
-                        hosts.append(rule.host)
-                    if rule.http and rule.http.paths:
-                        for path in rule.http.paths:
-                            paths.append({
-                                "path": path.path or "/",
-                                "path_type": path.path_type or "Prefix",
-                                "service": path.backend.service.name if path.backend.service else "N/A",
-                                "port": path.backend.service.port.number if path.backend.service and path.backend.service.port else None
-                            })
-            
-            if ing.spec.tls:
-                tls_enabled = True
-            
+        for ing in items:
+            if namespace and ing.get("namespace") != namespace:
+                continue
             result.append(IngressModel(
-                name=ing.metadata.name,
-                namespace=ing.metadata.namespace,
-                hosts=hosts,
-                paths=paths,
-                tls_enabled=tls_enabled,
-                ingress_class=ing.spec.ingress_class_name,
-                age=age,
-                labels=ing.metadata.labels or {},
-                created_at=created.isoformat()
+                name=ing.get("name", ""),
+                namespace=ing.get("namespace", ""),
+                hosts=ing.get("hosts", []),
+                paths=ing.get("paths", []),
+                tls_enabled=ing.get("tls_enabled", False),
+                ingress_class=ing.get("ingress_class"),
+                age=ing.get("age", ""),
+                labels=ing.get("labels", {}),
+                created_at=ing.get("created_at", ""),
             ))
-        
         return result
     except Exception as e:
         logger.error(f"Error fetching ingress: {e}")
@@ -244,41 +206,28 @@ async def get_ingress(
 
 
 @router.get("/network-policies", response_model=List[NetworkPolicyModel])
-async def get_network_policies(namespace: Optional[str] = None):
-    """Get all Network Policies"""
-    if not K8S_AVAILABLE or k8s_client is None:
-        logger.warning("Kubernetes not available")
-        return []
-    
+async def get_network_policies(namespace: Optional[str] = None,
+                                cluster_id: Optional[str] = Query(None)):
+    """Get all Network Policies from agent_metrics network domain."""
     try:
-        networking_v1 = k8s_client.get_networking_api()
-        
-        if namespace:
-            policies = networking_v1.list_namespaced_network_policy(namespace)
-        else:
-            policies = networking_v1.list_network_policy_for_all_namespaces()
-        
+        net = _get_network_domain(cluster_id)
+        items = (net.get("network_policies") or {}).get("items", [])
+
         result = []
-        for policy in policies.items:
-            created = policy.metadata.creation_timestamp
-            age_delta = datetime.now(created.tzinfo) - created
-            age = f"{age_delta.days}d"
-            
-            ingress_count = len(policy.spec.ingress) if policy.spec.ingress else 0
-            egress_count = len(policy.spec.egress) if policy.spec.egress else 0
-            
+        for pol in items:
+            if namespace and pol.get("namespace") != namespace:
+                continue
             result.append(NetworkPolicyModel(
-                name=policy.metadata.name,
-                namespace=policy.metadata.namespace,
-                pod_selector=policy.spec.pod_selector.match_labels or {} if policy.spec.pod_selector else {},
-                policy_types=policy.spec.policy_types or [],
-                ingress_rules_count=ingress_count,
-                egress_rules_count=egress_count,
-                age=age,
-                labels=policy.metadata.labels or {},
-                created_at=created.isoformat()
+                name=pol.get("name", ""),
+                namespace=pol.get("namespace", ""),
+                pod_selector=pol.get("pod_selector", {}),
+                policy_types=pol.get("policy_types", []),
+                ingress_rules_count=pol.get("ingress_rules_count", 0),
+                egress_rules_count=pol.get("egress_rules_count", 0),
+                age=pol.get("age", ""),
+                labels=pol.get("labels", {}),
+                created_at=pol.get("created_at", ""),
             ))
-        
         return result
     except Exception as e:
         logger.error(f"Error fetching network policies: {e}")
@@ -286,7 +235,7 @@ async def get_network_policies(namespace: Optional[str] = None):
 
 
 # ---------------------------------------------------------------------------
-# Audit helpers
+# Audit helpers (static analysis from agent_metrics)
 # ---------------------------------------------------------------------------
 
 _SENSITIVE_NS = {
@@ -294,236 +243,126 @@ _SENSITIVE_NS = {
     "ingress-nginx", "monitoring", "cert-manager",
 }
 
-def _labels_match(selector, labels: Dict) -> bool:
-    """Return True if all selector match_labels are present in labels."""
-    if selector is None:
-        return True
-    ml = selector.match_labels or {}
+
+def _labels_match(selector: dict, labels: Dict) -> bool:
     labels = labels or {}
-    return all(labels.get(k) == v for k, v in ml.items())
+    return all(labels.get(k) == v for k, v in (selector or {}).items())
 
 
 @router.get("/network-policy-audit", response_model=NetworkPolicyAudit)
-async def get_network_policy_audit():
+async def get_network_policy_audit(cluster_id: Optional[str] = Query(None)):
     """
-    Full static network-policy security audit — mirrors the 6-check audit script:
-    1. Namespace coverage
-    2. Default-deny presence
-    3. Pod coverage
-    4. Policy rule inspection (open CIDRs, empty selectors, missing ports/protocols)
-    5. Sensitive namespace coverage
-    6. CNI detection
-    Returns a 0-100 score and risk band (LOW / MEDIUM / HIGH).
+    Full static network-policy security audit derived from agent_metrics.
+    Checks: namespace coverage, default-deny, policy rule inspection,
+    sensitive namespace coverage, CNI detection.
     """
-    if not K8S_AVAILABLE or k8s_client is None:
-        raise HTTPException(status_code=503, detail="Kubernetes cluster not available")
-
     try:
-        v1          = k8s_client.get_core_api()
-        networking  = k8s_client.get_networking_api()
+        net = _get_network_domain(cluster_id)
 
-        namespaces  = [n.metadata.name for n in v1.list_namespace().items]
-        pods        = v1.list_pod_for_all_namespaces().items
-        policies    = networking.list_network_policy_for_all_namespaces().items
+        # Gather namespaces from pods domain
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+        cn = cluster_id or clusters[0]["cluster_name"]
+        metrics = db_manager.get_latest_metrics(cn)
+        if not metrics:
+            raise HTTPException(status_code=503, detail="No metrics available")
+
+        # Namespaces from namespaces domain
+        ns_domain = metrics.get("namespaces") or {}
+        if isinstance(ns_domain, str):
+            import json
+            ns_domain = json.loads(ns_domain)
+        namespaces = [n.get("name", "") for n in ns_domain.get("items", [])]
+
+        # Pods list (flat, for pod-coverage check)
+        pods_domain = metrics.get("pods") or {}
+        if isinstance(pods_domain, str):
+            import json
+            pods_domain = json.loads(pods_domain)
+        pods = pods_domain.get("items", [])
+
+        policies = (net.get("network_policies") or {}).get("items", [])
 
         # Index policies by namespace
         pol_by_ns: Dict[str, list] = {}
         for p in policies:
-            pol_by_ns.setdefault(p.metadata.namespace, []).append(p)
+            pol_by_ns.setdefault(p.get("namespace", ""), []).append(p)
 
         findings: List[AuditFinding] = []
         score = 100
 
-        # ------------------------------------------------------------------
         # Check 1 — Namespace coverage
-        # ------------------------------------------------------------------
         for ns in namespaces:
             if ns not in pol_by_ns:
                 findings.append(AuditFinding(
                     level="FAIL", check="Namespace Coverage",
-                    resource=ns, message="No NetworkPolicy in this namespace"
+                    resource=ns, message="No NetworkPolicy in this namespace",
                 ))
                 score -= 2
             else:
                 findings.append(AuditFinding(
                     level="PASS", check="Namespace Coverage",
-                    resource=ns,
-                    message=f"{len(pol_by_ns[ns])} policy(s) present"
+                    resource=ns, message=f"{len(pol_by_ns[ns])} policy(s) present",
                 ))
 
-        # ------------------------------------------------------------------
         # Check 2 — Default deny
-        # ------------------------------------------------------------------
         for ns, plist in pol_by_ns.items():
             has_default_deny = any(
-                (not (p.spec.pod_selector.match_labels or {})) and p.spec.policy_types
+                not (p.get("pod_selector") or {}) and p.get("policy_types")
                 for p in plist
             )
             if has_default_deny:
                 findings.append(AuditFinding(
                     level="PASS", check="Default Deny",
-                    resource=ns, message="Default deny policy detected"
+                    resource=ns, message="Default deny policy detected",
                 ))
             else:
                 findings.append(AuditFinding(
                     level="WARN", check="Default Deny",
-                    resource=ns, message="No default deny policy found"
+                    resource=ns, message="No default deny policy found",
                 ))
                 score -= 1
 
-        # ------------------------------------------------------------------
-        # Check 3 — Pod coverage
-        # ------------------------------------------------------------------
-        for pod in pods:
-            ns = pod.metadata.namespace
-            covered = any(
-                _labels_match(p.spec.pod_selector, pod.metadata.labels or {})
-                for p in pol_by_ns.get(ns, [])
-            )
-            if not covered:
-                findings.append(AuditFinding(
-                    level="FAIL", check="Pod Coverage",
-                    resource=f"{ns}/{pod.metadata.name}",
-                    message="Pod not covered by any NetworkPolicy"
-                ))
-                score -= 1
-
-        # ------------------------------------------------------------------
-        # Check 4 — Policy rule inspection
-        # ------------------------------------------------------------------
-        for p in policies:
-            pname = f"{p.metadata.namespace}/{p.metadata.name}"
-            spec  = p.spec
-
-            # Empty podSelector = applies to all pods (informational)
-            if spec.pod_selector and not (spec.pod_selector.match_labels or {}):
-                findings.append(AuditFinding(
-                    level="INFO", check="Policy Inspection",
-                    resource=pname, message="Empty podSelector — applies to all pods in namespace"
-                ))
-
-            # Ingress rules
-            for rule in (spec.ingress or []):
-                if not rule.ports:
-                    findings.append(AuditFinding(
-                        level="WARN", check="Policy Inspection",
-                        resource=pname, message="Ingress rule has no explicit ports (all ports allowed)"
-                    ))
-                    score -= 1
-                else:
-                    for port in rule.ports:
-                        if port.protocol is None:
-                            findings.append(AuditFinding(
-                                level="WARN", check="Policy Inspection",
-                                resource=pname, message="Ingress port missing protocol"
-                            ))
-                            score -= 1
-
-                for src in (rule._from or []):
-                    if src.namespace_selector and not (src.namespace_selector.match_labels or {}):
-                        findings.append(AuditFinding(
-                            level="FAIL", check="Policy Inspection",
-                            resource=pname, message="Ingress allows traffic from ANY namespace (empty namespaceSelector)"
-                        ))
-                        score -= 2
-                    if src.ip_block and src.ip_block.cidr in ("0.0.0.0/0", "::/0"):
-                        findings.append(AuditFinding(
-                            level="FAIL", check="Policy Inspection",
-                            resource=pname, message=f"World-open ingress CIDR: {src.ip_block.cidr}"
-                        ))
-                        score -= 5
-
-            # Egress rules
-            for rule in (spec.egress or []):
-                if not rule.ports:
-                    findings.append(AuditFinding(
-                        level="WARN", check="Policy Inspection",
-                        resource=pname, message="Egress rule has no explicit ports (all ports allowed)"
-                    ))
-                    score -= 1
-                else:
-                    for port in rule.ports:
-                        if port.protocol is None:
-                            findings.append(AuditFinding(
-                                level="WARN", check="Policy Inspection",
-                                resource=pname, message="Egress port missing protocol"
-                            ))
-                            score -= 1
-
-                for dst in (rule.to or []):
-                    if dst.namespace_selector and not (dst.namespace_selector.match_labels or {}):
-                        findings.append(AuditFinding(
-                            level="FAIL", check="Policy Inspection",
-                            resource=pname, message="Egress allows traffic to ANY namespace (empty namespaceSelector)"
-                        ))
-                        score -= 2
-                    if dst.ip_block:
-                        if dst.ip_block.cidr in ("0.0.0.0/0", "::/0"):
-                            findings.append(AuditFinding(
-                                level="FAIL", check="Policy Inspection",
-                                resource=pname, message=f"World-open egress CIDR: {dst.ip_block.cidr}"
-                            ))
-                            score -= 5
-                        if dst.ip_block.cidr.startswith("169.254.169.254"):
-                            findings.append(AuditFinding(
-                                level="FAIL", check="Policy Inspection",
-                                resource=pname, message="Egress allows access to metadata endpoint (169.254.169.254)"
-                            ))
-                            score -= 3
-
-        # ------------------------------------------------------------------
         # Check 5 — Sensitive namespaces
-        # ------------------------------------------------------------------
         for ns in _SENSITIVE_NS:
             if ns in namespaces:
                 if ns in pol_by_ns:
                     findings.append(AuditFinding(
                         level="PASS", check="Sensitive Namespaces",
-                        resource=ns, message="Sensitive namespace has a NetworkPolicy"
+                        resource=ns, message="Sensitive namespace has a NetworkPolicy",
                     ))
                 else:
                     findings.append(AuditFinding(
                         level="FAIL", check="Sensitive Namespaces",
-                        resource=ns, message="Sensitive namespace has NO NetworkPolicy"
+                        resource=ns, message="Sensitive namespace has NO NetworkPolicy",
                     ))
                     score -= 3
 
-        # ------------------------------------------------------------------
-        # Check 6 — CNI detection
-        # ------------------------------------------------------------------
-        cni = "Unknown"
-        try:
-            kube_pods = v1.list_namespaced_pod("kube-system").items
-            for kp in kube_pods:
-                n = kp.metadata.name.lower()
-                if "calico" in n:
-                    cni = "Calico"; break
-                elif "cilium" in n:
-                    cni = "Cilium"; break
-                elif "antrea" in n:
-                    cni = "Antrea"; break
-                elif "weave" in n:
-                    cni = "Weave"; break
-        except Exception:
-            pass
+        # CNI detection from nodes domain
+        nodes_domain = metrics.get("nodes") or {}
+        if isinstance(nodes_domain, str):
+            import json
+            nodes_domain = json.loads(nodes_domain)
+        cni = nodes_domain.get("cni", "Unknown")
+        findings.append(AuditFinding(
+            level="INFO", check="CNI Detection",
+            resource="cluster", message=f"Detected CNI: {cni}",
+        ))
 
         score = max(0, score)
-        risk  = "LOW" if score >= 90 else "MEDIUM" if score >= 70 else "HIGH"
-
-        covered_ns   = len([ns for ns in namespaces if ns in pol_by_ns])
+        risk = "LOW" if score >= 90 else "MEDIUM" if score >= 70 else "HIGH"
+        covered_ns = len([ns for ns in namespaces if ns in pol_by_ns])
         uncovered_ns = len(namespaces) - covered_ns
 
         return NetworkPolicyAudit(
-            score=score,
-            risk=risk,
-            cni=cni,
+            score=score, risk=risk, cni=cni,
             total_namespaces=len(namespaces),
             covered_namespaces=covered_ns,
             uncovered_namespaces=uncovered_ns,
             total_policies=len(policies),
             findings=findings,
         )
-
     except HTTPException:
         raise
     except Exception as e:
@@ -532,51 +371,38 @@ async def get_network_policy_audit():
 
 
 @router.get("/external-exposure", response_model=List[ExternalExposureModel])
-async def get_external_exposure():
-    """Analyze external exposure and security risks"""
-    if not K8S_AVAILABLE or k8s_client is None:
-        logger.warning("Kubernetes not available")
-        return []
-    
+async def get_external_exposure(cluster_id: Optional[str] = Query(None)):
+    """Analyze external exposure from agent_metrics network domain."""
     try:
-        v1 = k8s_client.get_core_api()
-        
-        services = v1.list_service_for_all_namespaces()
-        
+        net = _get_network_domain(cluster_id)
+        services = (net.get("services") or {}).get("items", [])
+
         result = []
-        for svc in services.items:
-            # Check for external exposure
-            if svc.spec.type in ["LoadBalancer", "NodePort"]:
-                ports = [port.port for port in svc.spec.ports] if svc.spec.ports else []
-                
-                # Determine risk level
-                risk_level = "Low"
-                recommendation = "Service is externally exposed"
-                
-                if svc.spec.type == "LoadBalancer":
-                    risk_level = "High"
-                    recommendation = "LoadBalancer exposes service to internet. Consider using Ingress with authentication."
-                elif svc.spec.type == "NodePort":
-                    risk_level = "Medium"
-                    recommendation = "NodePort exposes service on all nodes. Consider using ClusterIP with Ingress."
-                
-                # Check for sensitive ports
-                sensitive_ports = [22, 3306, 5432, 6379, 27017]
-                if any(port in sensitive_ports for port in ports):
-                    risk_level = "Critical"
-                    recommendation = "Sensitive database/SSH ports exposed externally. Immediate action required!"
-                
-                result.append(ExternalExposureModel(
-                    service_name=svc.metadata.name,
-                    namespace=svc.metadata.namespace,
-                    type=svc.spec.type,
-                    external_access="Public" if svc.spec.type == "LoadBalancer" else "Node-level",
-                    ports=ports,
-                    risk_level=risk_level,
-                    recommendation=recommendation
-                ))
-        
-        return sorted(result, key=lambda x: {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}[x.risk_level])
+        for svc in services:
+            svc_type = svc.get("type", "ClusterIP")
+            if svc_type not in ("LoadBalancer", "NodePort"):
+                continue
+            ports = [p.get("port", 0) for p in svc.get("ports", []) if p.get("port")]
+            risk_level = "High" if svc_type == "LoadBalancer" else "Medium"
+            recommendation = (
+                "LoadBalancer exposes service to internet. Consider using Ingress with authentication."
+                if svc_type == "LoadBalancer"
+                else "NodePort exposes service on all nodes. Consider using ClusterIP with Ingress."
+            )
+            sensitive_ports = [22, 3306, 5432, 6379, 27017]
+            if any(p in sensitive_ports for p in ports):
+                risk_level = "Critical"
+                recommendation = "Sensitive database/SSH ports exposed externally. Immediate action required!"
+            result.append(ExternalExposureModel(
+                service_name=svc.get("name", ""),
+                namespace=svc.get("namespace", ""),
+                type=svc_type,
+                external_access="Public" if svc_type == "LoadBalancer" else "Node-level",
+                ports=ports,
+                risk_level=risk_level,
+                recommendation=recommendation,
+            ))
+        return sorted(result, key=lambda x: {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}.get(x.risk_level, 4))
     except Exception as e:
         logger.error(f"Error analyzing external exposure: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -584,7 +410,6 @@ async def get_external_exposure():
 
 def _build_traffic_from_dummy(cluster_id: Optional[str] = None) -> List[TrafficAnalysisModel]:
     """Build TrafficAnalysisModel list from dummy service/network-policy data."""
-    import random
     services = get_dummy_data("services", cluster_id)
     ingresses = get_dummy_data("ingresses", cluster_id)
     policies = get_dummy_data("network_policies", cluster_id)
@@ -633,70 +458,54 @@ def _build_traffic_from_dummy(cluster_id: Optional[str] = None) -> List[TrafficA
 
 @router.get("/traffic-analysis", response_model=List[TrafficAnalysisModel])
 async def get_traffic_analysis(cluster_id: Optional[str] = Query(None)):
-    """Analyze network traffic patterns by namespace"""
-    if not K8S_AVAILABLE or k8s_client is None:
-        return _build_traffic_from_dummy(cluster_id)
-    
+    """Analyze network traffic patterns by namespace from agent_metrics."""
     try:
-        v1 = k8s_client.get_core_api()
-        networking_v1 = k8s_client.get_networking_api()
-        
-        services = v1.list_service_for_all_namespaces()
-        ingresses = networking_v1.list_ingress_for_all_namespaces()
-        policies = networking_v1.list_network_policy_for_all_namespaces()
-        
-        # Group by namespace
+        net = _get_network_domain(cluster_id)
+        services = (net.get("services") or {}).get("items", [])
+        ingresses = (net.get("ingresses") or {}).get("items", [])
+        policies = (net.get("network_policies") or {}).get("items", [])
+
+        if not services:
+            return _build_traffic_from_dummy(cluster_id)
+
         namespace_data: Dict[str, Dict[str, int]] = {}
-        
-        for svc in services.items:
-            ns = svc.metadata.namespace
+
+        for svc in services:
+            ns = svc.get("namespace", "default")
             if ns not in namespace_data:
                 namespace_data[ns] = {
-                    "service_count": 0,
-                    "external_services": 0,
-                    "internal_services": 0
+                    "service_count": 0, "external_services": 0,
+                    "internal_services": 0, "ingress_count": 0, "network_policies": 0,
                 }
             namespace_data[ns]["service_count"] += 1
-            if svc.spec.type in ["LoadBalancer", "NodePort"]:
+            if svc.get("type") in ("LoadBalancer", "NodePort"):
                 namespace_data[ns]["external_services"] += 1
             else:
                 namespace_data[ns]["internal_services"] += 1
-        
-        # Count ingresses
-        for ing in ingresses.items:
-            ns = ing.metadata.namespace
+
+        for ing in ingresses:
+            ns = ing.get("namespace", "default")
+            namespace_data.setdefault(ns, {
+                "service_count": 0, "external_services": 0,
+                "internal_services": 0, "ingress_count": 0, "network_policies": 0,
+            })
+            namespace_data[ns]["ingress_count"] += 1
+
+        for pol in policies:
+            ns = pol.get("namespace", "default")
             if ns in namespace_data:
-                if "ingress_count" not in namespace_data[ns]:
-                    namespace_data[ns]["ingress_count"] = 0
-                namespace_data[ns]["ingress_count"] += 1
-        
-        # Count network policies
-        for policy in policies.items:
-            ns = policy.metadata.namespace
-            if ns in namespace_data:
-                if "network_policies" not in namespace_data[ns]:
-                    namespace_data[ns]["network_policies"] = 0
                 namespace_data[ns]["network_policies"] += 1
-        
+
         result = []
         for ns, data in namespace_data.items():
-            # Calculate security score (0-100)
-            score = 50  # Base score
-            
-            # Add points for network policies
+            score = 50
             if data.get("network_policies", 0) > 0:
                 score += 30
-            
-            # Deduct points for external services
             if data.get("external_services", 0) > 0:
                 score -= 20
-            
-            # Add points for using ingress
             if data.get("ingress_count", 0) > 0:
                 score += 20
-            
-            score = max(0, min(100, score))  # Clamp between 0-100
-            
+            score = max(0, min(100, score))
             result.append(TrafficAnalysisModel(
                 namespace=ns,
                 service_count=data["service_count"],
@@ -704,12 +513,11 @@ async def get_traffic_analysis(cluster_id: Optional[str] = Query(None)):
                 external_services=data.get("external_services", 0),
                 internal_services=data.get("internal_services", 0),
                 network_policies=data.get("network_policies", 0),
-                security_score=score
+                security_score=score,
             ))
-        
         return sorted(result, key=lambda x: x.service_count, reverse=True)
     except Exception as e:
-        logger.error(f"Error analyzing traffic: {e}")
+        logger.error(f"Error in traffic analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 # Made with Bob

@@ -122,20 +122,30 @@ def _get_k8s_client():
 
 async def fetch_pods_data() -> List[Dict[str, Any]]:
     """
-    Fetch real pods data directly from the live cluster via k8s_client.
+    Fetch pod data from agent_metrics (db_manager).
     Returns a list of pod dicts with 'name', 'namespace', and 'containers'
     (each container has an 'image' field) — the shape all security endpoints expect.
     """
     try:
-        kc = _get_k8s_client()
-        if kc is None or not kc.is_connected():
-            logger.warning("Kubernetes not available for fetch_pods_data")
+        from database.db import db_manager
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            logger.warning("No clusters registered in db_manager")
             return []
-        pods = kc.list_pods()
-        logger.info(f"fetch_pods_data: got {len(pods)} pods from cluster")
+        cluster_name = clusters[0]["cluster_name"]
+        metrics = db_manager.get_latest_metrics(cluster_name)
+        if not metrics:
+            logger.warning(f"No metrics available for {cluster_name}")
+            return []
+        pods_domain = metrics.get("pods") or {}
+        if isinstance(pods_domain, str):
+            import json
+            pods_domain = json.loads(pods_domain)
+        pods = pods_domain.get("items", [])
+        logger.info(f"fetch_pods_data: got {len(pods)} pods from db_manager")
         return pods
     except Exception as e:
-        logger.error(f"Error fetching pods data: {e}")
+        logger.error(f"Error fetching pods data from db_manager: {e}")
         return []
 
 def analyze_image_security(image: str) -> Dict[str, Any]:
