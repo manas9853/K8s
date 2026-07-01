@@ -1,0 +1,1175 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8s Cluster Audit Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+
+        h1 {
+            color: #667eea;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .file-upload-section {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        .file-upload-section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+
+        .file-inputs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .file-input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .file-input-group label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .file-input-group input[type="file"] {
+            padding: 10px;
+            border: 2px dashed #667eea;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-input-group input[type="file"]:hover {
+            background: #f8f9fa;
+            border-color: #764ba2;
+        }
+
+        .load-button {
+            margin-top: 20px;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.3s;
+        }
+
+        .load-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+        }
+
+        .load-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .dashboard-content {
+            display: none;
+        }
+
+        .dashboard-content.active {
+            display: block;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .tab-button {
+            background: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .tab-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+        }
+
+        .tab-button.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .metric-value {
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .metric-value.warning {
+            color: #f39c12;
+        }
+
+        .metric-value.danger {
+            color: #e74c3c;
+        }
+
+        .metric-value.success {
+            color: #27ae60;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 30px;
+            position: relative;
+            height: 400px;
+        }
+
+        .table-container {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            overflow-x: auto;
+            margin-bottom: 30px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9em;
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        td {
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-warning {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-danger {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .filter-section {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+
+        .filter-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            color: #555;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .filter-group select:focus,
+        .filter-group input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .summary-card h3 {
+            font-size: 0.9em;
+            margin-bottom: 10px;
+            opacity: 0.9;
+        }
+
+        .summary-card .value {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: white;
+        }
+
+        .status-message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-weight: 600;
+        }
+
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 1.8em;
+            }
+
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .chart-container {
+                height: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🚀 Kubernetes Cluster Audit Dashboard</h1>
+            <p class="subtitle">Comprehensive analysis of cluster resources, dependencies, and optimization opportunities</p>
+        </header>
+
+        <div class="file-upload-section">
+            <h2>📁 Load CSV Files</h2>
+            <p style="margin-bottom: 20px; color: #666;">Please select the four CSV files generated by the audit script:</p>
+            <div class="file-inputs">
+                <div class="file-input-group">
+                    <label for="namespaceFile">Namespace Summary CSV:</label>
+                    <input type="file" id="namespaceFile" accept=".csv" />
+                </div>
+                <div class="file-input-group">
+                    <label for="podFile">Pod Audit Full CSV:</label>
+                    <input type="file" id="podFile" accept=".csv" />
+                </div>
+                <div class="file-input-group">
+                    <label for="cleanupFile">Cleanup Keep Delete CSV:</label>
+                    <input type="file" id="cleanupFile" accept=".csv" />
+                </div>
+                <div class="file-input-group">
+                    <label for="dependencyFile">Pod Dependencies API Map CSV:</label>
+                    <input type="file" id="dependencyFile" accept=".csv" />
+                </div>
+            </div>
+            <button class="load-button" onclick="loadAllFiles()">Load Dashboard</button>
+            <div id="statusMessage"></div>
+        </div>
+
+        <div class="dashboard-content" id="dashboardContent">
+            <div class="tabs">
+                <button class="tab-button active" onclick="showTab('overview')">📊 Overview</button>
+                <button class="tab-button" onclick="showTab('namespace')">🏢 Namespace Summary</button>
+                <button class="tab-button" onclick="showTab('pods')">🔷 Pod Audit</button>
+                <button class="tab-button" onclick="showTab('cleanup')">🧹 Cleanup Recommendations</button>
+                <button class="tab-button" onclick="showTab('dependencies')">🔗 Dependencies</button>
+            </div>
+
+            <!-- Overview Tab -->
+            <div id="overview" class="tab-content active">
+                <div class="summary-cards" id="overviewCards">
+                    <div class="summary-card">
+                        <h3>Total Namespaces</h3>
+                        <div class="value" id="totalNamespaces">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Total Pods</h3>
+                        <div class="value" id="totalPods">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Pods to Delete</h3>
+                        <div class="value" id="podsToDelete">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Pods to Rightsize</h3>
+                        <div class="value" id="podsToRightsize">-</div>
+                    </div>
+                </div>
+
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h2>Resource Efficiency</h2>
+                        <div class="metric">
+                            <span class="metric-label">Avg CPU Efficiency</span>
+                            <span class="metric-value" id="avgCpuEff">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Avg Memory Efficiency</span>
+                            <span class="metric-value" id="avgMemEff">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Total CPU Requested</span>
+                            <span class="metric-value success" id="totalCpuReq">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Total Memory Requested</span>
+                            <span class="metric-value success" id="totalMemReq">-</span>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2>Action Summary</h2>
+                        <div class="metric">
+                            <span class="metric-label">Keep</span>
+                            <span class="metric-value success" id="actionKeep">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Rightsize</span>
+                            <span class="metric-value warning" id="actionRightsize">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Set Requests</span>
+                            <span class="metric-value warning" id="actionSetReq">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Cleanup</span>
+                            <span class="metric-value danger" id="actionCleanup">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="namespaceChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="actionChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Namespace Summary Tab -->
+            <div id="namespace" class="tab-content">
+                <div class="filter-section">
+                    <div class="filter-group">
+                        <label>Filter by Action:</label>
+                        <select id="namespaceFilter" onchange="filterNamespaces()">
+                            <option value="all">All</option>
+                            <option value="KEEP">Keep</option>
+                            <option value="RIGHTSIZE_DOWN">Rightsize Down</option>
+                            <option value="SET_RESOURCE_REQUESTS">Set Resource Requests</option>
+                            <option value="CLEANUP_PODS">Cleanup Pods</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="cpuEfficiencyChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="memoryEfficiencyChart"></canvas>
+                </div>
+
+                <div class="table-container">
+                    <h2>Namespace Details</h2>
+                    <table id="namespaceTable">
+                        <thead>
+                            <tr>
+                                <th>Namespace</th>
+                                <th>Total Pods</th>
+                                <th>CPU Requested</th>
+                                <th>CPU Used</th>
+                                <th>CPU Efficiency</th>
+                                <th>Memory Requested</th>
+                                <th>Memory Used</th>
+                                <th>Memory Efficiency</th>
+                                <th>Recommended Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="namespaceTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pod Audit Tab -->
+            <div id="pods" class="tab-content">
+                <div class="filter-section">
+                    <div class="filter-group">
+                        <label>Namespace:</label>
+                        <select id="podNamespaceFilter" onchange="filterPods()">
+                            <option value="all">All</option>
+                        </select>
+                        <label>Action:</label>
+                        <select id="podActionFilter" onchange="filterPods()">
+                            <option value="all">All</option>
+                            <option value="KEEP">Keep</option>
+                            <option value="RIGHTSIZE">Rightsize</option>
+                            <option value="SET_REQUESTS">Set Requests</option>
+                            <option value="DELETE">Delete</option>
+                            <option value="INCREASE_RESOURCES">Increase Resources</option>
+                        </select>
+                        <label>Search:</label>
+                        <input type="text" id="podSearchFilter" placeholder="Search pod name..." onkeyup="filterPods()">
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <h2>Pod Audit Details (Top 100)</h2>
+                    <table id="podTable">
+                        <thead>
+                            <tr>
+                                <th>Namespace</th>
+                                <th>Pod</th>
+                                <th>Phase</th>
+                                <th>CPU Request</th>
+                                <th>CPU Used</th>
+                                <th>CPU Efficiency</th>
+                                <th>Memory Request</th>
+                                <th>Memory Used</th>
+                                <th>Memory Efficiency</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="podTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Cleanup Tab -->
+            <div id="cleanup" class="tab-content">
+                <div class="summary-cards">
+                    <div class="summary-card">
+                        <h3>Pods to Delete</h3>
+                        <div class="value" id="cleanupPods">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>Namespaces to Review</h3>
+                        <div class="value" id="cleanupNamespaces">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>PVCs to Review</h3>
+                        <div class="value" id="cleanupPVCs">-</div>
+                    </div>
+                    <div class="summary-card">
+                        <h3>StatefulSets to Review</h3>
+                        <div class="value" id="cleanupStatefulSets">-</div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="cleanupChart"></canvas>
+                </div>
+
+                <div class="table-container">
+                    <h2>Cleanup Recommendations</h2>
+                    <table id="cleanupTable">
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Namespace</th>
+                                <th>Name</th>
+                                <th>Action</th>
+                                <th>Reason</th>
+                                <th>Risk</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cleanupTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Dependencies Tab -->
+            <div id="dependencies" class="tab-content">
+                <div class="dashboard-grid">
+                    <div class="card">
+                        <h2>Dependency Statistics</h2>
+                        <div class="metric">
+                            <span class="metric-label">Total Dependencies</span>
+                            <span class="metric-value" id="totalDeps">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Internal Services</span>
+                            <span class="metric-value success" id="internalDeps">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">External Ingress</span>
+                            <span class="metric-value warning" id="externalDeps">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="metric-label">Unique Namespaces</span>
+                            <span class="metric-value" id="uniqueNsDeps">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="chart-container">
+                    <canvas id="dependencyChart"></canvas>
+                </div>
+
+                <div class="table-container">
+                    <h2>Pod Dependencies & API Map</h2>
+                    <table id="dependencyTable">
+                        <thead>
+                            <tr>
+                                <th>Source Namespace</th>
+                                <th>Source Pod</th>
+                                <th>Destination Namespace</th>
+                                <th>Destination Service</th>
+                                <th>Protocol</th>
+                                <th>Port</th>
+                                <th>Confidence</th>
+                            </tr>
+                        </thead>
+                        <tbody id="dependencyTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let namespaceData = [];
+        let podData = [];
+        let cleanupData = [];
+        let dependencyData = [];
+        let charts = {};
+
+        function showStatus(message, isError = false) {
+            const statusDiv = document.getElementById('statusMessage');
+            statusDiv.innerHTML = `<div class="status-message ${isError ? 'status-error' : 'status-success'}">${message}</div>`;
+        }
+
+        async function loadAllFiles() {
+            const nsFile = document.getElementById('namespaceFile').files[0];
+            const podFile = document.getElementById('podFile').files[0];
+            const cleanupFile = document.getElementById('cleanupFile').files[0];
+            const depFile = document.getElementById('dependencyFile').files[0];
+
+            if (!nsFile || !podFile || !cleanupFile || !depFile) {
+                showStatus('❌ Please select all four CSV files', true);
+                return;
+            }
+
+            try {
+                showStatus('⏳ Loading files...');
+                
+                const [nsText, podText, cleanupText, depText] = await Promise.all([
+                    nsFile.text(),
+                    podFile.text(),
+                    cleanupFile.text(),
+                    depFile.text()
+                ]);
+
+                namespaceData = Papa.parse(nsText, { header: true, skipEmptyLines: true }).data;
+                podData = Papa.parse(podText, { header: true, skipEmptyLines: true }).data;
+                cleanupData = Papa.parse(cleanupText, { header: true, skipEmptyLines: true }).data;
+                dependencyData = Papa.parse(depText, { header: true, skipEmptyLines: true }).data;
+
+                showStatus('✅ Files loaded successfully! Initializing dashboard...');
+                
+                setTimeout(() => {
+                    document.getElementById('dashboardContent').classList.add('active');
+                    initializeDashboard();
+                    showStatus('✅ Dashboard ready!');
+                }, 500);
+
+            } catch (error) {
+                console.error('Error loading files:', error);
+                showStatus('❌ Error loading files: ' + error.message, true);
+            }
+        }
+
+        function initializeDashboard() {
+            updateOverview();
+            renderNamespaceTab();
+            renderPodTab();
+            renderCleanupTab();
+            renderDependencyTab();
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(tabName).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function updateOverview() {
+            const totalNs = namespaceData.length;
+            const totalPods = namespaceData.reduce((sum, ns) => sum + parseInt(ns.total_pods || 0), 0);
+            const podsToDelete = namespaceData.reduce((sum, ns) => sum + parseInt(ns.pods_to_delete || 0), 0);
+            const podsToRightsize = namespaceData.reduce((sum, ns) => sum + parseInt(ns.pods_to_rightsize || 0), 0);
+
+            document.getElementById('totalNamespaces').textContent = totalNs;
+            document.getElementById('totalPods').textContent = totalPods;
+            document.getElementById('podsToDelete').textContent = podsToDelete;
+            document.getElementById('podsToRightsize').textContent = podsToRightsize;
+
+            let totalCpuEff = 0, totalMemEff = 0, count = 0;
+            let totalCpuReq = 0, totalMemReq = 0;
+
+            namespaceData.forEach(ns => {
+                const cpuEff = parseInt(ns.cpu_efficiency_pct?.replace('%', '') || 0);
+                const memEff = parseInt(ns.memory_efficiency_pct?.replace('%', '') || 0);
+                if (cpuEff > 0) { totalCpuEff += cpuEff; count++; }
+                if (memEff > 0) totalMemEff += memEff;
+                
+                totalCpuReq += parseFloat(ns.cpu_requested?.replace('m', '') || 0);
+                totalMemReq += parseFloat(ns.memory_requested?.replace(/[^\d.]/g, '') || 0);
+            });
+
+            document.getElementById('avgCpuEff').textContent = count > 0 ? Math.round(totalCpuEff / count) + '%' : 'N/A';
+            document.getElementById('avgMemEff').textContent = count > 0 ? Math.round(totalMemEff / count) + '%' : 'N/A';
+            document.getElementById('totalCpuReq').textContent = (totalCpuReq / 1000).toFixed(2) + ' cores';
+            document.getElementById('totalMemReq').textContent = (totalMemReq / 1024).toFixed(2) + ' Gi';
+
+            const actionCounts = {};
+            podData.forEach(pod => {
+                const action = pod.action || 'UNKNOWN';
+                actionCounts[action] = (actionCounts[action] || 0) + 1;
+            });
+
+            document.getElementById('actionKeep').textContent = actionCounts['KEEP'] || 0;
+            document.getElementById('actionRightsize').textContent = actionCounts['RIGHTSIZE'] || 0;
+            document.getElementById('actionSetReq').textContent = actionCounts['SET_REQUESTS'] || 0;
+            document.getElementById('actionCleanup').textContent = (actionCounts['DELETE'] || 0) + (actionCounts['INVESTIGATE'] || 0);
+
+            renderNamespaceChart();
+            renderActionChart();
+        }
+
+        function renderNamespaceChart() {
+            const ctx = document.getElementById('namespaceChart').getContext('2d');
+            if (charts.namespace) charts.namespace.destroy();
+            
+            const top10 = namespaceData.slice(0, 10);
+            
+            charts.namespace = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: top10.map(ns => ns.namespace),
+                    datasets: [{
+                        label: 'Total Pods',
+                        data: top10.map(ns => parseInt(ns.total_pods || 0)),
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Top 10 Namespaces by Pod Count',
+                            font: { size: 16, weight: 'bold' }
+                        },
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function renderActionChart() {
+            const ctx = document.getElementById('actionChart').getContext('2d');
+            if (charts.action) charts.action.destroy();
+            
+            const actionCounts = {};
+            podData.forEach(pod => {
+                const action = pod.action || 'UNKNOWN';
+                actionCounts[action] = (actionCounts[action] || 0) + 1;
+            });
+
+            charts.action = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: Object.keys(actionCounts),
+                    datasets: [{
+                        data: Object.values(actionCounts),
+                        backgroundColor: [
+                            'rgba(39, 174, 96, 0.8)',
+                            'rgba(243, 156, 18, 0.8)',
+                            'rgba(231, 76, 60, 0.8)',
+                            'rgba(52, 152, 219, 0.8)',
+                            'rgba(155, 89, 182, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Pod Actions Distribution',
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderNamespaceTab() {
+            const tbody = document.getElementById('namespaceTableBody');
+            tbody.innerHTML = namespaceData.map(ns => `
+                <tr>
+                    <td><strong>${ns.namespace}</strong></td>
+                    <td>${ns.total_pods}</td>
+                    <td>${ns.cpu_requested}</td>
+                    <td>${ns.cpu_used}</td>
+                    <td><span class="badge ${getEfficiencyBadge(ns.cpu_efficiency_pct)}">${ns.cpu_efficiency_pct}</span></td>
+                    <td>${ns.memory_requested}</td>
+                    <td>${ns.memory_used}</td>
+                    <td><span class="badge ${getEfficiencyBadge(ns.memory_efficiency_pct)}">${ns.memory_efficiency_pct}</span></td>
+                    <td><span class="badge ${getActionBadge(ns.recommended_action)}">${ns.recommended_action}</span></td>
+                </tr>
+            `).join('');
+
+            const filter = document.getElementById('podNamespaceFilter');
+            const uniqueNs = [...new Set(podData.map(p => p.namespace))].sort();
+            filter.innerHTML = '<option value="all">All</option>' + 
+                uniqueNs.map(ns => `<option value="${ns}">${ns}</option>`).join('');
+
+            renderCpuEfficiencyChart();
+            renderMemoryEfficiencyChart();
+        }
+
+        function renderCpuEfficiencyChart() {
+            const ctx = document.getElementById('cpuEfficiencyChart').getContext('2d');
+            if (charts.cpuEff) charts.cpuEff.destroy();
+            
+            const sorted = [...namespaceData].sort((a, b) => 
+                parseInt(b.cpu_efficiency_pct?.replace('%', '') || 0) - 
+                parseInt(a.cpu_efficiency_pct?.replace('%', '') || 0)
+            ).slice(0, 15);
+
+            charts.cpuEff = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(ns => ns.namespace),
+                    datasets: [{
+                        label: 'CPU Efficiency %',
+                        data: sorted.map(ns => parseInt(ns.cpu_efficiency_pct?.replace('%', '') || 0)),
+                        backgroundColor: sorted.map(ns => {
+                            const eff = parseInt(ns.cpu_efficiency_pct?.replace('%', '') || 0);
+                            return eff > 70 ? 'rgba(39, 174, 96, 0.8)' : 
+                                   eff > 40 ? 'rgba(243, 156, 18, 0.8)' : 
+                                   'rgba(231, 76, 60, 0.8)';
+                        })
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'CPU Efficiency by Namespace (Top 15)',
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
+                }
+            });
+        }
+
+        function renderMemoryEfficiencyChart() {
+            const ctx = document.getElementById('memoryEfficiencyChart').getContext('2d');
+            if (charts.memEff) charts.memEff.destroy();
+            
+            const sorted = [...namespaceData].sort((a, b) => 
+                parseInt(b.memory_efficiency_pct?.replace('%', '') || 0) - 
+                parseInt(a.memory_efficiency_pct?.replace('%', '') || 0)
+            ).slice(0, 15);
+
+            charts.memEff = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(ns => ns.namespace),
+                    datasets: [{
+                        label: 'Memory Efficiency %',
+                        data: sorted.map(ns => parseInt(ns.memory_efficiency_pct?.replace('%', '') || 0)),
+                        backgroundColor: sorted.map(ns => {
+                            const eff = parseInt(ns.memory_efficiency_pct?.replace('%', '') || 0);
+                            return eff > 70 ? 'rgba(39, 174, 96, 0.8)' : 
+                                   eff > 40 ? 'rgba(243, 156, 18, 0.8)' : 
+                                   'rgba(231, 76, 60, 0.8)';
+                        })
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Memory Efficiency by Namespace (Top 15)',
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true, max: 100 }
+                    }
+                }
+            });
+        }
+
+        function renderPodTab() {
+            filterPods();
+        }
+
+        function filterPods() {
+            const nsFilter = document.getElementById('podNamespaceFilter').value;
+            const actionFilter = document.getElementById('podActionFilter').value;
+            const searchFilter = document.getElementById('podSearchFilter').value.toLowerCase();
+
+            let filtered = podData.filter(pod => {
+                const matchNs = nsFilter === 'all' || pod.namespace === nsFilter;
+                const matchAction = actionFilter === 'all' || pod.action === actionFilter;
+                const matchSearch = !searchFilter || pod.pod?.toLowerCase().includes(searchFilter);
+                return matchNs && matchAction && matchSearch;
+            });
+
+            const tbody = document.getElementById('podTableBody');
+            tbody.innerHTML = filtered.slice(0, 100).map(pod => `
+                <tr>
+                    <td>${pod.namespace}</td>
+                    <td>${pod.pod}</td>
+                    <td><span class="badge ${getPhaseBadge(pod.phase)}">${pod.phase}</span></td>
+                    <td>${pod.cpu_request || 'none'}</td>
+                    <td>${pod.cpu_used || 'N/A'}</td>
+                    <td>${pod.cpu_efficiency || 'N/A'}</td>
+                    <td>${pod.memory_request || 'none'}</td>
+                    <td>${pod.memory_used || 'N/A'}</td>
+                    <td>${pod.memory_efficiency || 'N/A'}</td>
+                    <td><span class="badge ${getActionBadge(pod.action)}">${pod.action}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        function renderCleanupTab() {
+            const podCleanup = cleanupData.filter(item => item.type === 'POD' && item.action === 'DELETE').length;
+            const nsCleanup = cleanupData.filter(item => item.type === 'NAMESPACE').length;
+            const pvcCleanup = cleanupData.filter(item => item.type === 'PVC').length;
+            const stsCleanup = cleanupData.filter(item => item.type === 'STATEFULSET').length;
+
+            document.getElementById('cleanupPods').textContent = podCleanup;
+            document.getElementById('cleanupNamespaces').textContent = nsCleanup;
+            document.getElementById('cleanupPVCs').textContent = pvcCleanup;
+            document.getElementById('cleanupStatefulSets').textContent = stsCleanup;
+
+            const tbody = document.getElementById('cleanupTableBody');
+            tbody.innerHTML = cleanupData.slice(0, 100).map(item => `
+                <tr>
+                    <td><span class="badge badge-info">${item.type}</span></td>
+                    <td>${item.namespace}</td>
+                    <td>${item.name}</td>
+                    <td><span class="badge ${getActionBadge(item.action)}">${item.action}</span></td>
+                    <td>${item.reason}</td>
+                    <td><span class="badge ${getRiskBadge(item.risk)}">${item.risk}</span></td>
+                </tr>
+            `).join('');
+
+            renderCleanupChart();
+        }
+
+        function renderCleanupChart() {
+            const ctx = document.getElementById('cleanupChart').getContext('2d');
+            if (charts.cleanup) charts.cleanup.destroy();
+            
+            const typeCounts = {};
+            cleanupData.forEach(item => {
+                typeCounts[item.type] = (typeCounts[item.type] || 0) + 1;
+            });
+
+            charts.cleanup = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: Object.keys(typeCounts),
+                    datasets: [{
+                        data: Object.values(typeCounts),
+                        backgroundColor: [
+                            'rgba(231, 76, 60, 0.8)',
+                            'rgba(243, 156, 18, 0.8)',
+                            'rgba(52, 152, 219, 0.8)',
+                            'rgba(155, 89, 182, 0.8)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Cleanup Items by Type',
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderDependencyTab() {
+            const total = dependencyData.length;
+            const internal = dependencyData.filter(d => !d.source_namespace?.includes('external')).length;
+            const external = dependencyData.filter(d => d.source_namespace?.includes('external')).length;
+            const uniqueNs = new Set(dependencyData.map(d => d.source_namespace)).size;
+
+            document.getElementById('totalDeps').textContent = total;
+            document.getElementById('internalDeps').textContent = internal;
+            document.getElementById('externalDeps').textContent = external;
+            document.getElementById('uniqueNsDeps').textContent = uniqueNs;
+
+            const tbody = document.getElementById('dependencyTableBody');
+            tbody.innerHTML = dependencyData.slice(0, 50).map(dep => `
+                <tr>
+                    <td>${dep.source_namespace}</td>
+                    <td>${dep.source_pod}</td>
+                    <td>${dep.destination_namespace}</td>
+                    <td>${dep.destination_service}</td>
+                    <td><span class="badge badge-info">${dep.protocol}</span></td>
+                    <td>${dep.port}</td>
+                    <td><span class="badge ${getConfidenceBadge(dep.confidence)}">${dep.confidence}</span></td>
+                </tr>
+            `).join('');
+
+            renderDependencyChart();
+        }
+
+        function renderDependencyChart() {
+            const ctx = document.getElementById('dependencyChart').getContext('2d');
+            if (charts.dependency) charts.dependency.destroy();
+            
+            const nsCounts = {};
+            dependencyData.forEach(dep => {
+                const ns = dep.source_namespace;
+                nsCounts[ns] = (nsCounts[ns] || 0) + 1;
+            });
+
+            const sorted = Object.entries(nsCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+
+            charts.dependency = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sorted.map(([ns]) => ns),
+                    datasets: [{
+                        label: 'Dependencies',
+                        data: sorted.map(([, count]) => count),
+                        backgroundColor: 'rgba(102, 126, 234, 0.8)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Top 10 Namespaces by Dependency Count',
+                            font: { size: 16, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: { beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+        function getEfficiencyBadge(eff) {
+            const val = parseInt(eff?.replace('%', '') || 0);
+            return val > 70 ? 'badge-success' : val > 40 ? 'badge-warning' : 'badge-danger';
+        }
+
+        function getActionBadge(action) {
+            if (!action) return 'badge-info';
+            if (action.includes('KEEP')) return 'badge-success';
+            if (action.includes('DELETE') || action.includes('CLEANUP')) return 'badge-danger';
+            return 'badge-warning';
+        }
+
+        function getPhaseBadge(phase) {
+            if (phase === 'Running') return 'badge-success';
+            if (phase === 'Pending') return 'badge-warning';
+            if (phase === 'Failed') return 'badge-danger';
+            return 'badge-info';
+        }
+
+        function getRiskBadge(risk) {
+            if (risk === 'LOW') return 'badge-success';
+            if (risk === 'MEDIUM') return 'badge-warning';
+            if (risk === 'HIGH') return 'badge-danger';
+            return 'badge-info';
+        }
+
+        function getConfidenceBadge(conf) {
+            if (conf === 'HIGH') return 'badge-success';
