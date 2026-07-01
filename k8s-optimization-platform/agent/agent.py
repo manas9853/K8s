@@ -109,7 +109,7 @@ def _safe(fn, default=None):
     try:
         return fn()
     except Exception as exc:
-        logger.debug("_safe caught: %s", exc)
+        logger.warning("_safe caught %s: %s", fn.__name__ if hasattr(fn, '__name__') else fn, exc)
         return default
 
 
@@ -319,8 +319,26 @@ class ClusterAgent:
         # Populate top-level "resources" summary from already-collected data
         payload["resources"] = self._resource_summary(payload)
 
+        # ── post-collection sanity check ──────────────────────────────────
+        node_count = payload.get("nodes", {}).get("count", 0)
+        if node_count == 0:
+            logger.warning(
+                "NODES COUNT IS 0 for cluster '%s' — nodes domain collected: %s. "
+                "Check that the agent ServiceAccount has ClusterRole permission to "
+                "list nodes (kubectl auth can-i list nodes "
+                "--as=system:serviceaccount:k8s-optimization-agent:k8s-optimization-agent).",
+                self.cluster_name,
+                bool(payload.get("nodes")),
+            )
+
         elapsed = time.monotonic() - t0
-        logger.info("Collection done in %.1fs", elapsed)
+        logger.info(
+            "Collection done in %.1fs — nodes=%d pods=%d namespaces=%d",
+            elapsed,
+            node_count,
+            payload.get("pods", {}).get("total", 0),
+            payload.get("namespaces", {}).get("count", 0),
+        )
         return payload
 
     # ── domain: nodes ─────────────────────────────────────────────────────────

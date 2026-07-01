@@ -104,9 +104,18 @@ const Dashboard: React.FC = () => {
       let totalNodes = 0, totalPods = 0, totalNamespaces = 0;
       for (const c of agentClusters) {
         const mRes = await fetch(`${API_BASE_URL}/agents/clusters/${c.cluster_name}/metrics`);
-        if (!mRes.ok) continue;
+        if (!mRes.ok) {
+          console.warn(
+            `[Dashboard] metrics fetch failed for cluster "${c.cluster_name}": ` +
+            `HTTP ${mRes.status} — nodes will count as 0 for this cluster.`
+          );
+          continue;
+        }
         const m = await mRes.json();
-        totalNodes += m.nodes?.count ?? 0;
+        // Prefer nodes.count; fall back to nodes.items.length in case the
+        // agent sent items but the count key was missing (e.g. partial payload).
+        const nodeItems: unknown[] = m.nodes?.items ?? [];
+        totalNodes += m.nodes?.count ?? nodeItems.length;
         totalPods += m.pods?.total ?? 0;
         totalNamespaces += m.namespaces?.count ?? 0;
       }

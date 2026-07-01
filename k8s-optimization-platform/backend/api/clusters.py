@@ -90,6 +90,36 @@ class ClusterHealth(BaseModel):
 
 
 # Endpoints
+
+@router.get("/debug/nodes", include_in_schema=False)
+async def debug_nodes():
+    """Diagnostic endpoint: shows exactly what get_latest_metrics returns for nodes."""
+    agent_clusters = db_manager.get_all_clusters()
+    result = []
+    for cluster_data in agent_clusters:
+        cluster_name = cluster_data['cluster_name']
+        metrics = db_manager.get_latest_metrics(cluster_name)
+        if metrics:
+            nodes_data = metrics.get('nodes', {})
+            node_items = nodes_data.get('items', []) if isinstance(nodes_data, dict) else []
+            total_nodes_resolved = (
+                nodes_data.get('count', nodes_data.get('total', len(node_items)))
+                if isinstance(nodes_data, dict) else 0
+            )
+            result.append({
+                "cluster": cluster_name,
+                "nodes_type": type(nodes_data).__name__,
+                "nodes_keys": sorted(nodes_data.keys()) if isinstance(nodes_data, dict) else [],
+                "nodes_count_key": nodes_data.get('count') if isinstance(nodes_data, dict) else None,
+                "total_nodes_resolved": total_nodes_resolved,
+                "resources_cpu": metrics.get('resources', {}).get('cpu_capacity_cores'),
+                "metrics_timestamp": metrics.get('timestamp'),
+            })
+        else:
+            result.append({"cluster": cluster_name, "nodes_type": "NO METRICS"})
+    return result
+
+
 @router.get("", response_model=List[ClusterInfo])
 async def list_clusters(
     environment: Optional[str] = Query(None),
@@ -193,11 +223,22 @@ def _convert_agent_clusters_to_cluster_info(
             pods_data = metrics.get('pods', {})
             namespaces_data = metrics.get('namespaces', {})
             resources_data = metrics.get('resources', {})
-            
-            # Calculate totals — agent sends 'count', not 'total'
-            total_nodes = nodes_data.get('count', nodes_data.get('total', 0))
+
+            # Calculate totals — agent sends 'count', not 'total'.
+            # Fall back to len(items) in case 'count' was not written
+            # (e.g. _safe swallowed a partial result before count was set).
+            node_items = nodes_data.get('items', [])
+            total_nodes = nodes_data.get('count', nodes_data.get('total', len(node_items)))
             total_pods = pods_data.get('total', 0)
             total_namespaces = namespaces_data.get('count', namespaces_data.get('total', 0))
+
+            if total_nodes == 0:
+                logging.warning(
+                    "Cluster '%s' — nodes.count resolved to 0 "
+                    "(nodes_data keys: %s). "
+                    "Verify the agent ServiceAccount can `list nodes`.",
+                    cluster_name, list(nodes_data.keys()),
+                )
 
             # Get resource info — capacity lives under nodes, usage under resources
             cpu_capacity = nodes_data.get('cpu_capacity_cores', resources_data.get('cpu_capacity_cores', 0))
@@ -225,7 +266,12 @@ def _convert_agent_clusters_to_cluster_info(
                 cpu_requested, memory_requested
             )
         else:
-            # No metrics available - use defaults
+            # No metrics available — warn so this is visible in backend logs
+            logging.warning(
+                "Cluster '%s' has no metrics in the database yet — "
+                "nodes will show as 0 until the agent sends its first payload.",
+                cluster_name,
+            )
             total_nodes = 0
             total_pods = 0
             total_namespaces = 0
