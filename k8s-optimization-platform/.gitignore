@@ -1,0 +1,47 @@
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env
+.env.local
+.env.*.local
+
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+backend/.kube-token
+backend/.kube/
+backend/.bluemix/
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+frontend/build/
+frontend/.env
+frontend/.env.local
+frontend/.env.production
+
+# ── Logs & runtime ────────────────────────────────────────────────────────────
+*.log
+backend/backend.log
+
+# ── Database files ────────────────────────────────────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+backend/data/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+.idea/
+.vscode/
+
+# ── Backup archives ────────────────────────────────────────────────────────────
+*.tar.gz
+*.bak
+Dockerfile.*.backup

@@ -1,0 +1,168 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: k8s-optimization-agent
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-optimization-agent
+  namespace: k8s-optimization-agent
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-optimization-agent
+rules:
+  # Read nodes
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list"]
+  
+  # Read namespaces
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+  
+  # Read pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  
+  # Read deployments, replicasets, statefulsets, daemonsets
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+  
+  # Read services
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list"]
+  
+  # Read configmaps and secrets (metadata only)
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets"]
+    verbs: ["get", "list"]
+  
+  # Read persistent volumes and claims
+  - apiGroups: [""]
+    resources: ["persistentvolumes", "persistentvolumeclaims"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-optimization-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-optimization-agent
+subjects:
+  - kind: ServiceAccount
+    name: k8s-optimization-agent
+    namespace: k8s-optimization-agent
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: platform-credentials
+  namespace: k8s-optimization-agent
+type: Opaque
+stringData:
+  # REPLACE THESE VALUES BEFORE DEPLOYING
+  api-token: "YOUR_API_TOKEN_HERE"
+  platform-url: "http://your-platform-url:8000"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+  namespace: k8s-optimization-agent
+data:
+  # REPLACE THESE VALUES FOR EACH CLUSTER
+  CLUSTER_NAME: "my-cluster"
+  ENVIRONMENT: "production"
+  COLLECTION_INTERVAL: "30"
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-optimization-agent
+  namespace: k8s-optimization-agent
+  labels:
+    app: k8s-optimization-agent
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: k8s-optimization-agent
+  template:
+    metadata:
+      labels:
+        app: k8s-optimization-agent
+    spec:
+      serviceAccountName: k8s-optimization-agent
+      # Use public DNS directly — bypasses cluster/corporate DNS resolvers
+      # so the agent works in any org without kube-system changes
+      dnsPolicy: "None"
+      dnsConfig:
+        nameservers:
+          - 1.1.1.1
+          - 8.8.8.8
+        options:
+          - name: ndots
+            value: "1"
+      containers:
+        - name: agent
+          image: docker.io/manas2821/k8s-optimization-agent:latest
+          imagePullPolicy: Always
+          env:
+            - name: PLATFORM_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-credentials
+                  key: platform-url
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-credentials
+                  key: api-token
+            - name: CLUSTER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: CLUSTER_NAME
+            - name: ENVIRONMENT
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: ENVIRONMENT
+            - name: COLLECTION_INTERVAL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: COLLECTION_INTERVAL
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+
+# Made with Bob

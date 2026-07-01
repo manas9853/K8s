@@ -1,0 +1,345 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Deployment Options</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, "Segoe UI", system-ui, sans-serif; font-size: 14px; line-height: 1.6; background: #fff; color: #1f2328; padding: 24px; max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 19px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #57606a; font-size: 13px; margin-bottom: 24px; }
+  h2 { font-size: 15px; font-weight: 700; margin-bottom: 12px; margin-top: 28px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; }
+  .badge { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 600; white-space: nowrap; }
+  .b-free     { background: #dcfce7; color: #15803d; }
+  .b-paid     { background: #fee2e2; color: #b91c1c; }
+  .b-limited  { background: #fef9c3; color: #854d0e; }
+  .b-yes      { background: #dcfce7; color: #15803d; }
+  .b-no       { background: #fee2e2; color: #b91c1c; }
+  .b-partial  { background: #fef9c3; color: #854d0e; }
+  .b-best     { background: #dbeafe; color: #1d4ed8; }
+  .b-winner   { background: #f3e8ff; color: #7c3aed; }
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-bottom: 8px; }
+  th { background: #f7f8fa; text-align: left; padding: 9px 10px; border: 1px solid #e5e7eb; font-weight: 600; font-size: 12px; }
+  td { padding: 9px 10px; border: 1px solid #e5e7eb; vertical-align: middle; }
+  tr:hover td { background: #fafafa; }
+  .winner-row td { background: #faf5ff; }
+  .winner-row:hover td { background: #f3e8ff; }
+  .divider { border: none; border-top: 1px solid #e5e7eb; margin: 24px 0; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+  .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; }
+  .card-green  { border-left: 4px solid #22c55e; }
+  .card-purple { border-left: 4px solid #7c3aed; }
+  .card-blue   { border-left: 4px solid #3b82f6; }
+  .card-red    { border-left: 4px solid #ef4444; }
+  .card-title  { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+  .muted { color: #57606a; font-size: 12.5px; }
+  .arch-box { background: #f7f8fa; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; font-family: monospace; font-size: 12px; line-height: 2; overflow-x: auto; white-space: pre; }
+  .verdict { border: 2px solid #7c3aed; border-radius: 8px; padding: 18px 20px; background: #faf5ff; margin-top: 20px; }
+  .verdict h3 { font-size: 15px; font-weight: 700; color: #7c3aed; margin-bottom: 12px; }
+  .step { display: flex; gap: 12px; margin-bottom: 10px; align-items: flex-start; }
+  .step-num { background: #7c3aed; color: white; border-radius: 50%; min-width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; margin-top: 2px; }
+  ul { padding-left: 18px; }
+  li { margin-bottom: 3px; }
+  .note { background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 10px 14px; font-size: 12.5px; color: #92400e; margin-top: 10px; }
+  code { font-family: monospace; font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 3px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 24px; }
+  .summary-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; text-align: center; }
+  .summary-icon { font-size: 20px; margin-bottom: 4px; }
+  .summary-label { font-size: 11px; color: #57606a; }
+  .summary-val { font-size: 13px; font-weight: 700; }
+  .tag { display: inline-block; font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600; margin-left: 4px; background: #f3e8ff; color: #7c3aed; }
+  .footer { margin-top: 40px; padding-top: 12px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #57606a; }
+  .green { color: #15803d; font-weight: 600; }
+  .red   { color: #b91c1c; font-weight: 600; }
+  .orange { color: #c2410c; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>Where to Deploy — Safe + Free Tier</h1>
+<p class="subtitle">Your constraints: backend never directly public · everything through Nginx gateway · free or near-free · full stack (FastAPI + Postgres + Redis)</p>
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="summary-icon">🌐</div>
+    <div class="summary-val">Firebase Hosting</div>
+    <div class="summary-label">Frontend — already live ✅</div>
+  </div>
+  <div class="summary-card" style="border-color:#7c3aed">
+    <div class="summary-icon">⚙️</div>
+    <div class="summary-val">Oracle Cloud Free</div>
+    <div class="summary-label">Backend + Nginx — recommended</div>
+  </div>
+  <div class="summary-card">
+    <div class="summary-icon">🗄️</div>
+    <div class="summary-val">Supabase Free</div>
+    <div class="summary-label">Postgres — managed, free</div>
+  </div>
+</div>
+
+<hr class="divider" />
+
+<h2>Option Comparison — All Free Tiers Evaluated</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>Platform</th>
+      <th>What It Hosts</th>
+      <th>Cost</th>
+      <th>Nginx Gateway?</th>
+      <th>Postgres?</th>
+      <th>Redis?</th>
+      <th>Always On?</th>
+      <th>Verdict</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr class="winner-row">
+      <td><strong>Oracle Cloud Free</strong> <span class="tag">PICK THIS</span></td>
+      <td>Backend + Nginx + Redis</td>
+      <td><span class="badge b-free">Forever Free</span></td>
+      <td><span class="badge b-yes">✅ Full control</span></td>
+      <td><span class="badge b-yes">✅ Included</span></td>
+      <td><span class="badge b-yes">✅ Self-hosted</span></td>
+      <td><span class="badge b-yes">✅ Always on</span></td>
+      <td><span class="badge b-winner">★ Best</span></td>
+    </tr>
+    <tr>
+      <td><strong>Google Cloud Run</strong></td>
+      <td>Backend only</td>
+      <td><span class="badge b-free">~Free (2M req/mo)</span></td>
+      <td><span class="badge b-no">❌ No Nginx control</span></td>
+      <td><span class="badge b-no">❌ Cloud SQL = $7/mo</span></td>
+      <td><span class="badge b-no">❌ Memorystore = paid</span></td>
+      <td><span class="badge b-yes">✅ Scales to 0</span></td>
+      <td><span class="badge b-limited">Partial</span></td>
+    </tr>
+    <tr>
+      <td><strong>Railway</strong></td>
+      <td>Backend + Postgres + Redis</td>
+      <td><span class="badge b-limited">$5 credit/mo free</span></td>
+      <td><span class="badge b-no">❌ No Nginx</span></td>
+      <td><span class="badge b-yes">✅ Managed</span></td>
+      <td><span class="badge b-yes">✅ Managed</span></td>
+      <td><span class="badge b-yes">✅ Always on</span></td>
+      <td><span class="badge b-limited">Good but paid</span></td>
+    </tr>
+    <tr>
+      <td><strong>Render</strong></td>
+      <td>Backend only</td>
+      <td><span class="badge b-free">Free tier</span></td>
+      <td><span class="badge b-no">❌ No Nginx</span></td>
+      <td><span class="badge b-limited">90 days free only</span></td>
+      <td><span class="badge b-no">❌ Not on free</span></td>
+      <td><span class="badge b-no">❌ Sleeps after 15min</span></td>
+      <td><span class="badge b-no">Not suitable</span></td>
+    </tr>
+    <tr>
+      <td><strong>Fly.io</strong></td>
+      <td>Backend + Redis</td>
+      <td><span class="badge b-free">Free tier (3 VMs)</span></td>
+      <td><span class="badge b-partial">⚠️ Limited</span></td>
+      <td><span class="badge b-no">❌ Postgres = paid</span></td>
+      <td><span class="badge b-yes">✅ Upstash free</span></td>
+      <td><span class="badge b-yes">✅ Always on</span></td>
+      <td><span class="badge b-limited">Partial</span></td>
+    </tr>
+    <tr>
+      <td><strong>Supabase</strong></td>
+      <td>Postgres only</td>
+      <td><span class="badge b-free">Free (500MB)</span></td>
+      <td><span class="badge b-no">❌ DB only</span></td>
+      <td><span class="badge b-yes">✅ Managed Postgres</span></td>
+      <td><span class="badge b-no">❌ No Redis</span></td>
+      <td><span class="badge b-partial">⚠️ Pauses after 1 week idle</span></td>
+      <td><span class="badge b-limited">DB only</span></td>
+    </tr>
+    <tr>
+      <td><strong>Minikube (local)</strong></td>
+      <td>Everything</td>
+      <td><span class="badge b-free">Free</span></td>
+      <td><span class="badge b-yes">✅ Full control</span></td>
+      <td><span class="badge b-yes">✅ Local</span></td>
+      <td><span class="badge b-yes">✅ Local</span></td>
+      <td><span class="badge b-no">❌ Laptop dependent</span></td>
+      <td><span class="badge b-no">Dev only</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<hr class="divider" />
+
+<h2>Why Oracle Cloud Free Tier Wins</h2>
+
+<div class="grid2">
+  <div class="card card-purple">
+    <div class="card-title">What Oracle gives you — forever free</div>
+    <ul>
+      <li>2x AMD VMs — 1 OCPU + 1GB RAM each</li>
+      <li><strong>OR 1x Ampere ARM VM — 4 OCPU + 24GB RAM</strong></li>
+      <li>200GB block storage total</li>
+      <li>10TB outbound bandwidth/month</li>
+      <li>Full root access — install anything</li>
+      <li>Static public IP included</li>
+      <li>No credit card required to stay free</li>
+    </ul>
+  </div>
+  <div class="card card-green">
+    <div class="card-title">What you can run on it</div>
+    <ul>
+      <li>Nginx (gateway — port 443 only open)</li>
+      <li>FastAPI backend (internal only)</li>
+      <li>PostgreSQL (internal only)</li>
+      <li>Redis (internal only)</li>
+      <li>Celery workers (internal only)</li>
+      <li>Prometheus + Grafana (internal only)</li>
+      <li>Your existing docker-compose runs as-is</li>
+    </ul>
+  </div>
+</div>
+
+<div class="note">
+  The 4 OCPU + 24GB ARM instance is more powerful than most paid $20/month VPS servers. Your entire docker-compose stack runs comfortably on it. Oracle has kept this free tier since 2019 with no changes.
+</div>
+
+<hr class="divider" />
+
+<h2>The Complete Architecture — Safe + Free</h2>
+
+<div class="arch-box">INTERNET
+    |
+    |  HTTPS :443 only (port 80 redirects to 443)
+    v
++--------------------------------------------------+
+|  Oracle Cloud Free VM (public IP: your-ip)       |
+|                                                  |
+|  [Nginx — port 443]  &lt;-- ONLY PUBLIC PORT        |
+|       |                                          |
+|       |-- /           --&gt; React build files      |
+|       |-- /api/*      --&gt; backend:8000           |
+|                                                  |
+|  [FastAPI :8000]      &lt;-- NO external port       |
+|  [PostgreSQL :5432]   &lt;-- NO external port       |
+|  [Redis :6379]        &lt;-- NO external port       |
+|  [Celery workers]     &lt;-- NO external port       |
+|  [Prometheus :9090]   &lt;-- NO external port       |
+|                                                  |
+|  All on docker internal network k8s-opt-network  |
++--------------------------------------------------+
+    ^
+    |  Agent reports metrics via HTTPS
+    |
++------------------+
+|  K8s Cluster     |  (minikube / IBM IKS / any)
+|  [Agent Pod]     |
++------------------+
+
++---------------------------+
+|  Firebase Hosting         |  &lt;-- static UI only
+|  k8s-6d5ba.web.app        |      API calls go to Nginx URL
++---------------------------+
+</div>
+
+<hr class="divider" />
+
+<h2>Updated Todo — With Deployment Target Added</h2>
+
+<table>
+  <thead>
+    <tr><th>#</th><th>Task</th><th>Where</th><th>Cost</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>0</td>
+      <td><strong>Sign up for Oracle Cloud Free Tier</strong> — get the ARM VM (4 OCPU / 24GB)</td>
+      <td>cloud.oracle.com</td>
+      <td><span class="badge b-free">Free forever</span></td>
+    </tr>
+    <tr>
+      <td>0b</td>
+      <td><strong>Get a domain name</strong> — point it at Oracle VM's public IP</td>
+      <td>Cloudflare / Namecheap</td>
+      <td><span class="badge b-limited">~$10/year</span></td>
+    </tr>
+    <tr>
+      <td>1</td>
+      <td><strong>Remove exposed ports from docker-compose</strong> — backend, postgres, redis, prometheus all internal only</td>
+      <td>Your codebase</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>2</td>
+      <td><strong>Add SSL/TLS to Nginx</strong> — Let's Encrypt via Certbot on Oracle VM</td>
+      <td>Oracle VM</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>3</td>
+      <td><strong>Deploy docker-compose on Oracle VM</strong> — git clone + docker compose up</td>
+      <td>Oracle VM</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>4</td>
+      <td><strong>Fix ClusterOnboarding platformUrl</strong> — set to Oracle VM domain</td>
+      <td>Your codebase</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>5</td>
+      <td><strong>Set REACT_APP_API_URL</strong> — point frontend at Oracle VM Nginx URL</td>
+      <td>Your codebase</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>6</td>
+      <td><strong>Redeploy Firebase</strong> — with correct backend URL baked in</td>
+      <td>Firebase</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>7</td>
+      <td><strong>Add React Error Boundaries per domain</strong></td>
+      <td>Your codebase</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>8</td>
+      <td><strong>Add async timeouts on K8s + OpenAI calls</strong></td>
+      <td>Your codebase</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+    <tr>
+      <td>9</td>
+      <td><strong>Wire Cluster Onboarding end-to-end</strong> — token gen, agent YAML, verify</td>
+      <td>Your codebase</td>
+      <td><span class="badge b-free">Free</span></td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="verdict">
+  <h3>Final Recommendation</h3>
+  <div class="step">
+    <div class="step-num">1</div>
+    <div><strong>Frontend:</strong> Firebase Hosting — already live at <code>k8s-6d5ba.web.app</code>. Keep it there. Free forever.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div><strong>Backend + Nginx + Postgres + Redis:</strong> Oracle Cloud Free Tier — 4 OCPU / 24GB ARM VM. Your entire docker-compose runs on it. Free forever. Full root access. Nginx is the only open port.</div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div><strong>Domain:</strong> ~$10/year from Namecheap or Cloudflare. Point it at Oracle VM IP. Nginx gets a real SSL cert from Let's Encrypt (free).</div>
+  </div>
+  <div class="step">
+    <div class="step-num">4</div>
+    <div><strong>K8s Cluster Agent:</strong> Minikube locally for dev. Real cluster (IBM IKS, GKE, EKS) for production — agent phones home to your Oracle VM domain over HTTPS through Nginx.</div>
+  </div>
+</div>
+
+<div class="footer">Made with IBM Bob</div>
+</body>
+</html>
