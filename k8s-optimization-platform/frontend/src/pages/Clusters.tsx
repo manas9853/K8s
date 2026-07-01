@@ -428,25 +428,11 @@ const Clusters: React.FC = () => {
 
       {/* ── CSS keyframes ── */}
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap');
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @keyframes scan-line {
-          0%   { transform: translateY(-100%); opacity: 0; }
-          10%  { opacity: 0.3; }
-          90%  { opacity: 0.3; }
-          100% { transform: translateY(100vh); opacity: 0; }
-        }
         @keyframes pulse-dot {
           0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
         }
       `}</style>
-
-      {/* Scan line */}
-      <div style={{
-        position: 'fixed', top: 0, left: 0, right: 0, height: 2,
-        background: `linear-gradient(90deg, transparent, ${C.cyan}, transparent)`,
-        opacity: 0, animation: 'scan-line 10s linear infinite', pointerEvents: 'none', zIndex: 100,
-      }} />
 
       {/* Hex grid bg */}
       <div style={{ position: 'fixed', inset: 0, opacity: 0.25, pointerEvents: 'none' }}>

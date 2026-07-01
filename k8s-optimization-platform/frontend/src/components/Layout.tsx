@@ -594,6 +594,23 @@ const menuItems: MenuItem[] = [
 
 const USERS_API_BASE = 'http://localhost:8000';
 
+/* ── K8s 7-spoke wheel SVG ── */
+const K8sWheelIcon: React.FC<{ size?: number; color?: string }> = ({ size = 18, color = '#00d4ff' }) => (
+  <svg width={size} height={size} viewBox="0 0 30 30" fill="none" style={{ flexShrink: 0 }}>
+    {Array.from({ length: 7 }, (_, k) => {
+      const a = (2 * Math.PI * k) / 7 - Math.PI / 2;
+      return (
+        <line key={k}
+          x1={15 + 5 * Math.cos(a)} y1={15 + 5 * Math.sin(a)}
+          x2={15 + 11 * Math.cos(a)} y2={15 + 11 * Math.sin(a)}
+          stroke={color} strokeWidth="2" strokeLinecap="round"
+        />
+      );
+    })}
+    <circle cx="15" cy="15" r="3.5" fill={color} />
+  </svg>
+);
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -602,7 +619,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const isAdmin = user?.role === 'admin';
   const [drawerOpen, setDrawerOpen] = useState(true);
   const [openMenus, setOpenMenus] = useState<{ [key: string]: boolean }>({
-    Dashboard: true,  // Keep Dashboard open as it's the landing page
+    Dashboard: true,
     Operations: false,
     'Autonomous AI': false,
     Optimization: false,
@@ -615,174 +632,319 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   });
   const [pendingCount, setPendingCount] = useState(0);
 
-  // Poll for pending users (admins only) so the badge stays current
   const fetchPending = useCallback(async () => {
     if (!isAdmin) return;
     try {
       const res = await axios.get(`${USERS_API_BASE}/api/v1/users/pending`);
       setPendingCount(Array.isArray(res.data) ? res.data.length : 0);
-    } catch {
-      // backend unavailable – leave badge as-is
-    }
+    } catch { /* backend unavailable */ }
   }, [isAdmin]);
 
   useEffect(() => {
     fetchPending();
-    const id = setInterval(fetchPending, 30_000); // refresh every 30 s
+    const id = setInterval(fetchPending, 30_000);
     return () => clearInterval(id);
   }, [fetchPending]);
 
-  const handleDrawerToggle = () => {
-    setDrawerOpen(!drawerOpen);
-  };
+  const handleDrawerToggle = () => setDrawerOpen(!drawerOpen);
 
   const handleMenuClick = (text: string, path?: string) => {
     if (path) {
       navigate(path);
     } else {
-      setOpenMenus((prev) => ({
-        ...prev,
-        [text]: !prev[text],
-      }));
+      setOpenMenus((prev) => ({ ...prev, [text]: !prev[text] }));
     }
   };
 
   const renderMenuItem = (item: MenuItem, level: number = 0) => {
-    // Administration — admin-only
     if (item.text === 'Administration' && !isAdmin) return null;
-
-    // Team-based visibility for top-level sections (level 0 only)
     if (level === 0 && item.text !== 'Administration') {
       const allowedTeams = TEAM_MENU_ACCESS[item.text];
       if (allowedTeams !== undefined && !isAdmin) {
-        // If the user has teams assigned, check overlap; no teams = full access
         const userTeams: string[] = (platformUser?.teams ?? []);
-        if (userTeams.length > 0) {
-          const hasAccess = userTeams.some((t) => allowedTeams.includes(t));
-          if (!hasAccess) return null;
-        }
+        if (userTeams.length > 0 && !userTeams.some((t) => allowedTeams.includes(t))) return null;
       }
     }
 
     const hasChildren = item.children && item.children.length > 0;
     const isOpen = openMenus[item.text];
     const isSelected = item.path === location.pathname;
-
-    // Pending badge on "User Management" admin link
     const showPendingBadge = item.text === 'User Management' && isAdmin && pendingCount > 0;
 
+    /* ── Section header (level 0) ── */
+    if (level === 0) {
+      return (
+        <React.Fragment key={item.text}>
+          <ListItem disablePadding sx={{ mt: 0.5 }}>
+            <ListItemButton
+              onClick={() => handleMenuClick(item.text, item.path)}
+              sx={{
+                borderRadius: '6px',
+                mx: 1,
+                py: 0.75,
+                background: isOpen ? 'rgba(0,212,255,0.06)' : 'transparent',
+                '&:hover': { background: 'rgba(0,212,255,0.08)' },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 32, color: isOpen ? '#00d4ff' : '#2a5080' }}>
+                {showPendingBadge
+                  ? <Badge badgeContent={pendingCount} color="warning">{item.icon}</Badge>
+                  : item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  fontFamily: "'JetBrains Mono','Courier New',monospace",
+                  color: isOpen ? '#00d4ff' : '#3d6080',
+                }}
+              />
+              {hasChildren && (
+                isOpen
+                  ? <ExpandLess sx={{ fontSize: 14, color: '#3d6080' }} />
+                  : <ExpandMore sx={{ fontSize: 14, color: '#3d6080' }} />
+              )}
+            </ListItemButton>
+          </ListItem>
+          {hasChildren && (
+            <Collapse in={isOpen} timeout="auto" unmountOnExit>
+              <List component="div" disablePadding>
+                {item.children!.map((child) => renderMenuItem(child, level + 1))}
+              </List>
+            </Collapse>
+          )}
+        </React.Fragment>
+      );
+    }
+
+    /* ── Sub-section header (level 1 with children) ── */
+    if (hasChildren) {
+      return (
+        <React.Fragment key={item.text}>
+          <ListItem disablePadding>
+            <ListItemButton
+              onClick={() => handleMenuClick(item.text, item.path)}
+              sx={{
+                pl: level * 1.5 + 2,
+                py: 0.5,
+                mx: 1,
+                borderRadius: '4px',
+                '&:hover': { background: 'rgba(0,212,255,0.05)' },
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 28, color: '#2a5080' }}>
+                {item.icon}
+              </ListItemIcon>
+              <ListItemText
+                primary={item.text}
+                primaryTypographyProps={{
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  color: '#7ca5cc',
+                  letterSpacing: '0.02em',
+                }}
+              />
+              {isOpen
+                ? <ExpandLess sx={{ fontSize: 13, color: '#2a5080' }} />
+                : <ExpandMore sx={{ fontSize: 13, color: '#2a5080' }} />}
+            </ListItemButton>
+          </ListItem>
+          <Collapse in={isOpen} timeout="auto" unmountOnExit>
+            <List component="div" disablePadding>
+              {item.children!.map((child) => renderMenuItem(child, level + 1))}
+            </List>
+          </Collapse>
+        </React.Fragment>
+      );
+    }
+
+    /* ── Leaf item ── */
     return (
       <React.Fragment key={item.text}>
         <ListItem disablePadding>
           <ListItemButton
             selected={isSelected}
             onClick={() => handleMenuClick(item.text, item.path)}
-            sx={{ pl: level * 2 + 2 }}
+            sx={{
+              pl: level * 1.5 + 2,
+              py: 0.4,
+              mx: 1,
+              borderRadius: '4px',
+              position: 'relative',
+              '&.Mui-selected': {
+                background: 'rgba(0,212,255,0.1)',
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  left: 0,
+                  top: '15%',
+                  bottom: '15%',
+                  width: '2px',
+                  background: '#00d4ff',
+                  borderRadius: '0 2px 2px 0',
+                  boxShadow: '0 0 6px #00d4ff',
+                },
+              },
+              '&:hover': { background: 'rgba(0,212,255,0.06)' },
+            }}
           >
-            <ListItemIcon sx={{ minWidth: 36 }}>
+            <ListItemIcon sx={{ minWidth: 24, '& svg': { fontSize: 14 }, color: isSelected ? '#00d4ff' : '#2a5080' }}>
               {showPendingBadge
                 ? <Badge badgeContent={pendingCount} color="warning">{item.icon}</Badge>
-                : item.icon
-              }
+                : item.icon}
             </ListItemIcon>
             <ListItemText
               primary={item.text}
               primaryTypographyProps={{
-                fontSize: level === 0 ? '0.95rem' : '0.875rem',
-                fontWeight: level === 0 ? 600 : 400,
+                fontSize: '0.78rem',
+                fontWeight: isSelected ? 600 : 400,
+                color: isSelected ? '#00d4ff' : '#7ca5cc',
+                letterSpacing: '0.01em',
               }}
             />
-            {hasChildren && (isOpen ? <ExpandLess /> : <ExpandMore />)}
           </ListItemButton>
         </ListItem>
-        {hasChildren && (
-          <Collapse in={isOpen} timeout="auto" unmountOnExit>
-            <List component="div" disablePadding>
-              {item.children!.map((child) => renderMenuItem(child, level + 1))}
-            </List>
-          </Collapse>
-        )}
       </React.Fragment>
     );
   };
 
   return (
-    <Box sx={{ display: 'flex' }}>
+    <Box sx={{ display: 'flex', minHeight: '100vh', background: '#050d1a' }}>
+
+      {/* ── Injected global styles ── */}
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+        @keyframes k8s-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+        @keyframes k8s-scan {
+          0%{transform:translateY(-100%);opacity:0}
+          5%{opacity:.25} 95%{opacity:.25}
+          100%{transform:translateY(100vh);opacity:0}
+        }
+      `}</style>
+
+      {/* ── Top scan line ── */}
+      <div style={{
+        position: 'fixed', top: 0, left: 0, right: 0, height: 2, zIndex: 9999,
+        background: 'linear-gradient(90deg,transparent,#00d4ff,transparent)',
+        opacity: 0, animation: 'k8s-scan 12s linear infinite', pointerEvents: 'none',
+      }} />
+
+      {/* ══════════════════ APP BAR ══════════════════ */}
       <AppBar
         position="fixed"
+        elevation={0}
         sx={{
           zIndex: (theme) => theme.zIndex.drawer + 1,
           width: drawerOpen ? `calc(100% - ${drawerWidth}px)` : '100%',
           ml: drawerOpen ? `${drawerWidth}px` : 0,
+          background: 'linear-gradient(90deg, #071022 0%, #0a1830 100%)',
+          borderBottom: '1px solid #1e3a5f',
+          boxShadow: '0 1px 0 #1e3a5f, 0 4px 20px rgba(0,0,0,0.6)',
           transition: (theme) => theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),
         }}
       >
-        <Toolbar>
+        <Toolbar sx={{ gap: 1.5, minHeight: '52px !important', px: 2 }}>
+          {/* Hamburger */}
           <IconButton
-            color="inherit"
-            aria-label="toggle drawer"
             onClick={handleDrawerToggle}
-            edge="start"
-            sx={{ mr: 2 }}
+            size="small"
+            sx={{
+              border: '1px solid #1e3a5f',
+              borderRadius: '6px',
+              width: 32, height: 32,
+              color: '#3d6080',
+              '&:hover': { borderColor: '#00d4ff', color: '#00d4ff', background: 'rgba(0,212,255,0.08)' },
+            }}
           >
-            {drawerOpen ? <ChevronLeftIcon /> : <MenuIcon />}
+            {drawerOpen ? <ChevronLeftIcon sx={{ fontSize: 16 }} /> : <MenuIcon sx={{ fontSize: 16 }} />}
           </IconButton>
-          <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            K8s Optimization Platform
+
+          {/* Brand name */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
+            <Typography
+              sx={{
+                fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.06em',
+                fontFamily: "'JetBrains Mono','Courier New',monospace",
+                color: '#7ca5cc', textTransform: 'uppercase',
+                display: { xs: 'none', sm: 'block' },
+              }}
+            >
+              K8s<span style={{ color: '#00d4ff' }}>Opt</span>
+            </Typography>
+          </Box>
+
+          {/* Page path breadcrumb */}
+          <Typography
+            sx={{
+              fontSize: '0.7rem', color: '#3d6080', flexGrow: 1,
+              fontFamily: "'JetBrains Mono','Courier New',monospace",
+              letterSpacing: '0.04em',
+              display: { xs: 'none', md: 'block' },
+            }}
+          >
+            <span style={{ color: '#2a5080' }}>~/</span>
+            {location.pathname.replace(/\//g, ' / ').trim() || 'dashboard'}
           </Typography>
 
-          {/* Cluster Selector — switches active cluster for every page */}
+          <Box sx={{ flexGrow: { xs: 1, md: 0 } }} />
+
+          {/* Cluster Selector */}
           <ClusterSelector />
 
-          {/* User role chip + team chips + pending badge + Clerk UserButton */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          {/* Live dot */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75,
+            background: 'rgba(57,255,20,0.06)', border: '1px solid rgba(57,255,20,0.2)',
+            borderRadius: '4px', px: 1, py: 0.25,
+          }}>
+            <Box sx={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: '#39ff14', boxShadow: '0 0 6px #39ff14',
+              animation: 'k8s-pulse 2s ease-in-out infinite',
+            }} />
+            <Typography sx={{
+              fontSize: '0.65rem', color: '#39ff14', fontWeight: 700,
+              fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.1em',
+            }}>
+              LIVE
+            </Typography>
+          </Box>
+
+          {/* User chips */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
             {isAdmin && pendingCount > 0 && (
               <Chip
                 label={`${pendingCount} pending`}
-                size="small"
-                color="warning"
-                variant="outlined"
+                size="small" color="warning" variant="outlined"
                 onClick={() => navigate('/admin/user-management')}
-                sx={{ cursor: 'pointer' }}
+                sx={{ cursor: 'pointer', fontSize: '0.65rem' }}
               />
             )}
-            {/* Team chips — show first 2 teams to avoid overflow */}
             {(platformUser?.teams ?? []).slice(0, 2).map((t) => (
-              <Chip
-                key={t}
-                label={t}
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: '0.7rem', opacity: 0.85 }}
-              />
+              <Chip key={t} label={t} size="small" variant="outlined"
+                sx={{ fontSize: '0.65rem', borderColor: '#1e3a5f', color: '#3d6080' }} />
             ))}
             {(platformUser?.teams ?? []).length > 2 && (
-              <Chip
-                label={`+${(platformUser?.teams ?? []).length - 2}`}
-                size="small"
-                variant="outlined"
-                sx={{ fontSize: '0.7rem', opacity: 0.85 }}
-              />
+              <Chip label={`+${(platformUser?.teams ?? []).length - 2}`} size="small" variant="outlined"
+                sx={{ fontSize: '0.65rem', borderColor: '#1e3a5f', color: '#3d6080' }} />
             )}
             <Chip
               label={user?.role || 'User'}
               size="small"
-              color={user?.role === 'admin' ? 'error' : 'default'}
-              sx={{ textTransform: 'capitalize' }}
+              color={user?.role === 'admin' ? 'error' : 'info'}
+              sx={{ textTransform: 'uppercase', fontSize: '0.62rem', fontWeight: 700 }}
             />
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: { width: 32, height: 32 },
-                },
-              }}
-            />
+            <UserButton appearance={{ elements: { avatarBox: { width: 30, height: 30 } } }} />
           </Box>
         </Toolbar>
       </AppBar>
+
+      {/* ══════════════════ SIDEBAR ══════════════════ */}
       <Drawer
         variant="persistent"
         open={drawerOpen}
@@ -792,6 +954,9 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           '& .MuiDrawer-paper': {
             width: drawerWidth,
             boxSizing: 'border-box',
+            background: '#071022',
+            borderRight: '1px solid #1a2e4a',
+            backgroundImage: 'none',
             transition: (theme) => theme.transitions.create('width', {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
@@ -799,28 +964,123 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
           },
         }}
       >
-        <Toolbar />
-        <Box sx={{ overflow: 'auto' }}>
-          <List dense>
+        {/* Sidebar header */}
+        <Box sx={{
+          height: 52, display: 'flex', alignItems: 'center',
+          px: 2, gap: 1.5,
+          borderBottom: '1px solid #1a2e4a',
+          background: 'linear-gradient(90deg, #071022, #0b1628)',
+          flexShrink: 0,
+        }}>
+          <Box sx={{
+            width: 32, height: 32,
+            background: 'linear-gradient(135deg, #0f1e35, #0d2040)',
+            border: '1.5px solid #00d4ff',
+            borderRadius: '8px',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 0 14px rgba(0,212,255,0.25)',
+            flexShrink: 0,
+          }}>
+            <K8sWheelIcon size={18} color="#00d4ff" />
+          </Box>
+          <Box>
+            <Typography sx={{
+              fontSize: '0.78rem', fontWeight: 700, letterSpacing: '-0.01em',
+              color: '#e2f0ff', lineHeight: 1.2,
+            }}>
+              K8s Optimization
+            </Typography>
+            <Typography sx={{
+              fontSize: '0.6rem', color: '#3d6080',
+              fontFamily: "'JetBrains Mono',monospace",
+              letterSpacing: '0.06em',
+            }}>
+              PLATFORM v2.4
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* Hex pattern watermark */}
+        <Box sx={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden', top: 52 }}>
+          <svg width="100%" height="100%" style={{ opacity: 0.025 }} viewBox="0 0 280 800" preserveAspectRatio="xMidYMin slice">
+            <defs>
+              <pattern id="sidebar-hex" patternUnits="userSpaceOnUse" width="40" height="46">
+                <polygon points="20,1 39,12 39,34 20,45 1,34 1,12"
+                  fill="none" stroke="#00d4ff" strokeWidth="0.8" />
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#sidebar-hex)" />
+          </svg>
+        </Box>
+
+        {/* Nav list */}
+        <Box sx={{ overflow: 'auto', flexGrow: 1, position: 'relative', zIndex: 1, pt: 0.5 }}>
+          <List dense disablePadding>
             {menuItems.map((item) => renderMenuItem(item))}
           </List>
+
+          {/* Terminal footer inside sidebar */}
+          <Box sx={{
+            mx: 1, my: 2, p: 1.5,
+            background: 'rgba(0,0,0,0.35)',
+            border: '1px solid #1a2e4a',
+            borderRadius: '6px',
+          }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.75 }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: '#ff5f56' }} />
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: '#febc2e' }} />
+              <Box sx={{ width: 6, height: 6, borderRadius: '50%', background: '#27c93f' }} />
+            </Box>
+            {[
+              '$ kubectl cluster-info',
+              '  control-plane: RUNNING',
+              '  health: OPTIMAL ✓',
+            ].map((line, i) => (
+              <Typography key={i} sx={{
+                fontSize: '0.6rem', color: i === 0 ? '#7ca5cc' : '#3d6080',
+                fontFamily: "'JetBrains Mono',monospace", lineHeight: 1.6,
+              }}>
+                {line}
+              </Typography>
+            ))}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25 }}>
+              <Typography sx={{ fontSize: '0.6rem', color: '#39ff14', fontFamily: "'JetBrains Mono',monospace" }}>$</Typography>
+              <Box sx={{ width: 6, height: 10, background: '#39ff14', animation: 'k8s-pulse 1s step-end infinite' }} />
+            </Box>
+          </Box>
         </Box>
       </Drawer>
+
+      {/* ══════════════════ MAIN CONTENT ══════════════════ */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
-          p: 3,
+          minHeight: '100vh',
+          background: '#050d1a',
           width: drawerOpen ? `calc(100% - ${drawerWidth}px)` : '100%',
           ml: drawerOpen ? 0 : `-${drawerWidth}px`,
           transition: (theme) => theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.leavingScreen,
           }),
+          position: 'relative',
+          /* Faint global hex bg on main area */
+          '&::before': {
+            content: '""',
+            position: 'fixed',
+            inset: 0,
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='48'%3E%3Cpolygon points='28,1 55,16 55,46 28,61 1,46 1,16' fill='none' stroke='%2300d4ff' stroke-width='0.5' stroke-opacity='0.04'/%3E%3C/svg%3E")`,
+            backgroundSize: '56px 48px',
+            pointerEvents: 'none',
+            zIndex: 0,
+          },
         }}
       >
-        <Toolbar />
-        {children}
+        <Toolbar sx={{ minHeight: '52px !important' }} />
+        <Box sx={{ position: 'relative', zIndex: 1 }}>
+          {children}
+        </Box>
       </Box>
     </Box>
   );
