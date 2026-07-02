@@ -32,26 +32,30 @@ interface ClusterBenchmarkData {
   };
 }
 
-/* ── Design tokens ──────────────────────────────────────────────────────────── */
+/* ── Design tokens — dark terminal theme (matches app-wide MUI theme) ── */
 const T = {
-  bg: '#f7f8fa',
-  surface: '#ffffff',
-  border: '#e5e7eb',
-  text: '#1f2328',
-  muted: '#57606a',
-  accent: '#1a56db',
-  accentLight: '#eff4ff',
-  success: '#16a34a',
-  successLight: '#dcfce7',
-  warning: '#ca8a04',
-  warningLight: '#fef9c3',
-  danger: '#dc2626',
-  dangerLight: '#fee2e2',
-  orange: '#f97316',
-  orangeLight: '#fff7ed',
-  gradeC: '#f97316',
-  gradeB: '#3b82f6',
-  gradeA: '#16a34a',
+  bg:           '#050d1a',   // deepest navy — page background
+  surface:      '#0b1628',   // card / panel background
+  surfaceAlt:   '#0f1e35',   // slightly lighter panel (nested cards)
+  border:       '#1e3a5f',   // panel borders
+  borderBright: '#2a5080',   // hover / active borders
+  text:         '#e2f0ff',   // primary text
+  muted:        '#7ca5cc',   // secondary / label text
+  dim:          '#3d6080',   // very muted / disabled
+  accent:       '#00d4ff',   // cyan primary
+  accentDark:   '#00a8cc',
+  accentLight:  'rgba(0,212,255,0.12)',
+  success:      '#39ff14',   // neon green
+  successLight: 'rgba(57,255,20,0.12)',
+  warning:      '#f59e0b',
+  warningLight: 'rgba(245,158,11,0.12)',
+  danger:       '#ef4444',
+  dangerLight:  'rgba(239,68,68,0.12)',
+  orange:       '#f59e0b',
+  orangeLight:  'rgba(245,158,11,0.12)',
+  gradeC:       '#f59e0b',
+  gradeB:       '#00d4ff',
+  gradeA:       '#39ff14',
 };
 
 /* ── Helpers ────────────────────────────────────────────────────────────────── */
@@ -78,7 +82,7 @@ function GradeDonut({ score, grade }: { score: number; grade: string }) {
   return (
     <svg width="180" height="180" viewBox="0 0 180 180">
       {/* track */}
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e5e7eb" strokeWidth="16" />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={T.border} strokeWidth="16" />
       {/* filled arc */}
       <circle
         cx={cx} cy={cy} r={r}
@@ -128,7 +132,7 @@ function TrendChart({ scores }: { scores: number[] }) {
             x={x} y={chartH - h}
             width={barW} height={h}
             rx={3}
-            fill={isLast ? T.accent : '#c7d8f5'}
+            fill={isLast ? T.accent : T.borderBright}
           />
         );
       })}
@@ -182,7 +186,7 @@ function CompRow({ label, value }: { label: string; value: string }) {
         <span style={{ fontSize: 12, color: T.muted }}>{label}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: isNeg ? T.danger : T.success }}>{value}</span>
       </div>
-      <div style={{ height: 6, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden' }}>
+      <div style={{ height: 6, background: T.surfaceAlt, borderRadius: 3, overflow: 'hidden', border: `1px solid ${T.border}` }}>
         <div style={{
           height: '100%', width: `${Math.min(pct * 4, 100)}%`,
           background: isNeg ? T.danger : T.success, borderRadius: 3,
@@ -422,7 +426,7 @@ const ClusterBenchmarking: React.FC = () => {
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '7px 16px', borderRadius: 6, border: 'none',
-              background: T.accent, color: '#fff', fontSize: 13, fontWeight: 600,
+              background: T.accent, color: '#050d1a', fontSize: 13, fontWeight: 700,
               cursor: 'pointer',
             }}
             onClick={() => fetchBenchmark(selectedClusterId)}
