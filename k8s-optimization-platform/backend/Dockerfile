@@ -9,11 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Trivy via direct binary download (much faster than apt repo)
-RUN TRIVY_VERSION=$(curl -s https://api.github.com/repos/aquasecurity/trivy/releases/latest \
-      | grep '"tag_name"' | cut -d'"' -f4 | sed 's/v//') \
-    && curl -sfL "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" \
-       | tar -xz -C /usr/local/bin trivy
+# Install Trivy (best-effort — skip if download fails)
+RUN curl -sfL --retry 3 --retry-delay 5 \
+    "https://github.com/aquasecurity/trivy/releases/download/v0.62.1/trivy_0.62.1_Linux-64bit.tar.gz" \
+    | tar -xz -C /usr/local/bin trivy || echo "Trivy install skipped"
 
 # Copy requirements first for better caching
 COPY requirements.prod.txt .
