@@ -212,20 +212,33 @@ class ComprehensiveClusterAgent:
                 allocatable_cpu += cpu_alloc
                 allocatable_memory += mem_alloc
                 
+                # Extract node IP addresses
+                internal_ip = ""
+                external_ip = ""
+                if node.status.addresses:
+                    for addr in node.status.addresses:
+                        if addr.type == "InternalIP":
+                            internal_ip = addr.address
+                        elif addr.type == "ExternalIP":
+                            external_ip = addr.address
+
                 node_details.append({
                     "name": node.metadata.name,
-                    "status": "Ready" if any(c.type == "Ready" and c.status == "True" 
+                    "status": "Ready" if any(c.type == "Ready" and c.status == "True"
                                             for c in node.status.conditions) else "NotReady",
+                    "internal_ip": internal_ip,
+                    "external_ip": external_ip,
                     "cpu_capacity": cpu_cap,
                     "memory_capacity": mem_cap,
                     "cpu_allocatable": cpu_alloc,
                     "memory_allocatable": mem_alloc,
                     "labels": node.metadata.labels or {},
-                    "taints": [{"key": t.key, "effect": t.effect} 
+                    "taints": [{"key": t.key, "effect": t.effect}
                               for t in (node.spec.taints or [])],
                     "kubelet_version": node.status.node_info.kubelet_version,
                     "os_image": node.status.node_info.os_image,
-                    "kernel_version": node.status.node_info.kernel_version
+                    "kernel_version": node.status.node_info.kernel_version,
+                    "container_runtime": node.status.node_info.container_runtime_version
                 })
             
             return {

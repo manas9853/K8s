@@ -369,10 +369,20 @@ class ClusterAgent:
                 {"key": t.key, "effect": t.effect, "value": t.value}
                 for t in (n.spec.taints or [])
             ]
+            internal_ip = ""
+            external_ip = ""
+            for addr in (n.status.addresses or []):
+                if addr.type == "InternalIP":
+                    internal_ip = addr.address
+                elif addr.type == "ExternalIP":
+                    external_ip = addr.address
+
             details.append({
                 "name":                n.metadata.name,
                 "status":              "Ready" if is_ready else "NotReady",
                 "roles":               roles,
+                "internal_ip":         internal_ip,
+                "external_ip":         external_ip,
                 "kubelet_version":     n.status.node_info.kubelet_version,
                 "os_image":            n.status.node_info.os_image,
                 "kernel_version":      n.status.node_info.kernel_version,

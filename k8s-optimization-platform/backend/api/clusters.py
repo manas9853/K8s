@@ -748,6 +748,8 @@ class NodeInfo(BaseModel):
     roles: List[str]
     age: str
     version: str
+    internal_ip: str = ""
+    external_ip: str = ""
     os_image: str
     kernel_version: str
     container_runtime: str
@@ -834,6 +836,8 @@ async def get_cluster_nodes(
                         roles=node['roles'],
                         age=node['age'],
                         version=node['version'],
+                        internal_ip=node.get('internal_ip', ''),
+                        external_ip=node.get('external_ip', ''),
                         os_image=node['os_image'],
                         kernel_version=node['kernel_version'],
                         container_runtime=node['container_runtime'],
@@ -871,36 +875,86 @@ async def get_cluster_nodes(
 
             nodes_payload = metrics.get('nodes', {})
 
-            # -- Priority 2: comprehensive agent sends a 'nodes' list with per-node detail
-            node_list = nodes_payload.get('nodes', []) if isinstance(nodes_payload, dict) else []
+            # -- Priority 2: agent sends a per-node list under 'items' (agent.py v2)
+            # or under 'nodes' (agent_comprehensive.py).  Accept both keys.
+            node_list = []
+            if isinstance(nodes_payload, dict):
+                node_list = nodes_payload.get('items', nodes_payload.get('nodes', []))
+
             if node_list:
+                # Build a pod-count-per-node lookup from the pods payload
+                pods_payload = metrics.get('pods', {})
+                pod_items = pods_payload.get('items', []) if isinstance(pods_payload, dict) else []
+                pod_counts_by_node: dict = {}
+                for pod in pod_items:
+                    node_name = pod.get('node', '')
+                    if node_name:
+                        pod_counts_by_node[node_name] = pod_counts_by_node.get(node_name, 0) + 1
+
                 for node in node_list:
-                    cpu_cap = node.get('cpu_capacity', node.get('cpu_allocatable', 0))
-                    mem_cap = node.get('memory_capacity', node.get('memory_allocatable', 0))
-                    cpu_alloc = node.get('cpu_allocatable', cpu_cap)
-                    mem_alloc = node.get('memory_allocatable', mem_cap)
+                    name = node.get('name', f"{cluster_name}-node")
+
+                    # Normalise CPU — agent.py uses plain float cores
+                    cpu_cap_raw = node.get('cpu_capacity', node.get('cpu_allocatable', 0))
+                    cpu_alloc_raw = node.get('cpu_allocatable', cpu_cap_raw)
+
+                    # Normalise memory — agent.py uses _gb suffix, legacy uses plain bytes
+                    mem_cap_raw = node.get('memory_capacity_gb',
+                                  node.get('memory_capacity', 0))
+                    mem_alloc_raw = node.get('memory_allocatable_gb',
+                                   node.get('memory_allocatable', mem_cap_raw))
+
+                    def _fmt_cpu(v) -> str:
+                        try:
+                            return f"{float(v):.2f} cores"
+                        except (TypeError, ValueError):
+                            return str(v)
+
+                    def _fmt_mem(v) -> str:
+                        try:
+                            return f"{float(v):.2f} GB"
+                        except (TypeError, ValueError):
+                            return str(v)
+
                     version = node.get('kubelet_version', node.get('version', 'unknown'))
-                    labels = node.get('labels', {})
-                    roles = [k.replace('node-role.kubernetes.io/', '') for k in labels
-                             if k.startswith('node-role.kubernetes.io/')]
+                    roles = node.get('roles', [])
+                    if not roles:
+                        labels = node.get('labels', {})
+                        roles = [k.replace('node-role.kubernetes.io/', '') for k in labels
+                                 if k.startswith('node-role.kubernetes.io/')]
                     if not roles:
                         roles = ['worker']
+
+                    # Compute age from creation timestamp if available
+                    age = 'unknown'
+                    created_str = node.get('created', '')
+                    if created_str:
+                        try:
+                            from datetime import timezone
+                            created_dt = datetime.fromisoformat(created_str.replace('Z', '+00:00'))
+                            delta = datetime.now(timezone.utc) - created_dt
+                            age = f"{delta.days}d" if delta.days > 0 else f"{delta.seconds // 3600}h"
+                        except Exception:
+                            pass
+
                     result.append(NodeInfo(
-                        name=node.get('name', f"{cluster_name}-node"),
+                        name=name,
                         status=node.get('status', 'Unknown'),
                         roles=roles,
-                        age='unknown',
+                        age=age,
                         version=version,
+                        internal_ip=node.get('internal_ip', ''),
+                        external_ip=node.get('external_ip', ''),
                         os_image=node.get('os_image', 'unknown'),
                         kernel_version=node.get('kernel_version', 'unknown'),
                         container_runtime=node.get('container_runtime', 'unknown'),
-                        cpu_capacity=f"{cpu_cap:.2f}" if isinstance(cpu_cap, float) else str(cpu_cap),
-                        memory_capacity=f"{mem_cap:.2f} GB" if isinstance(mem_cap, float) else str(mem_cap),
-                        cpu_allocatable=f"{cpu_alloc:.2f}" if isinstance(cpu_alloc, float) else str(cpu_alloc),
-                        memory_allocatable=f"{mem_alloc:.2f} GB" if isinstance(mem_alloc, float) else str(mem_alloc),
+                        cpu_capacity=_fmt_cpu(cpu_cap_raw),
+                        memory_capacity=_fmt_mem(mem_cap_raw),
+                        cpu_allocatable=_fmt_cpu(cpu_alloc_raw),
+                        memory_allocatable=_fmt_mem(mem_alloc_raw),
                         cpu_usage=node.get('cpu_usage_percent', 0.0),
                         memory_usage=node.get('memory_usage_percent', 0.0),
-                        pod_count=node.get('pod_count', 0),
+                        pod_count=pod_counts_by_node.get(name, node.get('pod_count', 0)),
                         pod_capacity=node.get('pod_capacity', 110),
                         conditions=node.get('conditions', [{'type': 'Ready', 'status': node.get('status', 'Unknown')}]),
                     ))
@@ -932,6 +986,8 @@ async def get_cluster_nodes(
                     roles=['control-plane'] if i == 0 else ['worker'],
                     age='unknown',
                     version=version,
+                    internal_ip='',
+                    external_ip='',
                     os_image='unknown',
                     kernel_version='unknown',
                     container_runtime='unknown',

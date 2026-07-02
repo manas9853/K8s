@@ -525,7 +525,17 @@ class KubernetesClient:
             result = []
             for node in nodes.items:
                 node_name = node.metadata.name
-                
+
+                # Get node IP addresses
+                internal_ip = ""
+                external_ip = ""
+                if node.status.addresses:
+                    for addr in node.status.addresses:
+                        if addr.type == "InternalIP":
+                            internal_ip = addr.address
+                        elif addr.type == "ExternalIP":
+                            external_ip = addr.address
+
                 # Get node roles
                 roles = []
                 if node.metadata.labels:
@@ -585,6 +595,8 @@ class KubernetesClient:
                     "roles": roles,
                     "age": age,
                     "version": node.status.node_info.kubelet_version,
+                    "internal_ip": internal_ip,
+                    "external_ip": external_ip,
                     "os_image": node.status.node_info.os_image,
                     "kernel_version": node.status.node_info.kernel_version,
                     "container_runtime": node.status.node_info.container_runtime_version,

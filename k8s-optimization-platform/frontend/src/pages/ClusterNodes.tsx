@@ -42,6 +42,8 @@ interface NodeInfo {
   roles: string[];
   age: string;
   version: string;
+  internal_ip: string;
+  external_ip: string;
   os_image: string;
   kernel_version: string;
   container_runtime: string;
@@ -312,10 +314,14 @@ const ClusterNodes: React.FC = () => {
                     <TableCell>Roles</TableCell>
                     <TableCell>Age</TableCell>
                     <TableCell>Version</TableCell>
+                    <TableCell>Internal IP</TableCell>
+                    <TableCell>External IP</TableCell>
                     <TableCell align="right">CPU Usage</TableCell>
                     <TableCell align="right">Memory Usage</TableCell>
                     <TableCell align="right">Pods</TableCell>
-                    <TableCell>System Info</TableCell>
+                    <TableCell>OS Image</TableCell>
+                    <TableCell>Kernel</TableCell>
+                    <TableCell>Container Runtime</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -348,6 +354,16 @@ const ClusterNodes: React.FC = () => {
                       <TableCell>{node.age}</TableCell>
                       <TableCell>
                         <Typography variant="caption">{node.version}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+                          {node.internal_ip || '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>
+                          {node.external_ip || '—'}
+                        </Typography>
                       </TableCell>
                       <TableCell>
                         <Box>
@@ -399,12 +415,13 @@ const ClusterNodes: React.FC = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        <Typography variant="caption" display="block">
-                          {node.os_image}
-                        </Typography>
-                        <Typography variant="caption" display="block" color="textSecondary">
-                          {node.container_runtime}
-                        </Typography>
+                        <Typography variant="caption">{node.os_image || '—'}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption">{node.kernel_version || '—'}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="caption">{node.container_runtime || '—'}</Typography>
                       </TableCell>
                     </TableRow>
                   ))}
