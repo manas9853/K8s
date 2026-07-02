@@ -1026,56 +1026,127 @@ async def get_cluster_nodes(
 
 
 @router.get("/worker-pools", response_model=List[WorkerPoolInfo])
-async def get_worker_pools():
+async def get_worker_pools(
+    cluster_id: Optional[str] = Query(None, description="Filter by cluster ID")
+):
     """
-    Get worker pool information from the real Kubernetes cluster.
-    Returns an empty list if Kubernetes is not connected.
+    Get worker pool information.
+    Priority:
+    1. Direct K8s connection (if available)
+    2. Agent-reported data stored in the database
     """
-    if not _k8s_available() or k8s_client is None:
-        return []
+    # ── Priority 1: live kubeconfig connection ────────────────────────────────
+    if _k8s_available() and k8s_client is not None:
+        try:
+            cluster_info = k8s_client.get_cluster_info(timeout=15)
 
+            if not cluster_info.get('connected'):
+                return []
+
+            nodes = cluster_info.get('nodes', 0)
+            cpu_capacity = cluster_info.get('cpu_capacity_cores', 0)
+            memory_capacity = cluster_info.get('memory_capacity_gb', 0)
+            cpu_requested = cluster_info.get('cpu_requested_cores', 0)
+
+            if nodes == 0:
+                return []
+
+            cpu_per_node = cpu_capacity / nodes
+            memory_per_node = memory_capacity / nodes
+            utilization = (cpu_requested / cpu_capacity * 100) if cpu_capacity > 0 else 0
+
+            nodes_data = k8s_client.get_nodes_detailed()
+            pool_labels = {}
+            if nodes_data and len(nodes_data) > 0:
+                pool_labels = nodes_data[0].get('labels', {})
+
+            return [
+                WorkerPoolInfo(
+                    name="default-pool",
+                    node_count=nodes,
+                    instance_type=pool_labels.get('node.kubernetes.io/instance-type', 'Standard'),
+                    cpu_per_node=f"{cpu_per_node:.1f} cores",
+                    memory_per_node=f"{memory_per_node:.1f} GB",
+                    disk_per_node="100 GB",
+                    auto_scaling=True,
+                    min_nodes=max(1, nodes - 2),
+                    max_nodes=nodes + 5,
+                    current_utilization=round(utilization, 1),
+                    status="healthy" if utilization < 85 else "warning",
+                    labels=pool_labels
+                )
+            ]
+        except HTTPException:
+            raise
+        except Exception as e:
+            logging.error(f"Error getting worker pools from k8s_client: {e}")
+
+    # ── Priority 2: agent-reported data from the database ────────────────────
     try:
-        cluster_info = k8s_client.get_cluster_info(timeout=15)
-
-        if not cluster_info.get('connected'):
+        agent_clusters = db_manager.get_all_clusters()
+        if not agent_clusters:
             return []
 
-        nodes = cluster_info.get('nodes', 0)
-        cpu_capacity = cluster_info.get('cpu_capacity_cores', 0)
-        memory_capacity = cluster_info.get('memory_capacity_gb', 0)
-        cpu_requested = cluster_info.get('cpu_requested_cores', 0)
+        if cluster_id:
+            agent_clusters = [c for c in agent_clusters if c['cluster_name'] == cluster_id]
 
-        if nodes == 0:
-            return []
-        
-        cpu_per_node = cpu_capacity / nodes
-        memory_per_node = memory_capacity / nodes
-        utilization = (cpu_requested / cpu_capacity * 100) if cpu_capacity > 0 else 0
-        
-        # Get node labels from detailed nodes
-        nodes_data = k8s_client.get_nodes_detailed()
-        pool_labels = {}
-        if nodes_data and len(nodes_data) > 0:
-            pool_labels = nodes_data[0].get('labels', {})
-        
-        return [
-            WorkerPoolInfo(
-                name="default-pool",
-                node_count=nodes,
-                instance_type=pool_labels.get('node.kubernetes.io/instance-type', 'Standard'),
-                cpu_per_node=f"{cpu_per_node:.1f} cores",
-                memory_per_node=f"{memory_per_node:.1f} GB",
+        result: List[WorkerPoolInfo] = []
+        for cluster_data in agent_clusters:
+            cluster_name = cluster_data['cluster_name']
+            metrics = db_manager.get_latest_metrics(cluster_name)
+            if not metrics:
+                continue
+
+            nodes_payload = metrics.get('nodes', {})
+            resources_data = metrics.get('resources', {})
+
+            # Try per-node list first (agent.py v2 / agent_comprehensive.py)
+            node_list = []
+            if isinstance(nodes_payload, dict):
+                node_list = nodes_payload.get('items', nodes_payload.get('nodes', []))
+
+            if node_list:
+                total_nodes = len(node_list)
+                # Aggregate CPU / memory from per-node entries
+                total_cpu = sum(
+                    float(n.get('cpu_capacity', n.get('cpu_allocatable', 0)) or 0)
+                    for n in node_list
+                )
+                total_mem = sum(
+                    float(n.get('memory_capacity_gb', n.get('memory_capacity', 0)) or 0)
+                    for n in node_list
+                )
+            else:
+                # Fall back to aggregate counts
+                total_nodes = nodes_payload.get('count', nodes_payload.get('total_nodes', 0)) if isinstance(nodes_payload, dict) else 0
+                if total_nodes <= 0:
+                    continue
+                total_cpu = nodes_payload.get('cpu_capacity_cores', 0)
+                total_mem = nodes_payload.get('memory_capacity_gb', 0)
+
+            cpu_utilization = resources_data.get('cpu_utilization_percent', 0.0)
+            mem_utilization = resources_data.get('memory_utilization_percent', 0.0)
+            avg_utilization = round((cpu_utilization + mem_utilization) / 2, 1)
+
+            cpu_per_node = round(total_cpu / total_nodes, 1) if total_nodes > 0 else 0
+            mem_per_node = round(total_mem / total_nodes, 1) if total_nodes > 0 else 0
+
+            result.append(WorkerPoolInfo(
+                name=f"{cluster_name}-default-pool",
+                node_count=total_nodes,
+                instance_type=cluster_data.get('provider', 'Standard'),
+                cpu_per_node=f"{cpu_per_node} cores",
+                memory_per_node=f"{mem_per_node} GB",
                 disk_per_node="100 GB",
-                auto_scaling=True,
-                min_nodes=max(1, nodes - 2),
-                max_nodes=nodes + 5,
-                current_utilization=round(utilization, 1),
-                status="healthy" if utilization < 85 else "warning",
-                labels=pool_labels
-            )
-        ]
-    except HTTPException:
-        raise
+                auto_scaling=False,
+                min_nodes=max(1, total_nodes - 2),
+                max_nodes=total_nodes + 5,
+                current_utilization=avg_utilization,
+                status="healthy" if avg_utilization < 85 else "warning",
+                labels={},
+            ))
+
+        return result
     except Exception as e:
         logging.error(f"Error getting worker pools: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting worker pools: {str(e)}")
