@@ -118,6 +118,7 @@ const Deployments: React.FC = () => {
   const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
   const [selectedClusterId, setSelectedClusterId] = useState<string>(activeClusterId || 'all');
+  const [selectedNamespace, setSelectedNamespace] = useState<string>('all');
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +130,35 @@ const Deployments: React.FC = () => {
 
   useEffect(() => { setSelectedClusterId(activeClusterId || 'all'); }, [activeClusterId]);
 
+  const formatAgeFromCreatedAt = (createdAt?: string) => {
+    if (!createdAt) return '-';
+
+    const createdTime = new Date(createdAt);
+    if (Number.isNaN(createdTime.getTime())) return '-';
+
+    const diffMs = Date.now() - createdTime.getTime();
+    if (diffMs < 0) return '-';
+
+    const minutes = Math.floor(diffMs / (1000 * 60));
+    if (minutes < 60) return `${minutes}m`;
+
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h`;
+
+    const days = Math.floor(hours / 24);
+    if (days < 30) return `${days}d`;
+
+    const months = Math.floor(days / 30);
+    if (months < 12) return `${months}mo`;
+
+    return `${Math.floor(days / 365)}y`;
+  };
+
+  const normalizeDeployment = (deployment: Deployment): Deployment => ({
+    ...deployment,
+    age: deployment.age || formatAgeFromCreatedAt(deployment.created_at),
+  });
+
   const fetchDeployments = async (clusterId: string) => {
     try {
       setLoading(true);
@@ -137,7 +167,8 @@ const Deployments: React.FC = () => {
       const response = await fetch(`${API_BASE_URL}/v1/workloads/deployments${param}`);
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
       const data = await response.json();
-      setDeployments(data);
+      setDeployments(Array.isArray(data) ? data.map(normalizeDeployment) : []);
+      setSelectedNamespace('all');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch deployments');
       console.error('Error fetching deployments:', err);

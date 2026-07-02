@@ -5,7 +5,7 @@ Reads workload data from agent_metrics stored in Supabase/Postgres (db_manager).
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 from database.db import db_manager
@@ -102,6 +102,94 @@ class CronJobInfo(BaseModel):
 # Helper
 # ---------------------------------------------------------------------------
 
+def _format_age(created_at: Optional[str]) -> str:
+    if not created_at:
+        return ""
+    try:
+        normalized = created_at.replace("Z", "+00:00")
+        created = datetime.fromisoformat(normalized)
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - created
+        minutes = max(int(delta.total_seconds() // 60), 0)
+        if minutes < 60:
+            return f"{minutes}m"
+        hours = minutes // 60
+        if hours < 24:
+            return f"{hours}h"
+        days = hours // 24
+        if days < 30:
+            return f"{days}d"
+        months = days // 30
+        if months < 12:
+            return f"{months}mo"
+        return f"{days // 365}y"
+    except Exception:
+        return ""
+
+
+def _normalize_container(container: Dict[str, Any]) -> Dict[str, Any]:
+    resources = container.get("resources") or {}
+    return {
+        "name": container.get("name", ""),
+        "image": container.get("image", ""),
+        "ports": container.get("ports") or [],
+        "resources": {
+            "requests": resources.get("requests") or {},
+            "limits": resources.get("limits") or {},
+        },
+    }
+
+
+def _normalize_conditions(conditions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    result = []
+    for condition in conditions or []:
+        result.append({
+            "type": condition.get("type", ""),
+            "status": condition.get("status", ""),
+            "reason": condition.get("reason", ""),
+            "message": condition.get("message", ""),
+            "last_update_time": condition.get("last_update_time") or condition.get("lastTransitionTime") or condition.get("last_transition_time"),
+        })
+    return result
+
+
+def _normalize_deployment(d: Dict[str, Any]) -> Dict[str, Any]:
+    created_at = d.get("created_at") or d.get("created") or ""
+    replicas_desired = d.get("replicas_desired")
+    if replicas_desired is None:
+        replicas_desired = d.get("replicas")
+    replicas_current = d.get("replicas_current")
+    if replicas_current is None:
+        replicas_current = d.get("updated_replicas", replicas_desired or 0)
+    replicas_ready = d.get("replicas_ready")
+    if replicas_ready is None:
+        replicas_ready = d.get("ready_replicas", 0)
+    replicas_available = d.get("replicas_available")
+    if replicas_available is None:
+        replicas_available = d.get("available_replicas", replicas_ready or 0)
+    replicas_unavailable = d.get("replicas_unavailable")
+    if replicas_unavailable is None:
+        replicas_unavailable = max((replicas_desired or 0) - (replicas_available or 0), 0)
+
+    return {
+        "name": d.get("name", ""),
+        "namespace": d.get("namespace", ""),
+        "replicas_desired": int(replicas_desired or 0),
+        "replicas_current": int(replicas_current or 0),
+        "replicas_ready": int(replicas_ready or 0),
+        "replicas_available": int(replicas_available or 0),
+        "replicas_unavailable": int(replicas_unavailable or 0),
+        "strategy": d.get("strategy", "RollingUpdate"),
+        "age": d.get("age") or _format_age(created_at),
+        "labels": d.get("labels") or {},
+        "selector": d.get("selector") or {},
+        "containers": [_normalize_container(c) for c in (d.get("containers") or [])],
+        "conditions": _normalize_conditions(d.get("conditions") or []),
+        "created_at": created_at,
+    }
+
+
 def _get_workloads_domain(cluster_id: Optional[str] = None) -> dict:
     """Return the workloads JSONB domain from the latest agent_metrics row."""
     if cluster_id:
@@ -140,24 +228,10 @@ async def list_deployments(
 
         result = []
         for d in items:
-            if namespace and d.get("namespace") != namespace:
+            normalized = _normalize_deployment(d)
+            if namespace and normalized["namespace"] != namespace:
                 continue
-            result.append(DeploymentInfo(
-                name=d.get("name", ""),
-                namespace=d.get("namespace", ""),
-                replicas_desired=d.get("replicas_desired", 0),
-                replicas_current=d.get("replicas_current", 0),
-                replicas_ready=d.get("replicas_ready", 0),
-                replicas_available=d.get("replicas_available", 0),
-                replicas_unavailable=d.get("replicas_unavailable", 0),
-                strategy=d.get("strategy", "RollingUpdate"),
-                age=d.get("age", ""),
-                labels=d.get("labels", {}),
-                selector=d.get("selector", {}),
-                containers=d.get("containers", []),
-                conditions=d.get("conditions", []),
-                created_at=d.get("created_at", ""),
-            ))
+            result.append(DeploymentInfo(**normalized))
         logger.info(f"Found {len(result)} deployments")
         return result
     except Exception as e:
