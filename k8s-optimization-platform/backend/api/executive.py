@@ -6,7 +6,7 @@ Derives all values from real agent metrics stored in the database.
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import logging
 
 from database.db import db_manager
@@ -226,19 +226,39 @@ async def get_executive_overview(
             total_clusters=len(agent_clusters),
         )
 
-        # ── Cost trends (project last 6 months from current) ──────────────────
+        # ── Cost trends — only from registration month to now ─────────────────
+        # Find the earliest registered_at across all queried clusters
+        earliest_reg = None
+        for c in agent_clusters:
+            reg_str = c.get('registered_at', '')
+            if reg_str:
+                try:
+                    reg_dt = datetime.fromisoformat(reg_str.replace('Z', '+00:00'))
+                    if reg_dt.tzinfo is None:
+                        reg_dt = reg_dt.replace(tzinfo=timezone.utc)
+                    if earliest_reg is None or reg_dt < earliest_reg:
+                        earliest_reg = reg_dt
+                except Exception:
+                    pass
+
+        now = datetime.now(timezone.utc)
+        # Start of the registration month
+        start = (earliest_reg or now).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Build one entry per calendar month from start → current month
         cost_trends: list = []
-        for i in range(5, -1, -1):
-            month_date  = (datetime.now(timezone.utc).replace(day=1) - timedelta(days=i * 30))
-            improvement = 1.0 - (0.01 * (5 - i))   # ~1% improvement per month
-            actual      = round(total_monthly_cost * improvement, 2)
-            optimised   = round(actual * 0.70, 2)
+        cursor = start
+        while cursor <= now.replace(day=1, hour=0, minute=0, second=0, microsecond=0):
             cost_trends.append(CostTrend(
-                month=month_date.strftime("%b %Y"),
-                actual_cost=actual,
-                optimized_cost=optimised,
-                savings=round(actual - optimised, 2),
+                month=cursor.strftime("%b %Y"),
+                actual_cost=round(total_monthly_cost, 2),
+                optimized_cost=round(total_monthly_cost * 0.70, 2),
+                savings=round(total_monthly_cost * 0.30, 2),
             ))
+            # Advance to next month
+            if cursor.month == 12:
+                cursor = cursor.replace(year=cursor.year + 1, month=1)
+            else:
+                cursor = cursor.replace(month=cursor.month + 1)
 
         # ── Top waste sources (top 5 namespaces by waste %) ───────────────────
         top_waste = sorted(all_ns_waste, key=lambda x: x['waste_percentage'], reverse=True)[:5]
