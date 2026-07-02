@@ -221,4 +221,3 @@ const SecretExposure: React.FC = () => {
 };
 
 export default SecretExposure;
-// Made with Bob

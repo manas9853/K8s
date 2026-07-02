@@ -502,4 +502,3 @@ const Scoring: React.FC = () => {
 };
 
 export default Scoring;
-// Made with Bob
