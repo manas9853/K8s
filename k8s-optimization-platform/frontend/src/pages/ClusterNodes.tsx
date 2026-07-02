@@ -365,10 +365,10 @@ const ClusterNodes: React.FC = () => {
                           {node.external_ip || '—'}
                         </Typography>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ minWidth: 130 }}>
                         <Box>
                           <Box display="flex" justifyContent="space-between" mb={0.5}>
-                            <Typography variant="caption">
+                            <Typography variant="caption" fontWeight="bold">
                               {node.cpu_usage.toFixed(1)}%
                             </Typography>
                             <Typography variant="caption" color="textSecondary">
@@ -383,10 +383,10 @@ const ClusterNodes: React.FC = () => {
                           />
                         </Box>
                       </TableCell>
-                      <TableCell>
+                      <TableCell sx={{ minWidth: 130 }}>
                         <Box>
                           <Box display="flex" justifyContent="space-between" mb={0.5}>
-                            <Typography variant="caption">
+                            <Typography variant="caption" fontWeight="bold">
                               {node.memory_usage.toFixed(1)}%
                             </Typography>
                             <Typography variant="caption" color="textSecondary">

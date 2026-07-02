@@ -882,14 +882,20 @@ async def get_cluster_nodes(
                 node_list = nodes_payload.get('items', nodes_payload.get('nodes', []))
 
             if node_list:
-                # Build a pod-count-per-node lookup from the pods payload
+                # Build per-node pod count + resource request sums from the pods payload
                 pods_payload = metrics.get('pods', {})
                 pod_items = pods_payload.get('items', []) if isinstance(pods_payload, dict) else []
                 pod_counts_by_node: dict = {}
+                cpu_req_by_node: dict = {}    # cores
+                mem_req_by_node: dict = {}    # GB
                 for pod in pod_items:
                     node_name = pod.get('node', '')
-                    if node_name:
-                        pod_counts_by_node[node_name] = pod_counts_by_node.get(node_name, 0) + 1
+                    if not node_name:
+                        continue
+                    pod_counts_by_node[node_name] = pod_counts_by_node.get(node_name, 0) + 1
+                    cpu_req_by_node[node_name] = cpu_req_by_node.get(node_name, 0.0) + float(pod.get('cpu_request', 0) or 0)
+                    # memory_request_mb → GB
+                    mem_req_by_node[node_name] = mem_req_by_node.get(node_name, 0.0) + float(pod.get('memory_request_mb', 0) or 0) / 1024.0
 
                 for node in node_list:
                     name = node.get('name', f"{cluster_name}-node")
@@ -937,6 +943,16 @@ async def get_cluster_nodes(
                         except Exception:
                             pass
 
+                    # Compute per-node usage % from pod requests vs allocatable
+                    try:
+                        cpu_alloc_f = float(cpu_alloc_raw) if cpu_alloc_raw else 0.0
+                        mem_alloc_f = float(mem_alloc_raw) if mem_alloc_raw else 0.0
+                        cpu_usage_pct = round(cpu_req_by_node.get(name, 0.0) / cpu_alloc_f * 100, 1) if cpu_alloc_f > 0 else 0.0
+                        mem_usage_pct = round(mem_req_by_node.get(name, 0.0) / mem_alloc_f * 100, 1) if mem_alloc_f > 0 else 0.0
+                    except (TypeError, ValueError):
+                        cpu_usage_pct = node.get('cpu_usage_percent', 0.0)
+                        mem_usage_pct = node.get('memory_usage_percent', 0.0)
+
                     result.append(NodeInfo(
                         name=name,
                         status=node.get('status', 'Unknown'),
@@ -952,8 +968,8 @@ async def get_cluster_nodes(
                         memory_capacity=_fmt_mem(mem_cap_raw),
                         cpu_allocatable=_fmt_cpu(cpu_alloc_raw),
                         memory_allocatable=_fmt_mem(mem_alloc_raw),
-                        cpu_usage=node.get('cpu_usage_percent', 0.0),
-                        memory_usage=node.get('memory_usage_percent', 0.0),
+                        cpu_usage=cpu_usage_pct,
+                        memory_usage=mem_usage_pct,
                         pod_count=pod_counts_by_node.get(name, node.get('pod_count', 0)),
                         pod_capacity=node.get('pod_capacity', 110),
                         conditions=node.get('conditions', [{'type': 'Ready', 'status': node.get('status', 'Unknown')}]),
