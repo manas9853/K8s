@@ -535,7 +535,7 @@ root.render(
     <ClerkProvider
       publishableKey={CLERK_PUBLISHABLE_KEY}
       signInUrl="/login"
-      signUpUrl="/sign-up"
+      signUpUrl="/login"
       afterSignOutUrl="/login"
     >
       <Provider store={store}>

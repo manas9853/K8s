@@ -1,7 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { Routes, Route } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
-import { SignUp } from '@clerk/clerk-react';
 import { AuthProvider } from './contexts/AuthContext';
 import { ClusterProvider } from './contexts/ClusterContext';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -262,7 +261,6 @@ function App() {
         <Routes>
           {/* Public route - Login */}
           <Route path="/login" element={<Login />} />
-          <Route path="/sign-up" element={<SignUp routing="path" path="/sign-up" signInUrl="/login" afterSignUpUrl="/" />} />
 
           {/* Protected routes - All other pages */}
           <Route path="/*" element={

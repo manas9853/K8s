@@ -682,8 +682,8 @@ const Login: React.FC = () => {
 
             {/* Clerk SignIn widget — form only, all chrome stripped via elements + global CSS */}
             <SignIn
-              routing="path"
-              path="/login"
+              routing="virtual"
+              signUpUrl="/login"
               forceRedirectUrl="/"
               appearance={{
                 variables: {
