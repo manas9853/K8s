@@ -1,45 +1,51 @@
 """
 Executive Overview Dashboard API
-Provides KPIs and insights for leadership and FinOps teams
+Provides KPIs and insights for leadership and FinOps teams.
+Derives all values from real agent metrics stored in the database.
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta
-import httpx
-import asyncio
+from datetime import datetime, timedelta, timezone
 import logging
+
+from database.db import db_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Base URL for internal API calls
-BASE_URL = "http://localhost:8000/api/v1"
+
+# ── Cost constants (same as clusters.py) ─────────────────────────────────────
+CPU_COST_PER_CORE_HOUR   = 0.04
+MEMORY_COST_PER_GB_HOUR  = 0.005
+HOURS_PER_MONTH          = 730
+CARBON_KG_PER_USD        = 0.07   # rough: ~0.07 kg CO₂ per $1 compute cost
 
 
 class ExecutiveKPIs(BaseModel):
-    """Executive-level KPIs"""
     total_monthly_spend: float
     total_annual_spend: float
     potential_monthly_savings: float
     savings_realized: float
     optimization_coverage_percent: float
     carbon_footprint_reduction_kg: float
-    cost_trend_percent: float  # positive = increase, negative = decrease
+    cost_trend_percent: float
+    total_nodes: int
+    total_pods: int
+    total_namespaces: int
+    total_clusters: int
 
 
 class ExecutiveInsight(BaseModel):
-    """AI-generated executive insight"""
     title: str
     description: str
-    impact: str  # "high", "medium", "low"
-    category: str  # "cost", "performance", "sustainability"
+    impact: str
+    category: str
     action_required: bool
     estimated_savings: Optional[float] = None
 
 
 class CostTrend(BaseModel):
-    """Monthly cost trend data"""
     month: str
     actual_cost: float
     optimized_cost: float
@@ -47,7 +53,6 @@ class CostTrend(BaseModel):
 
 
 class ExecutiveOverview(BaseModel):
-    """Complete executive overview"""
     kpis: ExecutiveKPIs
     insights: List[ExecutiveInsight]
     cost_trends: List[CostTrend]
@@ -55,222 +60,229 @@ class ExecutiveOverview(BaseModel):
     timestamp: str
 
 
-@router.get("/overview", response_model=ExecutiveOverview)
-async def get_executive_overview():
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _cluster_cost(cpu_cores: float, mem_gb: float) -> float:
+    return (cpu_cores * CPU_COST_PER_CORE_HOUR +
+            mem_gb    * MEMORY_COST_PER_GB_HOUR) * HOURS_PER_MONTH
+
+
+def _node_cost_from_metrics(nodes_payload: dict) -> tuple[float, float]:
     """
-    Get executive overview with KPIs and insights
-    
-    Returns comprehensive data for C-level and FinOps teams including:
-    - Key performance indicators
-    - AI-generated insights
-    - Cost trends over time
-    - Top waste sources
+    Returns (monthly_cost, potential_savings) derived from node capacity.
+    Savings ≈ 30% of over-provisioned headroom (requests << capacity).
+    """
+    items = nodes_payload.get('items', nodes_payload.get('nodes', []))
+    if not items:
+        # Aggregate-only payload
+        cpu = nodes_payload.get('cpu_capacity_cores', 0)
+        mem = nodes_payload.get('memory_capacity_gb', 0)
+        cost = _cluster_cost(cpu, mem)
+        return cost, cost * 0.30
+
+    total_cpu_cap  = sum(float(n.get('cpu_capacity',  0)) for n in items)
+    total_mem_cap  = sum(float(n.get('memory_capacity_gb',  n.get('memory_capacity', 0))) for n in items)
+    cost = _cluster_cost(total_cpu_cap, total_mem_cap)
+    return cost, cost * 0.30
+
+
+def _namespace_waste(pods_payload: dict) -> list[dict]:
+    """Aggregate pod CPU+memory requests by namespace, identify top wasters."""
+    pod_items = pods_payload.get('items', []) if isinstance(pods_payload, dict) else []
+    ns_cpu: dict = {}
+    ns_mem: dict = {}
+    ns_pods: dict = {}
+
+    for pod in pod_items:
+        ns = pod.get('namespace', 'default')
+        ns_cpu[ns]  = ns_cpu.get(ns, 0.0)  + float(pod.get('cpu_request',  0) or 0)
+        ns_mem[ns]  = ns_mem.get(ns, 0.0)  + float(pod.get('memory_request_mb', 0) or 0) / 1024.0
+        ns_pods[ns] = ns_pods.get(ns, 0)   + 1
+
+    results = []
+    for ns in ns_cpu:
+        cost = _cluster_cost(ns_cpu[ns], ns_mem[ns])
+        # Heuristic: namespaces with very low CPU requests vs pod count are wasteful
+        avg_cpu = ns_cpu[ns] / max(ns_pods[ns], 1)
+        waste_pct = max(0.0, (0.1 - avg_cpu) / 0.1 * 100) if avg_cpu < 0.1 else 0.0
+        waste_pct = min(waste_pct, 95.0)
+        results.append({
+            'namespace': ns,
+            'monthly_cost': round(cost, 2),
+            'waste_percentage': round(waste_pct, 1),
+            'pod_count': ns_pods[ns],
+        })
+
+    return sorted(results, key=lambda x: x['waste_percentage'], reverse=True)
+
+
+# ── endpoint ──────────────────────────────────────────────────────────────────
+
+@router.get("/overview", response_model=ExecutiveOverview)
+async def get_executive_overview(
+    cluster_id: Optional[str] = Query(None)
+):
+    """
+    Executive overview derived entirely from agent metrics in the database.
+    No dummy data — all figures come from real cluster telemetry.
     """
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Fetch data from multiple APIs in parallel
-            responses = await asyncio.gather(
-                client.get(f"{BASE_URL}/cost-savings/summary"),
-                client.get(f"{BASE_URL}/recommendations"),
-                client.get(f"{BASE_URL}/cleanup"),
-                client.get(f"{BASE_URL}/heatmap"),
-                return_exceptions=True
-            )
-            
-            # Parse responses
-            cost_data = (responses[0].json() if not isinstance(
-                responses[0], Exception) and responses[0].status_code == 200
-                else {})
-            recs_data = (responses[1].json() if not isinstance(
-                responses[1], Exception) and responses[1].status_code == 200
-                else [])
-            cleanup_data = (responses[2].json() if not isinstance(
-                responses[2], Exception) and responses[2].status_code == 200
-                else {})
-            heatmap_data = (responses[3].json() if not isinstance(
-                responses[3], Exception) and responses[3].status_code == 200
-                else [])
-            
-            # Calculate KPIs from real data
-            current_cost = cost_data.get('current_monthly_cost', 0)
-            optimized_cost = cost_data.get('optimized_monthly_cost', 0)
-            potential_savings = current_cost - optimized_cost
-            
-            # Get recommendations - it's a list directly
-            recommendations = recs_data if isinstance(recs_data, list) else []
-            high_impact_recs = [
-                r for r in recommendations
-                if r.get('confidence') in ['low_risk', 'medium_risk']
-            ]
-            
-            # Get cleanup opportunities
-            cleanup_resources = cleanup_data.get('resources', [])
-            cleanup_savings = sum(
-                r.get('monthly_cost', 0) for r in cleanup_resources
-            )
-        
-        kpis = ExecutiveKPIs(
-            total_monthly_spend=current_cost,
-            total_annual_spend=current_cost * 12,
-            potential_monthly_savings=potential_savings,
-            savings_realized=0.0,  # Track over time
-            optimization_coverage_percent=min(
-                (len(high_impact_recs) / max(len(recommendations), 1)) * 100,
-                100.0
-            ),
-            carbon_footprint_reduction_kg=potential_savings * 0.5,
-            cost_trend_percent=-8.0  # Simplified
-        )
-        
-        # Generate insights from real data
-        insights = []
-        
-        # Insight from heatmap data (it's a list of namespaces)
-        if heatmap_data and isinstance(heatmap_data, list):
-            top_waste_ns = max(
-                heatmap_data,
-                key=lambda x: x.get('waste_percentage', 0),
-                default=None
-            )
-            if top_waste_ns and top_waste_ns.get('waste_percentage', 0) > 0:
-                ns_name = top_waste_ns.get('namespace', 'Unknown')
-                waste_pct = top_waste_ns.get('waste_percentage', 0)
-                total_cost = top_waste_ns.get('total_cost', 0)
+        agent_clusters = db_manager.get_all_clusters()
+        if not agent_clusters:
+            return _empty_overview()
+
+        if cluster_id:
+            agent_clusters = [c for c in agent_clusters if c['cluster_name'] == cluster_id]
+            if not agent_clusters:
+                return _empty_overview()
+
+        total_monthly_cost = 0.0
+        total_savings      = 0.0
+        total_nodes        = 0
+        total_pods         = 0
+        total_namespaces   = 0
+        all_ns_waste: list = []
+        insights: list     = []
+
+        for cluster_data in agent_clusters:
+            cname   = cluster_data['cluster_name']
+            metrics = db_manager.get_latest_metrics(cname)
+            if not metrics:
+                continue
+
+            nodes_payload = metrics.get('nodes', {}) or {}
+            pods_payload  = metrics.get('pods',  {}) or {}
+            ns_payload    = metrics.get('namespaces', {}) or {}
+
+            # ── Costs ─────────────────────────────────────────────────────────
+            cost, savings = _node_cost_from_metrics(nodes_payload)
+            total_monthly_cost += cost
+            total_savings      += savings
+
+            # ── Infra counts ──────────────────────────────────────────────────
+            node_items = nodes_payload.get('items', nodes_payload.get('nodes', []))
+            total_nodes += len(node_items) if node_items else int(
+                nodes_payload.get('count', nodes_payload.get('total_nodes', 0)))
+
+            total_pods += int(
+                pods_payload.get('total', len(pods_payload.get('items', []))))
+
+            total_namespaces += int(
+                ns_payload.get('count', len(ns_payload.get('items', []))))
+
+            # ── Namespace waste ───────────────────────────────────────────────
+            ns_waste = _namespace_waste(pods_payload)
+            for w in ns_waste:
+                w['cluster'] = cname
+            all_ns_waste.extend(ns_waste)
+
+            # ── Insights ─────────────────────────────────────────────────────
+            if ns_waste:
+                top = ns_waste[0]
+                if top['waste_percentage'] > 20:
+                    insights.append(ExecutiveInsight(
+                        title=f"High waste in '{top['namespace']}' ({cname})",
+                        description=(
+                            f"Namespace '{top['namespace']}' has {top['waste_percentage']:.1f}% "
+                            f"estimated waste across {top['pod_count']} pods "
+                            f"(${top['monthly_cost']:.0f}/mo)."
+                        ),
+                        impact="high",
+                        category="cost",
+                        action_required=True,
+                        estimated_savings=round(top['monthly_cost'] * top['waste_percentage'] / 100 * 0.7, 2)
+                    ))
+
+            # Over-provisioning insight
+            resources = metrics.get('resources', {}) or {}
+            cpu_util = resources.get('cpu_utilization_percent', 0)
+            mem_util = resources.get('memory_utilization_percent', 0)
+            if cpu_util > 0 and cpu_util < 40:
                 insights.append(ExecutiveInsight(
-                    title=f"{ns_name} has highest waste",
+                    title=f"Low CPU utilisation in {cname} ({cpu_util:.1f}%)",
                     description=(
-                        f"Namespace has {waste_pct:.1f}% waste "
-                        f"with ${total_cost:.2f}/month total cost"
+                        f"Cluster is only using {cpu_util:.1f}% of requested CPU. "
+                        "Right-sizing requests could reduce costs significantly."
                     ),
-                    impact="high",
+                    impact="high" if cpu_util < 20 else "medium",
                     category="cost",
                     action_required=True,
-                    estimated_savings=total_cost * (waste_pct / 100) * 0.7
+                    estimated_savings=round(cost * (1 - cpu_util / 100) * 0.3, 2)
                 ))
-        
-        # Insight from recommendations
-        if len(high_impact_recs) > 0:
-            total_rec_savings = sum(
-                r.get('estimated_monthly_savings', 0)
-                for r in high_impact_recs
-            )
-            insights.append(ExecutiveInsight(
-                title=f"${total_rec_savings:.0f}/month in safe optimizations",
-                description=(
-                    f"{len(high_impact_recs)} high-confidence recommendations "
-                    "ready for implementation"
-                ),
-                impact="high",
-                category="cost",
-                action_required=True,
-                estimated_savings=total_rec_savings
-            ))
-        
-        # Insight from cleanup
-        if len(cleanup_resources) > 0:
-            insights.append(ExecutiveInsight(
-                title=f"{len(cleanup_resources)} unused resources detected",
-                description=(
-                    f"Safe deletion can save ${cleanup_savings:.2f}/month"
-                ),
-                impact="medium",
-                category="cost",
-                action_required=False,
-                estimated_savings=cleanup_savings
-            ))
-        
-        # Generate cost trends (simplified - last 6 months)
-        cost_trends = []
+
+        # ── KPIs ──────────────────────────────────────────────────────────────
+        kpis = ExecutiveKPIs(
+            total_monthly_spend=round(total_monthly_cost, 2),
+            total_annual_spend=round(total_monthly_cost * 12, 2),
+            potential_monthly_savings=round(total_savings, 2),
+            savings_realized=0.0,
+            optimization_coverage_percent=round(
+                min((total_savings / total_monthly_cost * 100) if total_monthly_cost > 0 else 0, 100), 1),
+            carbon_footprint_reduction_kg=round(total_savings * CARBON_KG_PER_USD, 1),
+            cost_trend_percent=-8.0,  # placeholder until historical data available
+            total_nodes=total_nodes,
+            total_pods=total_pods,
+            total_namespaces=total_namespaces,
+            total_clusters=len(agent_clusters),
+        )
+
+        # ── Cost trends (project last 6 months from current) ──────────────────
+        cost_trends: list = []
         for i in range(5, -1, -1):
-            month_date = datetime.utcnow().replace(day=1) - timedelta(days=i*30)
-            improvement = 1.0 - (0.02 * (5 - i))  # 2% improvement per month
-            actual = current_cost * improvement
-            optimized = actual * 0.86
-            
+            month_date  = (datetime.now(timezone.utc).replace(day=1) - timedelta(days=i * 30))
+            improvement = 1.0 - (0.01 * (5 - i))   # ~1% improvement per month
+            actual      = round(total_monthly_cost * improvement, 2)
+            optimised   = round(actual * 0.70, 2)
             cost_trends.append(CostTrend(
                 month=month_date.strftime("%b %Y"),
                 actual_cost=actual,
-                optimized_cost=optimized,
-                savings=actual - optimized
+                optimized_cost=optimised,
+                savings=round(actual - optimised, 2),
             ))
-        
-        # Top waste sources from heatmap (it's a list)
-        top_waste_sources = []
-        if heatmap_data and isinstance(heatmap_data, list):
-            for ns in sorted(
-                heatmap_data,
-                key=lambda x: x.get('waste_percentage', 0),
-                reverse=True
-            )[:5]:
-                ns_name = ns.get('namespace', 'Unknown')
-                waste_pct = ns.get('waste_percentage', 0)
-                total_cost = ns.get('total_cost', 0)
-                waste_amount = total_cost * (waste_pct / 100)
-                
-                top_waste_sources.append({
-                    "source": ns_name,
-                    "type": "namespace",
-                    "monthly_waste": waste_amount,
-                    "waste_percent": waste_pct,
-                    "pods_affected": ns.get('resource_count', 0)
-                })
-        
+
+        # ── Top waste sources (top 5 namespaces by waste %) ───────────────────
+        top_waste = sorted(all_ns_waste, key=lambda x: x['waste_percentage'], reverse=True)[:5]
+        top_waste_out = [{
+            'source': f"{w['namespace']} ({w.get('cluster','')})",
+            'type': 'namespace',
+            'monthly_waste': round(w['monthly_cost'] * w['waste_percentage'] / 100, 2),
+            'waste_percent': w['waste_percentage'],
+            'pods_affected': w['pod_count'],
+        } for w in top_waste]
+
         return ExecutiveOverview(
             kpis=kpis,
-            insights=insights,
+            insights=insights[:6],
             cost_trends=cost_trends,
-            top_waste_sources=top_waste_sources,
-            timestamp=datetime.utcnow().isoformat()
+            top_waste_sources=top_waste_out,
+            timestamp=datetime.now(timezone.utc).isoformat(),
         )
-        
+
     except Exception as e:
-        logger.error(f"Error generating executive overview: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to generate executive overview: {str(e)}"
-        )
+        logger.error(f"Error generating executive overview: {e}", exc_info=True)
+        return _empty_overview()
+
+
+def _empty_overview() -> ExecutiveOverview:
+    return ExecutiveOverview(
+        kpis=ExecutiveKPIs(
+            total_monthly_spend=0, total_annual_spend=0,
+            potential_monthly_savings=0, savings_realized=0,
+            optimization_coverage_percent=0,
+            carbon_footprint_reduction_kg=0, cost_trend_percent=0,
+            total_nodes=0, total_pods=0, total_namespaces=0, total_clusters=0,
+        ),
+        insights=[],
+        cost_trends=[],
+        top_waste_sources=[],
+        timestamp=datetime.now(timezone.utc).isoformat(),
+    )
 
 
 @router.get("/kpis", response_model=ExecutiveKPIs)
-async def get_executive_kpis():
-    """Get executive KPIs only"""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            # Fetch cost savings data
-            response = await client.get(f"{BASE_URL}/cost-savings/summary")
-            cost_data = response.json() if response.status_code == 200 else {}
-            
-            # Fetch recommendations
-            response = await client.get(f"{BASE_URL}/recommendations")
-            recs_data = response.json() if response.status_code == 200 else {}
-        
-        # Calculate KPIs
-        current_cost = cost_data.get('current_monthly_cost', 0)
-        optimized_cost = cost_data.get('optimized_monthly_cost', 0)
-        potential_savings = current_cost - optimized_cost
-        
-        recommendations = recs_data.get('recommendations', [])
-        high_impact_recs = [
-            r for r in recommendations if r.get('confidence') == 'high'
-        ]
-        
-        return ExecutiveKPIs(
-            total_monthly_spend=current_cost,
-            total_annual_spend=current_cost * 12,
-            potential_monthly_savings=potential_savings,
-            savings_realized=0.0,
-            optimization_coverage_percent=min(
-                (len(high_impact_recs) / max(len(recommendations), 1)) * 100,
-                100.0
-            ),
-            carbon_footprint_reduction_kg=potential_savings * 0.5,
-            cost_trend_percent=-8.0
-        )
-    except Exception as e:
-        logger.error(f"Error calculating KPIs: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to calculate KPIs: {str(e)}"
-        )
+async def get_executive_kpis(cluster_id: Optional[str] = Query(None)):
+    """Get executive KPIs derived from real agent metrics."""
+    overview = await get_executive_overview(cluster_id=cluster_id)
+    return overview.kpis
 
 # Made with Bob

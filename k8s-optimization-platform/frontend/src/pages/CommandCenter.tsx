@@ -10,12 +10,12 @@ import {
   CardContent,
   IconButton,
   LinearProgress,
-  Alert,
   Chip,
   List,
   ListItem,
   ListItemText,
   Button,
+  CircularProgress,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -25,6 +25,12 @@ import {
   Error as ErrorIcon,
   TrendingUp as TrendingUpIcon,
   Add as AddIcon,
+  Storage as StorageIcon,
+  Dns as DnsIcon,
+  Memory as MemoryIcon,
+  AttachMoney as MoneyIcon,
+  HealthAndSafety as HealthIcon,
+  NotificationsActive as AlertsIcon,
 } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../config/api';
@@ -37,7 +43,6 @@ const CommandCenter: React.FC = () => {
   const [alerts, setAlerts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Derive infra totals directly from the live cluster list — no hardcoding
   const totalClusters = clusters.length;
   const totalNodes = clusters.reduce((s, c) => s + c.nodes, 0);
   const totalPods = clusters.reduce((s, c) => s + c.pods, 0);
@@ -83,9 +88,7 @@ const CommandCenter: React.FC = () => {
           time: '5m ago',
         })));
       } else {
-        setAlerts([
-          { id: 1, severity: 'info', message: 'Platform is operational', time: 'now' },
-        ]);
+        setAlerts([{ id: 1, severity: 'info', message: 'Platform is operational', time: 'now' }]);
       }
     } catch {
       setHealth({ status: 'healthy', uptime: '99.9%', response_time: '45ms' });
@@ -104,10 +107,18 @@ const CommandCenter: React.FC = () => {
     { time: '20:00', cost: totalCost,         savings: totalSavings },
   ].map(d => ({ ...d, cost: Math.round(d.cost), savings: Math.round(d.savings) }));
 
+  const getHealthColor = (score: number): 'success' | 'warning' | 'error' => {
+    if (score >= 80) return 'success';
+    if (score >= 60) return 'warning';
+    return 'error';
+  };
+
   if (clustersLoading) {
-    return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-      <LinearProgress sx={{ width: '200px' }} />
-    </Box>;
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+        <CircularProgress />
+      </Box>
+    );
   }
 
   if (!clustersLoading && clusters.length === 0) {
@@ -126,100 +137,137 @@ const CommandCenter: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box p={3}>
+      {/* Header */}
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4" gutterBottom>Platform Engineering Command Center</Typography>
-          <Typography variant="body2" color="textSecondary">
-            Real-time AI-powered Kubernetes optimization — {totalClusters} cluster{totalClusters !== 1 ? 's' : ''} connected
+          <Typography variant="h4" gutterBottom>
+            Command Center
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            Real-time overview — {totalClusters} cluster{totalClusters !== 1 ? 's' : ''} connected
           </Typography>
         </Box>
-        <Box>
-          <Chip icon={<CheckCircleIcon />} label="All Systems Operational" color="success" sx={{ mr: 2 }} />
-          <IconButton onClick={fetchSideData} disabled={loading}>
+        <Box display="flex" alignItems="center" gap={1}>
+          <Chip icon={<CheckCircleIcon />} label="All Systems Operational" color="success" variant="outlined" />
+          <IconButton onClick={fetchSideData} disabled={loading} size="small">
             <RefreshIcon />
           </IconButton>
         </Box>
       </Box>
 
-      {/* Infrastructure KPI cards — driven by real cluster data */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'primary.light', color: 'white' }}>
+      {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+
+      {/* KPI Summary Cards */}
+      <Grid container spacing={3} mb={3}>
+        <Grid item xs={12} md={2}>
+          <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>Infrastructure</Typography>
+              <Box display="flex" alignItems="center" mb={1}>
+                <StorageIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="body2" color="text.secondary">Clusters</Typography>
+              </Box>
               <Typography variant="h4">{totalClusters}</Typography>
-              <Typography variant="caption">
-                Clusters · {totalNodes} Nodes · {totalPods} Pods
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={2}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <DnsIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="body2" color="text.secondary">Nodes</Typography>
+              </Box>
+              <Typography variant="h4">{totalNodes}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={2}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <MemoryIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="body2" color="text.secondary">Pods</Typography>
+              </Box>
+              <Typography variant="h4">{totalPods}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={2}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <MoneyIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="body2" color="text.secondary">Monthly Cost</Typography>
+              </Box>
+              <Typography variant="h5">${totalCost.toLocaleString()}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={2}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <TrendingUpIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="body2" color="text.secondary">Savings</Typography>
+              </Box>
+              <Typography variant="h5">${totalSavings.toLocaleString()}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} md={2}>
+          <Card>
+            <CardContent>
+              <Box display="flex" alignItems="center" mb={1}>
+                <HealthIcon color="primary" sx={{ mr: 1 }} />
+                <Typography variant="body2" color="text.secondary">Health Score</Typography>
+              </Box>
+              <Typography variant="h4">
+                <Chip label={`${avgHealthScore}/100`} color={getHealthColor(avgHealthScore)} size="small" />
               </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'success.light', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>Cost Optimization</Typography>
-              <Typography variant="h4">${totalSavings.toLocaleString()}</Typography>
-              <Typography variant="caption">
-                Monthly Savings · ${totalCost.toLocaleString()} Current
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'info.light', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>Health Score</Typography>
-              <Typography variant="h4">{avgHealthScore}/100</Typography>
-              <Typography variant="caption">Avg across all clusters</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: 'warning.light', color: 'white' }}>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>Active Alerts</Typography>
-              <Typography variant="h4">{alerts.length}</Typography>
-              <Typography variant="caption">Live notifications</Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      {/* Charts + Alerts row */}
+      <Grid container spacing={3} mb={3}>
         <Grid item xs={12} md={8}>
           <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>Cost & Savings Trends</Typography>
-            <ResponsiveContainer width="100%" height={300}>
+            <Typography variant="h6" gutterBottom>Cost &amp; Savings Trends</Typography>
+            <ResponsiveContainer width="100%" height={280}>
               <LineChart data={trendData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="time" />
                 <YAxis />
                 <Tooltip formatter={(v: any) => `$${Number(v).toLocaleString()}`} />
                 <Legend />
-                <Line type="monotone" dataKey="cost" stroke="#8884d8" name="Cost ($)" />
-                <Line type="monotone" dataKey="savings" stroke="#82ca9d" name="Savings ($)" />
+                <Line type="monotone" dataKey="cost" stroke="#8884d8" name="Cost ($)" dot={false} />
+                <Line type="monotone" dataKey="savings" stroke="#82ca9d" name="Savings ($)" dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </Paper>
         </Grid>
         <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>Real-time Alerts</Typography>
-            <List>
+          <Paper sx={{ p: 2, height: '100%' }}>
+            <Box display="flex" alignItems="center" mb={1} gap={1}>
+              <AlertsIcon color="primary" fontSize="small" />
+              <Typography variant="h6">Alerts</Typography>
+            </Box>
+            <List dense disablePadding>
               {alerts.map(alert => (
-                <ListItem key={alert.id}>
+                <ListItem key={alert.id} disableGutters>
                   <ListItemText
                     primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        {alert.severity === 'warning' && <WarningIcon color="warning" sx={{ mr: 1 }} />}
-                        {alert.severity === 'error' && <ErrorIcon color="error" sx={{ mr: 1 }} />}
-                        {alert.severity === 'success' && <CheckCircleIcon color="success" sx={{ mr: 1 }} />}
-                        {alert.severity === 'info' && <TrendingUpIcon color="info" sx={{ mr: 1 }} />}
+                      <Box display="flex" alignItems="center" gap={0.5}>
+                        {alert.severity === 'warning' && <WarningIcon color="warning" fontSize="small" />}
+                        {alert.severity === 'error'   && <ErrorIcon   color="error"   fontSize="small" />}
+                        {alert.severity === 'success' && <CheckCircleIcon color="success" fontSize="small" />}
+                        {alert.severity === 'info'    && <TrendingUpIcon  color="info"    fontSize="small" />}
                         <Typography variant="body2">{alert.message}</Typography>
                       </Box>
                     }
-                    secondary={alert.time}
+                    secondary={<Typography variant="caption" color="text.secondary">{alert.time}</Typography>}
                   />
                 </ListItem>
               ))}
@@ -228,19 +276,18 @@ const CommandCenter: React.FC = () => {
         </Grid>
       </Grid>
 
+      {/* Bottom row */}
       <Grid container spacing={3}>
         <Grid item xs={12} md={4}>
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
-                <DashboardIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Quick Actions
-              </Typography>
-              <Box sx={{ mt: 2 }}>
-                <Button variant="outlined" fullWidth sx={{ mb: 1 }}>Run Full Optimization</Button>
-                <Button variant="outlined" fullWidth sx={{ mb: 1 }}>Generate Executive Report</Button>
-                <Button variant="outlined" fullWidth>View All Recommendations</Button>
+              <Box display="flex" alignItems="center" mb={2} gap={1}>
+                <DashboardIcon color="primary" fontSize="small" />
+                <Typography variant="h6">Quick Actions</Typography>
               </Box>
+              <Button variant="outlined" fullWidth sx={{ mb: 1 }}>Run Full Optimization</Button>
+              <Button variant="outlined" fullWidth sx={{ mb: 1 }}>Generate Executive Report</Button>
+              <Button variant="outlined" fullWidth>View All Recommendations</Button>
             </CardContent>
           </Card>
         </Grid>
@@ -248,15 +295,22 @@ const CommandCenter: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>System Health</Typography>
-              <Box sx={{ mt: 2 }}>
-                {health && <>
-                  <Typography variant="body2" gutterBottom>
-                    Status: <Chip label={health.status.toUpperCase()} color="success" size="small" />
-                  </Typography>
-                  <Typography variant="body2" gutterBottom>Uptime: <strong>{health.uptime}</strong></Typography>
-                  <Typography variant="body2">Avg Response: <strong>{health.response_time}</strong></Typography>
-                </>}
-              </Box>
+              {health && (
+                <Box mt={1} display="flex" flexDirection="column" gap={1}>
+                  <Box display="flex" justifyContent="space-between">
+                    <Typography variant="body2" color="text.secondary">Status</Typography>
+                    <Chip label={health.status.toUpperCase()} color="success" size="small" variant="outlined" />
+                  </Box>
+                  <Box display="flex" justifyContent="space-between">
+                    <Typography variant="body2" color="text.secondary">Uptime</Typography>
+                    <Typography variant="body2"><strong>{health.uptime}</strong></Typography>
+                  </Box>
+                  <Box display="flex" justifyContent="space-between">
+                    <Typography variant="body2" color="text.secondary">Avg Response</Typography>
+                    <Typography variant="body2"><strong>{health.response_time}</strong></Typography>
+                  </Box>
+                </Box>
+              )}
             </CardContent>
           </Card>
         </Grid>
@@ -264,16 +318,16 @@ const CommandCenter: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>AI Capabilities</Typography>
-              <Box sx={{ mt: 2 }}>
+              <Box mt={1} display="flex" flexWrap="wrap" gap={0.5}>
                 {['Predictive Scaling', 'Auto-Healing', 'Cost Optimization', 'Incident Correlation', 'Root Cause Analysis', 'Smart Cleanup']
-                  .map(cap => <Chip key={cap} label={`✓ ${cap}`} size="small" color="success" sx={{ m: 0.5 }} />)}
+                  .map(cap => (
+                    <Chip key={cap} label={cap} size="small" icon={<CheckCircleIcon />} variant="outlined" color="success" />
+                  ))}
               </Box>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
-
-      {loading && <LinearProgress sx={{ mt: 2 }} />}
     </Box>
   );
 };

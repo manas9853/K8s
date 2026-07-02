@@ -35,6 +35,10 @@ interface ExecutiveKPIs {
   optimization_coverage_percent: number;
   carbon_footprint_reduction_kg: number;
   cost_trend_percent: number;
+  total_nodes: number;
+  total_pods: number;
+  total_namespaces: number;
+  total_clusters: number;
 }
 
 interface ExecutiveInsight {
@@ -193,8 +197,44 @@ const Executive: React.FC = () => {
         For Leadership & FinOps Teams
       </Typography>
 
+      {/* Infra counts row */}
+      <Grid container spacing={2} sx={{ mt: 2, mb: 1 }}>
+        <Grid item xs={6} sm={3}>
+          <Card variant="outlined">
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Typography variant="caption" color="text.secondary">Clusters</Typography>
+              <Typography variant="h5" fontWeight="bold">{kpis.total_clusters}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card variant="outlined">
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Typography variant="caption" color="text.secondary">Nodes</Typography>
+              <Typography variant="h5" fontWeight="bold">{kpis.total_nodes}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card variant="outlined">
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Typography variant="caption" color="text.secondary">Pods</Typography>
+              <Typography variant="h5" fontWeight="bold">{kpis.total_pods}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <Card variant="outlined">
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Typography variant="caption" color="text.secondary">Namespaces</Typography>
+              <Typography variant="h5" fontWeight="bold">{kpis.total_namespaces}</Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
       {/* KPI Cards */}
-      <Grid container spacing={3} sx={{ mt: 2 }}>
+      <Grid container spacing={3} sx={{ mt: 1 }}>
         {/* Total Monthly Spend */}
         <Grid item xs={12} sm={6} md={3}>
           <Card>
