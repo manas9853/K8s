@@ -100,26 +100,34 @@ function GradeDonut({ score, grade }: { score: number; grade: string }) {
   );
 }
 
-/* ── Mini bar chart for trend ───────────────────────────────────────────────── */
+/* ── Mini bar chart for trend — fills container width ───────────────────────── */
 function TrendChart({ scores }: { scores: number[] }) {
   const max = Math.max(...scores, 100);
-  const barW = 36;
+  const chartH = 140;
+  const n = scores.length;
+  // Use viewBox so SVG scales to fill any container; bars are evenly distributed
+  const vbW = 600;
   const gap = 12;
-  const chartH = 120;
-  const total = scores.length * barW + (scores.length - 1) * gap;
+  const barW = (vbW - gap * (n - 1)) / n;
 
   return (
-    <svg width={total} height={chartH} style={{ overflow: 'visible' }}>
+    <svg
+      viewBox={`0 0 ${vbW} ${chartH}`}
+      width="100%"
+      height={chartH}
+      preserveAspectRatio="none"
+      style={{ display: 'block' }}
+    >
       {scores.map((s, i) => {
-        const h = (s / max) * chartH;
+        const h = Math.max((s / max) * chartH, 4);
         const x = i * (barW + gap);
-        const isLast = i === scores.length - 1;
+        const isLast = i === n - 1;
         return (
           <rect
             key={i}
             x={x} y={chartH - h}
             width={barW} height={h}
-            rx={4}
+            rx={3}
             fill={isLast ? T.accent : '#c7d8f5'}
           />
         );
@@ -459,9 +467,35 @@ const ClusterBenchmarking: React.FC = () => {
         const costScore = costMetric ? costMetric.value.toFixed(1) : '—';
         const reliabilityScore = reliabilityMetric ? reliabilityMetric.value.toFixed(1) : cluster.overall_score.toFixed(1);
 
-        const resourceDesc = resourceMetric?.name ?? 'CPU and Memory over-provisioning is currently high on 12% of nodes.';
-        const costDesc = costMetric?.name ?? 'Spot instance utilization is optimal but egress costs are exceeding budget.';
-        const reliabilityDesc = reliabilityMetric?.name ?? 'Liveness probe coverage is missing for 4 critical microservices.';
+        /* ── Generate insight text from actual values ── */
+        const rv = resourceMetric?.value ?? 0;
+        const resourceDesc = rv < 40
+          ? 'CPU and Memory utilization is very low — cluster is significantly over-provisioned.'
+          : rv < 60
+          ? 'CPU and Memory over-provisioning is currently high across several nodes.'
+          : rv < 80
+          ? 'Resource utilization is healthy. Minor optimization headroom remains.'
+          : rv <= 90
+          ? 'Resource utilization is efficient. Monitor to avoid saturation.'
+          : 'Resource utilization is very high — risk of saturation under load spikes.';
+
+        const cv = costMetric?.value ?? 0;
+        const costDesc = cv >= 90
+          ? 'Excellent cost efficiency. Spot and reserved instance mix is optimal.'
+          : cv >= 80
+          ? 'Spot instance utilization is good. Review egress costs for further savings.'
+          : cv >= 70
+          ? 'Moderate cost optimization. Consider increasing spot instance coverage.'
+          : 'Cost efficiency is below benchmark. Review idle resources and reserved capacity.';
+
+        const relv = reliabilityMetric?.value ?? 0;
+        const reliabilityDesc = relv >= 98
+          ? 'All pods running healthy. Liveness and readiness probes are fully covered.'
+          : relv >= 90
+          ? 'Pod reliability is good. A small number of pods are pending or restarting.'
+          : relv >= 75
+          ? 'Several pods are not in Running state. Review CrashLoopBackOff and OOM events.'
+          : 'Pod reliability needs attention — a significant portion of pods are unhealthy.';
 
         return (
           <div key={cluster.cluster_name}>

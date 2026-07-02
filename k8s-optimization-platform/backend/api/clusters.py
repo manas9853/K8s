@@ -1418,18 +1418,22 @@ def _compute_benchmark_from_metrics(
     weaknesses: List[str] = []
 
     if reliability >= 95:
-        strengths.append("Excellent pod reliability")
+        strengths.append("Pod Reliability - All pods are running healthy with no restarts or failures.")
     if cost_score >= 85:
-        strengths.append("Good cost optimization")
+        strengths.append("Cost Optimization - Spot and reserved instance mix is achieving optimal cost efficiency.")
     if resource_efficiency >= 70:
-        strengths.append("Efficient resource utilization")
+        strengths.append("Resource Utilization - CPU and Memory are efficiently allocated across all nodes.")
+    if resource_efficiency >= 60 and reliability >= 90:
+        strengths.append("Cluster Stability - Consistent performance with no major disruptions detected.")
 
     if resource_efficiency < 50:
-        weaknesses.append("Low resource utilization - over-provisioned")
+        weaknesses.append("Over-Provisioning - Low resource utilization detected; right-sizing nodes could reduce costs.")
     elif resource_efficiency > 85:
-        weaknesses.append("High resource utilization - risk of saturation")
+        weaknesses.append("Saturation Risk - Resource utilization is very high; consider scaling out before load spikes.")
     if reliability < 90:
-        weaknesses.append("Pod reliability needs improvement")
+        weaknesses.append("Pod Reliability - A significant number of pods are not in Running state; review OOM and crash events.")
+    if cost_score < 75:
+        weaknesses.append("Cost Efficiency - Below-average cost score; review idle workloads and unattached volumes.")
 
     vs_avg = overall_score - 70
     vs_avg_str = f"+{round(vs_avg, 1)}%" if vs_avg >= 0 else f"{round(vs_avg, 1)}%"
