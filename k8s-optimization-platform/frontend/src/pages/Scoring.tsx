@@ -23,6 +23,7 @@ import {
   Divider,
   Button,
   CircularProgress,
+  Stack,
 } from '@mui/material';
 import {
   TrendingUp as TrendingUpIcon,
@@ -34,6 +35,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
   Add as AddIcon,
+  Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import {
   LineChart,
@@ -107,6 +109,16 @@ interface Summary {
   }>;
 }
 
+const scoreColor = (score: number) =>
+  score >= 90 ? '#2e7d32' : score >= 75 ? '#1565c0' : score >= 60 ? '#e65100' : '#c62828';
+
+const gradeChipColor = (grade: string): 'success' | 'primary' | 'warning' | 'error' => {
+  if (grade.startsWith('A')) return 'success';
+  if (grade.startsWith('B')) return 'primary';
+  if (grade.startsWith('C')) return 'warning';
+  return 'error';
+};
+
 const Scoring: React.FC = () => {
   const navigate = useNavigate();
   const { clusterParam } = useActiveCluster();
@@ -115,100 +127,59 @@ const Scoring: React.FC = () => {
   const [trends, setTrends] = useState<ScoreTrend[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [selectedCluster, setSelectedCluster] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
+    const i = setInterval(fetchData, 60000);
+    return () => clearInterval(i);
   }, [clusterParam]);
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
-      await Promise.all([
-        fetchClusterScores(),
-        fetchTrends(),
-        fetchSummary(),
+      const [scoresRes, trendsRes, summaryRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/v1/scoring/clusters${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/scoring/trends${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/scoring/summary${clusterParam}`),
       ]);
+      const scores: ClusterScore[] = await scoresRes.json();
+      const trendData: ScoreTrend[] = await trendsRes.json();
+      const summaryData: Summary = await summaryRes.json();
+      setClusterScores(scores);
+      setTrends(trendData);
+      setSummary(summaryData);
+      if (scores.length > 0 && !selectedCluster) {
+        setSelectedCluster(scores[0].cluster_name);
+      }
+    } catch (err) {
+      setError('Failed to load scoring data');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchClusterScores = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/scoring/clusters${clusterParam}`);
-    const data = await response.json();
-    setClusterScores(data);
-    if (data.length > 0 && !selectedCluster) {
-      setSelectedCluster(data[0].cluster_name);
-    }
-  };
-
-  const fetchTrends = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/scoring/trends${clusterParam}`);
-    const data = await response.json();
-    setTrends(data);
-  };
-
-  const fetchSummary = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/scoring/summary${clusterParam}`);
-    const data = await response.json();
-    setSummary(data);
-  };
-
-  const getGradeColor = (grade: string) => {
-    if (grade.startsWith('A')) return 'success';
-    if (grade.startsWith('B')) return 'info';
-    if (grade.startsWith('C')) return 'warning';
-    return 'error';
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'excellent':
-        return 'success';
-      case 'good':
-        return 'info';
-      case 'fair':
-        return 'warning';
-      case 'poor':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
   const getTrendIcon = (trend: string) => {
-    switch (trend) {
-      case 'improving':
-        return <TrendingUpIcon color="success" />;
-      case 'declining':
-        return <TrendingDownIcon color="error" />;
-      default:
-        return <TrendingFlatIcon color="action" />;
-    }
-  };
-
-  const getScoreColor = (score: number) => {
-    if (score >= 90) return '#4caf50';
-    if (score >= 75) return '#2196f3';
-    if (score >= 60) return '#ff9800';
-    return '#f44336';
+    if (trend === 'improving') return <TrendingUpIcon color="success" fontSize="small" />;
+    if (trend === 'declining') return <TrendingDownIcon color="error" fontSize="small" />;
+    return <TrendingFlatIcon color="action" fontSize="small" />;
   };
 
   const selectedClusterData = clusterScores.find((c) => c.cluster_name === selectedCluster);
   const selectedTrendData = trends.find((t) => t.cluster_name === selectedCluster);
 
-  // Prepare radar chart data
   const radarData = selectedClusterData?.factors.map((f) => ({
-    factor: f.name.replace(' ', '\n'),
+    factor: f.name,
     score: f.score,
     fullMark: 100,
   }));
 
   if (clustersLoading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress size={48} />
       </Box>
     );
   }
@@ -216,8 +187,8 @@ const Scoring: React.FC = () => {
   if (!clustersLoading && clusters.length === 0) {
     return (
       <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
+        <Typography variant="h5" color="text.secondary">No clusters attached yet</Typography>
+        <Typography variant="body1" color="text.secondary" textAlign="center" maxWidth={480}>
           Scoring data is calculated from registered clusters. Connect a cluster via the
           Cluster Onboarding page and optimization scores will appear automatically.
         </Typography>
@@ -228,86 +199,61 @@ const Scoring: React.FC = () => {
     );
   }
 
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+        <CircularProgress size={48} />
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box p={3}>
+        <Alert severity="error" action={
+          <Button size="small" onClick={fetchData}>Retry</Button>
+        }>{error}</Alert>
+      </Box>
+    );
+  }
+
   return (
-    <Box sx={{ p: 3 }}>
+    <Box p={3}>
       {/* Header */}
-      <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box>
-          <Typography variant="h4" fontWeight="bold">
-            Cluster Optimization Scores
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Comprehensive scoring based on efficiency metrics
-          </Typography>
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={3}>
+        <Box display="flex" alignItems="center" gap={1.5}>
+          <AssessmentIcon sx={{ fontSize: 36, color: 'primary.main' }} />
+          <Box>
+            <Typography variant="h4" fontWeight="bold">Cluster Optimization Scores</Typography>
+            <Typography variant="caption" color="text.secondary">
+              Comprehensive scoring based on efficiency metrics
+            </Typography>
+          </Box>
         </Box>
-        <IconButton onClick={fetchData} color="primary">
+        <IconButton onClick={fetchData} disabled={loading}>
           <RefreshIcon />
         </IconButton>
       </Box>
 
       {/* Summary Cards */}
       {summary && (
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
-              <CardContent>
-                <Typography variant="h6" color="white" gutterBottom>
-                  Average Score
-                </Typography>
-                <Typography variant="h3" color="white" fontWeight="bold">
-                  {summary.average_score}
-                </Typography>
-                <Typography variant="body2" color="white">
-                  Across {summary.total_clusters} clusters
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)' }}>
-              <CardContent>
-                <Typography variant="h6" color="white" gutterBottom>
-                  Excellent
-                </Typography>
-                <Typography variant="h3" color="white" fontWeight="bold">
-                  {summary.performance_breakdown.excellent}
-                </Typography>
-                <Typography variant="body2" color="white">
-                  Score ≥ 90
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)' }}>
-              <CardContent>
-                <Typography variant="h6" color="white" gutterBottom>
-                  Needs Attention
-                </Typography>
-                <Typography variant="h3" color="white" fontWeight="bold">
-                  {summary.performance_breakdown.poor}
-                </Typography>
-                <Typography variant="body2" color="white">
-                  Score {'<'} 60
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)' }}>
-              <CardContent>
-                <Typography variant="h6" color="white" gutterBottom>
-                  Top Performer
-                </Typography>
-                <Typography variant="h5" color="white" fontWeight="bold">
-                  {summary.top_performers[0]?.cluster}
-                </Typography>
-                <Typography variant="body2" color="white">
-                  Score: {summary.top_performers[0]?.score}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+        <Grid container spacing={2} sx={{ mb: 3 }}>
+          {[
+            { label: 'Average Score', value: `${summary.average_score}`, sub: `Across ${summary.total_clusters} cluster${summary.total_clusters !== 1 ? 's' : ''}` },
+            { label: 'Excellent', value: `${summary.performance_breakdown.excellent}`, sub: 'Score ≥ 90' },
+            { label: 'Good', value: `${summary.performance_breakdown.good}`, sub: 'Score 75–89' },
+            { label: 'Needs Attention', value: `${summary.performance_breakdown.poor}`, sub: 'Score < 60' },
+          ].map((k) => (
+            <Grid item xs={6} sm={3} key={k.label}>
+              <Card variant="outlined">
+                <CardContent>
+                  <Typography variant="caption" color="text.secondary">{k.label}</Typography>
+                  <Typography variant="h4" fontWeight={700}>{k.value}</Typography>
+                  <Typography variant="caption" color="text.secondary">{k.sub}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
         </Grid>
       )}
 
@@ -315,23 +261,22 @@ const Scoring: React.FC = () => {
         {/* Cluster Scores Table */}
         <Grid item xs={12} md={7}>
           <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Cluster Scores
-            </Typography>
+            <Typography variant="h6" fontWeight="bold" gutterBottom>Cluster Scores</Typography>
             <TableContainer>
-              <Table>
+              <Table size="small">
                 <TableHead>
-                  <TableRow>
+                  <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'grey.50' } }}>
                     <TableCell>Cluster</TableCell>
                     <TableCell>Score</TableCell>
                     <TableCell>Grade</TableCell>
                     <TableCell>Trend</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell>Details</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {clusterScores.map((cluster) => {
                     const trend = trends.find((t) => t.cluster_name === cluster.cluster_name);
+                    const color = scoreColor(cluster.overall_score);
                     return (
                       <TableRow
                         key={cluster.cluster_name}
@@ -341,62 +286,42 @@ const Scoring: React.FC = () => {
                         sx={{ cursor: 'pointer' }}
                       >
                         <TableCell>
-                          <Typography variant="body2" fontWeight="medium">
-                            {cluster.cluster_name}
-                          </Typography>
+                          <Typography variant="body2" fontWeight={600}>{cluster.cluster_name}</Typography>
                         </TableCell>
                         <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Box sx={{ width: 100 }}>
+                          <Box display="flex" alignItems="center" gap={1}>
+                            <Box sx={{ width: 90 }}>
                               <LinearProgress
                                 variant="determinate"
                                 value={cluster.overall_score}
-                                sx={{
-                                  height: 8,
-                                  borderRadius: 1,
-                                  backgroundColor: 'grey.200',
-                                  '& .MuiLinearProgress-bar': {
-                                    backgroundColor: getScoreColor(cluster.overall_score),
-                                  },
-                                }}
+                                sx={{ height: 8, borderRadius: 4, '& .MuiLinearProgress-bar': { bgcolor: color } }}
                               />
                             </Box>
-                            <Typography variant="body2" fontWeight="bold">
+                            <Typography variant="body2" fontWeight={700} sx={{ color }}>
                               {cluster.overall_score}
                             </Typography>
                           </Box>
                         </TableCell>
                         <TableCell>
-                          <Chip
-                            label={cluster.grade}
-                            size="small"
-                            color={getGradeColor(cluster.grade)}
-                          />
+                          <Chip label={cluster.grade} size="small" color={gradeChipColor(cluster.grade)} />
                         </TableCell>
                         <TableCell>
                           {trend && (
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <Box display="flex" alignItems="center" gap={0.5}>
                               {getTrendIcon(trend.trend)}
                               <Typography
                                 variant="caption"
-                                color={
-                                  trend.change > 0
-                                    ? 'success.main'
-                                    : trend.change < 0
-                                    ? 'error.main'
-                                    : 'text.secondary'
-                                }
+                                color={trend.change > 0 ? 'success.main' : trend.change < 0 ? 'error.main' : 'text.secondary'}
                               >
-                                {trend.change > 0 ? '+' : ''}
-                                {trend.change}
+                                {trend.change > 0 ? '+' : ''}{trend.change}
                               </Typography>
                             </Box>
                           )}
                         </TableCell>
                         <TableCell>
                           <Tooltip title="View Details">
-                            <IconButton size="small" color="primary">
-                              <InfoIcon />
+                            <IconButton size="small">
+                              <InfoIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
                         </TableCell>
@@ -412,67 +337,61 @@ const Scoring: React.FC = () => {
         {/* Top Performers & Needs Attention */}
         <Grid item xs={12} md={5}>
           <Paper sx={{ p: 3, mb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <StarIcon color="warning" />
-              <Typography variant="h6">Top Performers</Typography>
+            <Box display="flex" alignItems="center" gap={1} mb={2}>
+              <StarIcon sx={{ color: '#e65100', fontSize: 20 }} />
+              <Typography variant="h6" fontWeight="bold">Top Performers</Typography>
             </Box>
-            {summary?.top_performers.map((performer, idx) => (
-              <Box
-                key={performer.cluster}
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  p: 1.5,
-                  mb: 1,
-                  bgcolor: 'success.light',
-                  borderRadius: 1,
-                }}
-              >
-                <Box>
-                  <Typography variant="body2" fontWeight="medium">
-                    #{idx + 1} {performer.cluster}
+            <Stack spacing={1}>
+              {summary?.top_performers.map((performer, idx) => (
+                <Box
+                  key={performer.cluster}
+                  display="flex"
+                  justifyContent="space-between"
+                  alignItems="center"
+                  sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}
+                >
+                  <Box>
+                    <Typography variant="body2" fontWeight={600}>#{idx + 1} {performer.cluster}</Typography>
+                    <Chip label={performer.grade} size="small" color={gradeChipColor(performer.grade)} sx={{ mt: 0.5, height: 18, fontSize: 11 }} />
+                  </Box>
+                  <Typography variant="h6" fontWeight="bold" sx={{ color: scoreColor(performer.score) }}>
+                    {performer.score}
                   </Typography>
-                  <Chip label={performer.grade} size="small" color="success" sx={{ mt: 0.5 }} />
                 </Box>
-                <Typography variant="h6" fontWeight="bold" color="success.dark">
-                  {performer.score}
-                </Typography>
-              </Box>
-            ))}
+              ))}
+            </Stack>
           </Paper>
 
           <Paper sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <WarningIcon color="error" />
-              <Typography variant="h6">Needs Attention</Typography>
+            <Box display="flex" alignItems="center" gap={1} mb={2}>
+              <WarningIcon sx={{ color: '#c62828', fontSize: 20 }} />
+              <Typography variant="h6" fontWeight="bold">Needs Attention</Typography>
             </Box>
-            {summary?.needs_attention.map((cluster) => (
-              <Box
-                key={cluster.cluster}
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  p: 1.5,
-                  mb: 1,
-                  bgcolor: 'error.light',
-                  borderRadius: 1,
-                }}
-              >
-                <Box>
-                  <Typography variant="body2" fontWeight="medium">
-                    {cluster.cluster}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {cluster.recommendations} recommendations
-                  </Typography>
-                </Box>
-                <Typography variant="h6" fontWeight="bold" color="error.dark">
-                  {cluster.score}
-                </Typography>
-              </Box>
-            ))}
+            {summary?.needs_attention.length === 0 ? (
+              <Alert severity="success" sx={{ fontSize: 13 }}>All clusters are performing well</Alert>
+            ) : (
+              <Stack spacing={1}>
+                {summary?.needs_attention.map((cluster) => (
+                  <Box
+                    key={cluster.cluster}
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    sx={{ p: 1.5, bgcolor: 'grey.50', borderRadius: 1, border: '1px solid', borderColor: 'grey.200' }}
+                  >
+                    <Box>
+                      <Typography variant="body2" fontWeight={600}>{cluster.cluster}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {cluster.recommendations} recommendation{cluster.recommendations !== 1 ? 's' : ''}
+                      </Typography>
+                    </Box>
+                    <Typography variant="h6" fontWeight="bold" sx={{ color: scoreColor(cluster.score) }}>
+                      {cluster.score}
+                    </Typography>
+                  </Box>
+                ))}
+              </Stack>
+            )}
           </Paper>
         </Grid>
 
@@ -482,92 +401,75 @@ const Scoring: React.FC = () => {
             {/* Score Factors */}
             <Grid item xs={12} md={6}>
               <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Score Factors - {selectedClusterData.cluster_name}
+                <Typography variant="h6" fontWeight="bold" gutterBottom>
+                  Score Factors — {selectedClusterData.cluster_name}
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
-                {selectedClusterData.factors.map((factor) => (
-                  <Box key={factor.name} sx={{ mb: 3 }}>
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="body2" fontWeight="medium">
-                          {factor.name}
-                        </Typography>
-                        <Chip
-                          label={factor.status}
-                          size="small"
-                          color={getStatusColor(factor.status)}
-                          sx={{ height: 20, fontSize: '0.7rem' }}
+                <Stack spacing={2.5}>
+                  {selectedClusterData.factors.map((factor) => {
+                    const color = scoreColor(factor.score);
+                    return (
+                      <Box key={factor.name}>
+                        <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.5}>
+                          <Box display="flex" alignItems="center" gap={1}>
+                            <Typography variant="body2" fontWeight={600}>{factor.name}</Typography>
+                            <Chip
+                              label={factor.status}
+                              size="small"
+                              sx={{
+                                height: 18, fontSize: 10,
+                                bgcolor: factor.status === 'excellent' ? '#e8f5e9' : factor.status === 'good' ? '#e3f2fd' : factor.status === 'fair' ? '#fff3e0' : '#fdecea',
+                                color,
+                              }}
+                            />
+                          </Box>
+                          <Typography variant="body2" fontWeight={700} sx={{ color }}>{factor.score}/100</Typography>
+                        </Box>
+                        <LinearProgress
+                          variant="determinate"
+                          value={factor.score}
+                          sx={{ height: 8, borderRadius: 4, '& .MuiLinearProgress-bar': { bgcolor: color } }}
                         />
+                        <Typography variant="caption" color="text.secondary">
+                          Weight: {Math.round(factor.weight * 100)}% · {factor.description}
+                        </Typography>
                       </Box>
-                      <Typography variant="body2" fontWeight="bold">
-                        {factor.score}/100
-                      </Typography>
-                    </Box>
-                    <LinearProgress
-                      variant="determinate"
-                      value={factor.score}
-                      sx={{
-                        height: 8,
-                        borderRadius: 1,
-                        backgroundColor: 'grey.200',
-                        '& .MuiLinearProgress-bar': {
-                          backgroundColor: getScoreColor(factor.score),
-                        },
-                      }}
-                    />
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                      Weight: {factor.weight * 100}% • {factor.description}
-                    </Typography>
-                  </Box>
-                ))}
+                    );
+                  })}
+                </Stack>
               </Paper>
             </Grid>
 
             {/* Radar Chart */}
             <Grid item xs={12} md={6}>
               <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Performance Radar
-                </Typography>
+                <Typography variant="h6" fontWeight="bold" gutterBottom>Performance Radar</Typography>
                 <ResponsiveContainer width="100%" height={300}>
                   <RadarChart data={radarData}>
                     <PolarGrid />
-                    <PolarAngleAxis dataKey="factor" />
-                    <PolarRadiusAxis angle={90} domain={[0, 100]} />
-                    <Radar
-                      name="Score"
-                      dataKey="score"
-                      stroke="#8884d8"
-                      fill="#8884d8"
-                      fillOpacity={0.6}
-                    />
+                    <PolarAngleAxis dataKey="factor" tick={{ fontSize: 12 }} />
+                    <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
+                    <Radar name="Score" dataKey="score" stroke="#1565c0" fill="#1565c0" fillOpacity={0.2} />
                   </RadarChart>
                 </ResponsiveContainer>
               </Paper>
             </Grid>
 
             {/* Score Trend */}
-            {selectedTrendData && (
+            {selectedTrendData && selectedTrendData.history.length > 0 && (
               <Grid item xs={12}>
                 <Paper sx={{ p: 3 }}>
-                  <Typography variant="h6" gutterBottom>
-                    Score Trend - {selectedClusterData.cluster_name}
+                  <Typography variant="h6" fontWeight="bold" gutterBottom>
+                    Score Trend — {selectedClusterData.cluster_name}
                   </Typography>
-                  <ResponsiveContainer width="100%" height={250}>
+                  <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={selectedTrendData.history}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis domain={[0, 100]} />
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                      <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
                       <RechartsTooltip />
                       <Legend />
-                      <Line
-                        type="monotone"
-                        dataKey="score"
-                        stroke="#8884d8"
-                        strokeWidth={2}
-                        dot={{ r: 4 }}
-                      />
+                      <Line type="monotone" dataKey="score" stroke="#1565c0" strokeWidth={2} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </Paper>
@@ -577,21 +479,19 @@ const Scoring: React.FC = () => {
             {/* Recommendations */}
             <Grid item xs={12}>
               <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <CheckCircleIcon color="primary" />
-                  Recommendations
-                </Typography>
-                {selectedClusterData.recommendations.length > 0 ? (
-                  selectedClusterData.recommendations.map((rec, idx) => (
-                    <Alert key={idx} severity="info" sx={{ mb: 1 }}>
-                      {rec}
-                    </Alert>
-                  ))
-                ) : (
-                  <Alert severity="success">
-                    No recommendations - cluster is well optimized!
-                  </Alert>
-                )}
+                <Box display="flex" alignItems="center" gap={1} mb={2}>
+                  <CheckCircleIcon color="primary" fontSize="small" />
+                  <Typography variant="h6" fontWeight="bold">Recommendations</Typography>
+                </Box>
+                <Stack spacing={1}>
+                  {selectedClusterData.recommendations.length > 0 ? (
+                    selectedClusterData.recommendations.map((rec, idx) => (
+                      <Alert key={idx} severity="info" sx={{ fontSize: 13 }}>{rec}</Alert>
+                    ))
+                  ) : (
+                    <Alert severity="success">No recommendations — cluster is well optimized!</Alert>
+                  )}
+                </Stack>
               </Paper>
             </Grid>
           </>
@@ -602,5 +502,4 @@ const Scoring: React.FC = () => {
 };
 
 export default Scoring;
-
 // Made with Bob
