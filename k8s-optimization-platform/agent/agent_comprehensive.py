@@ -279,13 +279,57 @@ class ComprehensiveClusterAgent:
             
             statefulset_list = []
             for s in statefulsets.items:
+                # Build container specs
+                sts_containers = []
+                for c in (s.spec.template.spec.containers or []):
+                    req = {}
+                    lim = {}
+                    if c.resources:
+                        if c.resources.requests:
+                            req = {k: v for k, v in c.resources.requests.items()}
+                        if c.resources.limits:
+                            lim = {k: v for k, v in c.resources.limits.items()}
+                    ports = []
+                    if c.ports:
+                        for p in c.ports:
+                            ports.append({"containerPort": p.container_port, "protocol": p.protocol or "TCP"})
+                    sts_containers.append({
+                        "name": c.name,
+                        "image": c.image or "",
+                        "ports": ports,
+                        "resources": {"requests": req, "limits": lim},
+                    })
+
+                # Build volume claim templates
+                vct_list = []
+                for vct in (s.spec.volume_claim_templates or []):
+                    storage = ""
+                    storage_class = ""
+                    if vct.spec:
+                        if vct.spec.resources and vct.spec.resources.requests:
+                            storage = vct.spec.resources.requests.get("storage", "")
+                        storage_class = vct.spec.storage_class_name or ""
+                    vct_list.append({
+                        "name": vct.metadata.name if vct.metadata else "",
+                        "storage": storage,
+                        "storage_class": storage_class,
+                    })
+
+                created_ts = s.metadata.creation_timestamp
+                created_iso = created_ts.isoformat() if created_ts else None
+
                 statefulset_list.append({
                     "name": s.metadata.name,
                     "namespace": s.metadata.namespace,
-                    "replicas": s.spec.replicas,
-                    "ready_replicas": s.status.ready_replicas or 0,
+                    "replicas_desired": s.spec.replicas or 0,
+                    "replicas_current": s.status.current_replicas or s.status.ready_replicas or 0,
+                    "replicas_ready": s.status.ready_replicas or 0,
+                    "service_name": s.spec.service_name or "",
                     "labels": s.metadata.labels or {},
-                    "created": s.metadata.creation_timestamp.isoformat() if s.metadata.creation_timestamp else None
+                    "selector": (s.spec.selector.match_labels or {}) if s.spec.selector else {},
+                    "containers": sts_containers,
+                    "volume_claim_templates": vct_list,
+                    "created_at": created_iso,
                 })
             
             daemonset_list = []

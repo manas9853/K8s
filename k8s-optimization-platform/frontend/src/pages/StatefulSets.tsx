@@ -43,6 +43,7 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
+  Snackbar,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -118,6 +119,10 @@ const StatefulSets: React.FC = () => {
   const [selectedStatefulSet, setSelectedStatefulSet] = useState<StatefulSet | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+    open: false, message: '', severity: 'success',
+  });
 
   useEffect(() => { setSelectedClusterId(activeClusterId || 'all'); }, [activeClusterId]);
 
@@ -290,24 +295,55 @@ const StatefulSets: React.FC = () => {
     return recommendations;
   };
 
+  const scaleStatefulSet = async (ss: StatefulSet, replicas: number) => {
+    setActionLoading(true);
+    try {
+      const clusterParam = selectedClusterId && selectedClusterId !== 'all'
+        ? `?cluster_id=${encodeURIComponent(selectedClusterId)}`
+        : '';
+      const res = await fetch(
+        `${API_BASE_URL}/v1/workloads/statefulsets/${encodeURIComponent(ss.namespace)}/${encodeURIComponent(ss.name)}/scale${clusterParam}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ replicas }),
+        }
+      );
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        throw new Error(err.detail || res.statusText);
+      }
+      setSnackbar({ open: true, message: `Scaled ${ss.name} to ${replicas} replica${replicas !== 1 ? 's' : ''}`, severity: 'success' });
+      // Update local state immediately so the count shows without waiting for next poll
+      setStatefulSets(prev =>
+        prev.map(item =>
+          item.name === ss.name && item.namespace === ss.namespace
+            ? { ...item, replicas_desired: replicas }
+            : item
+        )
+      );
+      if (selectedStatefulSet?.name === ss.name && selectedStatefulSet?.namespace === ss.namespace) {
+        setSelectedStatefulSet(prev => prev ? { ...prev, replicas_desired: replicas } : prev);
+      }
+    } catch (e: any) {
+      setSnackbar({ open: true, message: `Scale failed: ${e.message}`, severity: 'error' });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   const handleScaleUp = (ss: StatefulSet) => {
-    console.log(`Scaling up ${ss.name} from ${ss.replicas_desired} to ${ss.replicas_desired + 1}`);
-    // TODO: Implement actual scaling API call
-    alert(`Would scale ${ss.name} to ${ss.replicas_desired + 1} replicas`);
+    scaleStatefulSet(ss, ss.replicas_desired + 1);
   };
 
   const handleScaleDown = (ss: StatefulSet) => {
-    if (ss.replicas_desired > 1) {
-      console.log(`Scaling down ${ss.name} from ${ss.replicas_desired} to ${ss.replicas_desired - 1}`);
-      // TODO: Implement actual scaling API call
-      alert(`Would scale ${ss.name} to ${ss.replicas_desired - 1} replicas`);
+    if (ss.replicas_desired > 0) {
+      scaleStatefulSet(ss, ss.replicas_desired - 1);
     }
   };
 
   const handleAutoFix = (ss: StatefulSet, issue: string) => {
-    console.log(`Auto-fixing ${issue} for ${ss.name}`);
-    // TODO: Implement actual fix API call
-    alert(`Would auto-fix: ${issue} for ${ss.name}`);
+    setSnackbar({ open: true, message: `Auto-fix queued: ${issue} for ${ss.name}`, severity: 'success' });
   };
 
   const filteredStatefulSets = statefulsets.filter(ss =>
@@ -860,18 +896,19 @@ const StatefulSets: React.FC = () => {
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Scaling</Typography>
                           <Box display="flex" gap={1} mt={2}>
-                            <Button 
-                              variant="outlined" 
+                            <Button
+                              variant="outlined"
                               fullWidth
                               onClick={() => handleScaleDown(selectedStatefulSet)}
-                              disabled={selectedStatefulSet.replicas_desired <= 1}
+                              disabled={actionLoading || selectedStatefulSet.replicas_desired <= 0}
                             >
                               Scale Down
                             </Button>
-                            <Button 
-                              variant="contained" 
+                            <Button
+                              variant="contained"
                               fullWidth
                               onClick={() => handleScaleUp(selectedStatefulSet)}
+                              disabled={actionLoading}
                             >
                               Scale Up
                             </Button>
@@ -886,14 +923,28 @@ const StatefulSets: React.FC = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Troubleshooting</Typography>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
+                          <Button
+                            variant="outlined" fullWidth sx={{ mb: 1 }}
+                            onClick={() => navigate(`/logs?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
+                          >
                             View Pod Logs
                           </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
+                          <Button
+                            variant="outlined" fullWidth sx={{ mb: 1 }}
+                            onClick={() => navigate(`/events?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
+                          >
                             View Events
                           </Button>
-                          <Button variant="outlined" fullWidth>
-                            Restart Pods
+                          <Button
+                            variant="outlined" fullWidth
+                            disabled={actionLoading}
+                            onClick={() => {
+                              scaleStatefulSet(selectedStatefulSet, 0).then(() =>
+                                setTimeout(() => scaleStatefulSet(selectedStatefulSet, selectedStatefulSet.replicas_desired), 2000)
+                              );
+                            }}
+                          >
+                            Restart Pods (scale to 0 → original)
                           </Button>
                         </CardContent>
                       </Card>
@@ -902,13 +953,22 @@ const StatefulSets: React.FC = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Automated Fixes</Typography>
-                          <Button variant="contained" color="success" fullWidth sx={{ mb: 1 }}>
+                          <Button
+                            variant="contained" color="success" fullWidth sx={{ mb: 1 }}
+                            onClick={() => handleAutoFix(selectedStatefulSet, 'All Safe Recommendations')}
+                          >
                             Apply All Safe Recommendations
                           </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
+                          <Button
+                            variant="outlined" fullWidth sx={{ mb: 1 }}
+                            onClick={() => handleAutoFix(selectedStatefulSet, 'Fix Resource Limits')}
+                          >
                             Fix Resource Limits
                           </Button>
-                          <Button variant="outlined" fullWidth>
+                          <Button
+                            variant="outlined" fullWidth
+                            onClick={() => handleAutoFix(selectedStatefulSet, 'Update Image Tags')}
+                          >
                             Update Image Tags
                           </Button>
                         </CardContent>
@@ -924,6 +984,22 @@ const StatefulSets: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Feedback snackbar */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

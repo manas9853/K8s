@@ -1,8 +1,9 @@
 """
 Workloads API - Kubernetes workload management endpoints
 Reads workload data from agent_metrics stored in Supabase/Postgres (db_manager).
+Scale/patch actions are executed directly via the Kubernetes API (k8s_client).
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Body
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -12,6 +13,16 @@ from database.db import db_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+# Lazy import so module still loads when k8s is not configured
+def _get_apps_api():
+    try:
+        from services.k8s_client import k8s_client
+        if k8s_client and k8s_client.is_connected():
+            return k8s_client.get_apps_api()
+    except Exception:
+        pass
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -190,6 +201,36 @@ def _normalize_deployment(d: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _normalize_statefulset(s: Dict[str, Any]) -> Dict[str, Any]:
+    """Normalise a StatefulSet dict from agent_metrics — handles both old and new field names."""
+    created_at = s.get("created_at") or s.get("created") or ""
+    # Support old field names emitted by the pre-fix agent
+    replicas_desired = s.get("replicas_desired")
+    if replicas_desired is None:
+        replicas_desired = s.get("replicas", 0)
+    replicas_current = s.get("replicas_current")
+    if replicas_current is None:
+        replicas_current = s.get("current_replicas", replicas_desired or 0)
+    replicas_ready = s.get("replicas_ready")
+    if replicas_ready is None:
+        replicas_ready = s.get("ready_replicas", 0)
+
+    return {
+        "name": s.get("name", ""),
+        "namespace": s.get("namespace", ""),
+        "replicas_desired": int(replicas_desired or 0),
+        "replicas_current": int(replicas_current or 0),
+        "replicas_ready": int(replicas_ready or 0),
+        "service_name": s.get("service_name", ""),
+        "age": s.get("age") or _format_age(created_at),
+        "labels": s.get("labels") or {},
+        "selector": s.get("selector") or {},
+        "containers": [_normalize_container(c) for c in (s.get("containers") or [])],
+        "volume_claim_templates": s.get("volume_claim_templates") or [],
+        "created_at": created_at,
+    }
+
+
 def _get_workloads_domain(cluster_id: Optional[str] = None) -> dict:
     """Return the workloads JSONB domain from the latest agent_metrics row."""
     if cluster_id:
@@ -252,26 +293,51 @@ async def list_statefulsets(
 
         result = []
         for s in items:
-            if namespace and s.get("namespace") != namespace:
+            normalized = _normalize_statefulset(s)
+            if namespace and normalized["namespace"] != namespace:
                 continue
-            result.append(StatefulSetInfo(
-                name=s.get("name", ""),
-                namespace=s.get("namespace", ""),
-                replicas_desired=s.get("replicas_desired", 0),
-                replicas_current=s.get("replicas_current", 0),
-                replicas_ready=s.get("replicas_ready", 0),
-                service_name=s.get("service_name", ""),
-                age=s.get("age", ""),
-                labels=s.get("labels", {}),
-                selector=s.get("selector", {}),
-                containers=s.get("containers", []),
-                volume_claim_templates=s.get("volume_claim_templates", []),
-                created_at=s.get("created_at", ""),
-            ))
+            result.append(StatefulSetInfo(**normalized))
         logger.info(f"Found {len(result)} statefulsets")
         return result
     except Exception as e:
         logger.error(f"Error fetching statefulsets: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ScaleRequest(BaseModel):
+    replicas: int
+
+
+@router.post("/statefulsets/{namespace}/{name}/scale")
+async def scale_statefulset(
+    namespace: str,
+    name: str,
+    body: ScaleRequest,
+    cluster_id: Optional[str] = Query(None),
+):
+    """Scale a StatefulSet to the requested replica count by patching directly via the K8s API."""
+    if body.replicas < 0:
+        raise HTTPException(status_code=400, detail="replicas must be >= 0")
+
+    apps_v1 = _get_apps_api()
+    if apps_v1 is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Kubernetes API not reachable from the backend. Ensure the backend pod has cluster credentials or a kubeconfig."
+        )
+
+    try:
+        from kubernetes import client as k8s_client_mod
+        patch = {"spec": {"replicas": body.replicas}}
+        apps_v1.patch_namespaced_stateful_set(
+            name=name,
+            namespace=namespace,
+            body=patch,
+        )
+        logger.info(f"Scaled StatefulSet {namespace}/{name} to {body.replicas} replicas")
+        return {"success": True, "name": name, "namespace": namespace, "replicas": body.replicas}
+    except Exception as e:
+        logger.error(f"Error scaling statefulset {namespace}/{name}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
