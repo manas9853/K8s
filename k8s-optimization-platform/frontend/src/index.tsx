@@ -534,6 +534,8 @@ root.render(
   <React.StrictMode>
     <ClerkProvider
       publishableKey={CLERK_PUBLISHABLE_KEY}
+      signInUrl="/login"
+      signUpUrl="/sign-up"
       afterSignOutUrl="/login"
     >
       <Provider store={store}>
