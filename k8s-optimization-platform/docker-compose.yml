@@ -41,8 +41,8 @@ services:
       MIN_RECOMMENDATION_CONFIDENCE: 0.7
       LOOKBACK_DAYS: 7
       # Auto-fix Settings
-      AUTO_FIX_ENABLED: "false"
-      AUTO_FIX_DRY_RUN: "true"
+      AUTO_FIX_ENABLED: "true"
+      AUTO_FIX_DRY_RUN: "false"
       AUTO_FIX_MAX_BATCH_SIZE: 10
       # Cleanup Settings
       CLEANUP_UNUSED_DAYS: 90

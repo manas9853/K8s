@@ -451,4 +451,196 @@ async def list_cronjobs(
         logger.error(f"Error fetching cronjobs: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ---------------------------------------------------------------------------
+# Write endpoints — mutate the real Kubernetes cluster
+# ---------------------------------------------------------------------------
+
+class PatchResourcesRequest(BaseModel):
+    """Patch resource requests/limits on a deployment container."""
+    container_name: Optional[str] = None   # if None, patches the first container
+    cpu_request:    Optional[str] = None   # e.g. "200m"
+    cpu_limit:      Optional[str] = None
+    memory_request: Optional[str] = None   # e.g. "256Mi"
+    memory_limit:   Optional[str] = None
+
+
+@router.post("/deployments/{namespace}/{name}/scale")
+async def scale_deployment(
+    namespace: str,
+    name: str,
+    body: ScaleRequest,
+    cluster_id: Optional[str] = Query(None),
+):
+    """Scale a Deployment to the requested replica count via the K8s API."""
+    if body.replicas < 0:
+        raise HTTPException(status_code=400, detail="replicas must be >= 0")
+
+    apps_v1 = _get_apps_api()
+    if apps_v1 is None:
+        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+
+    try:
+        apps_v1.patch_namespaced_deployment(
+            name=name,
+            namespace=namespace,
+            body={"spec": {"replicas": body.replicas}},
+        )
+        logger.info(f"Scaled Deployment {namespace}/{name} to {body.replicas} replicas")
+        return {"success": True, "name": name, "namespace": namespace, "replicas": body.replicas}
+    except Exception as e:
+        logger.error(f"Error scaling deployment {namespace}/{name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/deployments/{namespace}/{name}/patch-resources")
+async def patch_deployment_resources(
+    namespace: str,
+    name: str,
+    body: PatchResourcesRequest,
+    cluster_id: Optional[str] = Query(None),
+):
+    """
+    Update CPU/memory requests and limits on a Deployment's container.
+    Only the fields provided in the request body are changed.
+    """
+    apps_v1 = _get_apps_api()
+    if apps_v1 is None:
+        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+
+    # Build resource dict — only include fields that were supplied
+    resource_patch: Dict[str, Any] = {}
+    if body.cpu_request or body.memory_request:
+        resource_patch["requests"] = {
+            k: v for k, v in {
+                "cpu": body.cpu_request,
+                "memory": body.memory_request,
+            }.items() if v is not None
+        }
+    if body.cpu_limit or body.memory_limit:
+        resource_patch["limits"] = {
+            k: v for k, v in {
+                "cpu": body.cpu_limit,
+                "memory": body.memory_limit,
+            }.items() if v is not None
+        }
+
+    if not resource_patch:
+        raise HTTPException(status_code=400, detail="No resource fields to patch")
+
+    # Strategic merge patch — K8s merges by container name
+    container_entry: Dict[str, Any] = {"resources": resource_patch}
+    if body.container_name:
+        container_entry["name"] = body.container_name
+
+    patch_body = {
+        "spec": {
+            "template": {
+                "spec": {
+                    "containers": [container_entry]
+                }
+            }
+        }
+    }
+
+    try:
+        apps_v1.patch_namespaced_deployment(
+            name=name,
+            namespace=namespace,
+            body=patch_body,
+        )
+        logger.info(f"Patched resources on Deployment {namespace}/{name}: {resource_patch}")
+        return {"success": True, "name": name, "namespace": namespace, "patched": resource_patch}
+    except Exception as e:
+        logger.error(f"Error patching deployment {namespace}/{name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/deployments/{namespace}/{name}/restart")
+async def restart_deployment(
+    namespace: str,
+    name: str,
+    cluster_id: Optional[str] = Query(None),
+):
+    """
+    Trigger a rolling restart of a Deployment by patching the pod-template
+    annotation `kubectl.kubernetes.io/restartedAt`.
+    """
+    apps_v1 = _get_apps_api()
+    if apps_v1 is None:
+        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+
+    import datetime as _dt
+    restart_time = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    patch_body = {
+        "spec": {
+            "template": {
+                "metadata": {
+                    "annotations": {
+                        "kubectl.kubernetes.io/restartedAt": restart_time
+                    }
+                }
+            }
+        }
+    }
+
+    try:
+        apps_v1.patch_namespaced_deployment(
+            name=name,
+            namespace=namespace,
+            body=patch_body,
+        )
+        logger.info(f"Triggered rolling restart of Deployment {namespace}/{name}")
+        return {"success": True, "name": name, "namespace": namespace, "restartedAt": restart_time}
+    except Exception as e:
+        logger.error(f"Error restarting deployment {namespace}/{name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/deployments/{namespace}/{name}")
+async def delete_deployment(
+    namespace: str,
+    name: str,
+    cluster_id: Optional[str] = Query(None),
+):
+    """Delete a Deployment from the cluster."""
+    apps_v1 = _get_apps_api()
+    if apps_v1 is None:
+        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+
+    try:
+        apps_v1.delete_namespaced_deployment(name=name, namespace=namespace)
+        logger.info(f"Deleted Deployment {namespace}/{name}")
+        return {"success": True, "name": name, "namespace": namespace}
+    except Exception as e:
+        logger.error(f"Error deleting deployment {namespace}/{name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/pods/{namespace}/{name}")
+async def delete_pod(
+    namespace: str,
+    name: str,
+    cluster_id: Optional[str] = Query(None),
+):
+    """
+    Delete (evict) a Pod from the cluster.
+    The owning controller (Deployment/RS) will reschedule it immediately.
+    """
+    apps_v1 = _get_apps_api()
+    if apps_v1 is None:
+        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+
+    try:
+        from services.k8s_client import k8s_client as _kc
+        if _kc is None:
+            raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+        core_v1 = _kc.get_core_api()
+        core_v1.delete_namespaced_pod(name=name, namespace=namespace)
+        logger.info(f"Deleted Pod {namespace}/{name}")
+        return {"success": True, "name": name, "namespace": namespace}
+    except Exception as e:
+        logger.error(f"Error deleting pod {namespace}/{name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Made with Bob

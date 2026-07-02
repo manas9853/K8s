@@ -548,4 +548,93 @@ async def get_idle_namespaces(cluster_id: Optional[str] = Query(None)):
     return _cleanup_by_type("Namespace", cluster_id)
 
 
-# Made with Bob - Now with REAL Kubernetes cleanup detection!
+# ---------------------------------------------------------------------------
+# Delete endpoint — removes a resource from the real cluster
+# ---------------------------------------------------------------------------
+
+class DeleteResourceRequest(BaseModel):
+    resource_type: str    # Pod | ReplicaSet | Job | Service | ConfigMap | Secret | PersistentVolumeClaim
+    resource_name: str
+    namespace: str
+    dry_run: bool = False
+
+
+class DeleteResourceResult(BaseModel):
+    success: bool
+    resource_type: str
+    resource_name: str
+    namespace: str
+    message: str
+
+
+@router.delete("/delete", response_model=DeleteResourceResult)
+async def delete_resource(req: DeleteResourceRequest):
+    """
+    Delete a single cleanup candidate from the real Kubernetes cluster.
+    Supports: Pod, ReplicaSet, Job, Service, ConfigMap, Secret, PersistentVolumeClaim.
+    """
+    if not K8S_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+
+    dry_run_param = ["All"] if req.dry_run else []
+    ns  = req.namespace
+    nm  = req.resource_name
+    rtype = req.resource_type.lower().replace(" ", "")
+
+    try:
+        core_v1  = k8s_client.get_core_api()
+        apps_v1  = k8s_client.get_apps_api()
+        batch_v1 = k8s_client.get_batch_api()
+
+        if rtype == "pod":
+            core_v1.delete_namespaced_pod(
+                name=nm, namespace=ns, dry_run=dry_run_param or None
+            )
+        elif rtype == "replicaset":
+            apps_v1.delete_namespaced_replica_set(
+                name=nm, namespace=ns, dry_run=dry_run_param or None
+            )
+        elif rtype == "job":
+            batch_v1.delete_namespaced_job(
+                name=nm, namespace=ns, dry_run=dry_run_param or None
+            )
+        elif rtype == "service":
+            core_v1.delete_namespaced_service(
+                name=nm, namespace=ns, dry_run=dry_run_param or None
+            )
+        elif rtype == "configmap":
+            core_v1.delete_namespaced_config_map(
+                name=nm, namespace=ns, dry_run=dry_run_param or None
+            )
+        elif rtype == "secret":
+            core_v1.delete_namespaced_secret(
+                name=nm, namespace=ns, dry_run=dry_run_param or None
+            )
+        elif rtype in ("persistentvolumeclaim", "pvc"):
+            core_v1.delete_namespaced_persistent_volume_claim(
+                name=nm, namespace=ns, dry_run=dry_run_param or None
+            )
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported resource type: {req.resource_type}"
+            )
+
+        action = "DRY-RUN deleted" if req.dry_run else "Deleted"
+        logger.info(f"{action} {req.resource_type} {ns}/{nm}")
+        return DeleteResourceResult(
+            success=True,
+            resource_type=req.resource_type,
+            resource_name=nm,
+            namespace=ns,
+            message=f"{action} {req.resource_type} '{nm}' from namespace '{ns}'",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Error deleting {req.resource_type} {ns}/{nm}: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# Made with Bob - Now with REAL Kubernetes cleanup & delete!
