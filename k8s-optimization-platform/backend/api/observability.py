@@ -1,7 +1,7 @@
 """
 Observability API - Events, Logs, Metrics, and Service Health
 Reads event/observability data from agent_metrics (db_manager).
-Log-fetching endpoints still require live K8s and return 503 when unavailable.
+Log-fetching is done via the agent command queue (get_pod_logs).
 """
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Any, Optional
@@ -11,6 +11,7 @@ import logging
 from utils.dummy_data import get_dummy_data
 
 from database.db import db_manager
+from database.db import db_manager as _db
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -38,13 +39,16 @@ def _get_observability_domain(cluster_id: Optional[str] = None) -> dict:
 
 
 class EventModel(BaseModel):
-    """Kubernetes Event model"""
+    """Kubernetes Event model — flat fields matching the frontend KubernetesEvent interface"""
     name: str
     namespace: str
     type: str
     reason: str
     message: str
-    involved_object: Dict[str, str]
+    involved_object_kind: str
+    involved_object_name: str
+    source_component: str
+    source_host: str
     count: int
     first_timestamp: str
     last_timestamp: str
@@ -94,10 +98,22 @@ async def get_events(
     """Get Kubernetes events from agent_metrics observability domain."""
     try:
         obs = _get_observability_domain(cluster_id)
-        # Agent sends recent_events list and warning_events list
-        all_events = (
+        # Agent stores events at the top-level of the observability domain:
+        #   obs["all_events"], obs["warning_events"], obs["recent_events"]
+        # Use all_events when present; fall back to merging warning + recent.
+        all_events = obs.get("all_events") or (
             obs.get("recent_events", []) + obs.get("warning_events", [])
         )
+
+        # De-duplicate by name (all_events already contains warnings+recent)
+        seen: set = set()
+        deduped = []
+        for ev in all_events:
+            key = ev.get("name", "") + ev.get("namespace", "")
+            if key not in seen:
+                seen.add(key)
+                deduped.append(ev)
+        all_events = deduped
 
         if not all_events:
             # Graceful fallback to dummy data
@@ -105,15 +121,18 @@ async def get_events(
             result = []
             for e in raw_events:
                 result.append(EventModel(
-                    name=f"event-{e['reason'].lower()}-{e['cluster_id'][:4]}",
-                    namespace=e["namespace"],
-                    type=e["type"],
-                    reason=e["reason"],
-                    message=e["message"],
-                    involved_object={"kind": "Pod", "name": e["object"]},
-                    count=e["count"],
-                    first_timestamp=e["first_time"],
-                    last_timestamp=e["last_time"],
+                    name=f"event-{e['reason'].lower()}-{e.get('cluster_id','x')[:4]}",
+                    namespace=e.get("namespace", "default"),
+                    type=e.get("type", "Normal"),
+                    reason=e.get("reason", ""),
+                    message=e.get("message", ""),
+                    involved_object_kind="Pod",
+                    involved_object_name=e.get("object", ""),
+                    source_component="",
+                    source_host="",
+                    count=e.get("count", 1),
+                    first_timestamp=e.get("first_time", ""),
+                    last_timestamp=e.get("last_time", ""),
                     age="1h",
                 ))
             return result
@@ -132,7 +151,10 @@ async def get_events(
                 type=evt_type,
                 reason=event.get("reason", ""),
                 message=event.get("message", ""),
-                involved_object=event.get("involved_object", {"kind": "", "name": ""}),
+                involved_object_kind=event.get("involved_object_kind", ""),
+                involved_object_name=event.get("involved_object_name", ""),
+                source_component=event.get("source_component", ""),
+                source_host=event.get("source_host", ""),
                 count=event.get("count", 1),
                 first_timestamp=event.get("first_timestamp", ""),
                 last_timestamp=event.get("last_timestamp", ""),
@@ -321,11 +343,45 @@ async def get_pod_logs(
     pod: str = Query(...),
     container: Optional[str] = Query(None),
     tail_lines: int = Query(100, ge=1, le=10000),
+    cluster_id: Optional[str] = Query(None),
 ):
-    """Fetch pod logs — requires live cluster access."""
-    raise HTTPException(
-        status_code=503,
-        detail="Pod log fetching requires a live cluster connection. Agent-only mode is active.",
-    )
+    """Fetch pod logs via the agent command queue (get_pod_logs command)."""
+    import asyncio, time
+
+    # Resolve cluster name
+    clusters = _db.get_all_clusters()
+    if not clusters:
+        raise HTTPException(status_code=503, detail="No cluster registered")
+    cluster_name = cluster_id or clusters[0]["cluster_name"]
+
+    # Enqueue the command
+    params = {"namespace": namespace, "name": pod, "pod": pod,
+              "tail_lines": tail_lines}
+    if container:
+        params["container"] = container
+
+    cmd_id = _db.enqueue_command(cluster_name, "get_pod_logs", params)
+
+    # Poll for result (max 90 s — agent polls every ~35s so we need at least that)
+    deadline = time.time() + 90
+    while time.time() < deadline:
+        await asyncio.sleep(1.5)
+        row = _db.get_command(cmd_id)
+        if not row:
+            continue
+        if row["status"] == "done":
+            result = row.get("result") or {}
+            if isinstance(result, str):
+                import json as _json
+                result = _json.loads(result)
+            return {"logs": result.get("logs", ""), "pod": pod, "namespace": namespace}
+        if row["status"] == "failed":
+            result = row.get("result") or {}
+            if isinstance(result, str):
+                import json as _json
+                result = _json.loads(result)
+            raise HTTPException(status_code=500, detail=result.get("error", "Command failed"))
+
+    raise HTTPException(status_code=504, detail="Timed out waiting for agent to fetch logs")
 
 # Made with Bob

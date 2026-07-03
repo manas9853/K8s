@@ -67,7 +67,10 @@ class IngressModel(BaseModel):
     hosts: List[str]
     paths: List[Dict[str, Any]]
     tls_enabled: bool
+    tls_hosts: List[str] = []
     ingress_class: Optional[str]
+    address: str = ""
+    ports: List[int] = []
     age: str
     labels: Dict[str, str]
     created_at: str
@@ -213,16 +216,63 @@ async def get_ingress(
         for ing in items:
             if namespace and ing.get("namespace") != namespace:
                 continue
+            created = ing.get("created") or ing.get("created_at", "")
+
+            # Agent may store hosts directly or derive from rules
+            hosts = ing.get("hosts") or []
+            if not hosts:
+                hosts = list({
+                    r.get("host", "") for r in ing.get("rules", [])
+                    if r.get("host")
+                })
+
+            # Paths: agent stores as list of {host,path,path_type,service,port}
+            # or old format list of {host,path,service}
+            paths = ing.get("paths") or []
+            if not paths:
+                paths = [
+                    {
+                        "host":      r.get("host", "*"),
+                        "path":      r.get("path", "/"),
+                        "path_type": r.get("path_type", "Prefix"),
+                        "service":   r.get("service", ""),
+                        "port":      r.get("port"),
+                    }
+                    for r in ing.get("rules", [])
+                ]
+
+            # TLS: agent may store bool directly or as list
+            tls_enabled = ing.get("tls_enabled", False)
+            if not tls_enabled:
+                tls_enabled = bool(ing.get("tls"))
+
+            # Ports: derive from TLS + having paths if not stored
+            ports = ing.get("ports") or []
+            if not ports:
+                ports = [80]
+                if tls_enabled:
+                    ports.append(443)
+
+            # Ingress class: agent stores as "ingress_class" or "class"
+            ingress_class = (
+                ing.get("ingress_class")
+                or ing.get("class")
+                or None
+            )
+
             result.append(IngressModel(
                 name=ing.get("name", ""),
                 namespace=ing.get("namespace", ""),
-                hosts=ing.get("hosts", []),
-                paths=ing.get("paths", []),
-                tls_enabled=ing.get("tls_enabled", False),
-                ingress_class=ing.get("ingress_class"),
-                age=ing.get("age", ""),
+                hosts=hosts,
+                paths=paths,
+                tls_enabled=tls_enabled,
+                tls_hosts=ing.get("tls_hosts", []),
+                ingress_class=ingress_class or None,
+                address=ing.get("address", ""),
+                ports=ports,
+                age=_format_age(created),
                 labels=ing.get("labels", {}),
-                created_at=ing.get("created_at", ""),
+                created_at=created,
             ))
         return result
     except Exception as e:
@@ -242,16 +292,20 @@ async def get_network_policies(namespace: Optional[str] = None,
         for pol in items:
             if namespace and pol.get("namespace") != namespace:
                 continue
+            # Agent stores created_at as "created", rule counts as "ingress_rules"/"egress_rules"
+            created = pol.get("created") or pol.get("created_at", "")
+            ingress_count = pol.get("ingress_rules_count") or pol.get("ingress_rules", 0)
+            egress_count  = pol.get("egress_rules_count")  or pol.get("egress_rules",  0)
             result.append(NetworkPolicyModel(
                 name=pol.get("name", ""),
                 namespace=pol.get("namespace", ""),
                 pod_selector=pol.get("pod_selector", {}),
                 policy_types=pol.get("policy_types", []),
-                ingress_rules_count=pol.get("ingress_rules_count", 0),
-                egress_rules_count=pol.get("egress_rules_count", 0),
-                age=pol.get("age", ""),
+                ingress_rules_count=ingress_count,
+                egress_rules_count=egress_count,
+                age=pol.get("age") or _format_age(created),
                 labels=pol.get("labels", {}),
-                created_at=pol.get("created_at", ""),
+                created_at=created,
             ))
         return result
     except Exception as e:

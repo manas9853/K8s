@@ -1106,28 +1106,78 @@ class ClusterAgent:
 
         ing_list = []
         for ing in ings:
-            rules = []
+            # Collect all unique hosts across rules
+            hosts = list({
+                rule.host for rule in (ing.spec.rules or [])
+                if rule.host
+            })
+
+            # Collect all path entries with full detail
+            paths = []
             for rule in (ing.spec.rules or []):
                 if rule.http:
                     for path in (rule.http.paths or []):
-                        rules.append({
-                            "host":    rule.host,
-                            "path":    path.path,
-                            "service": (
-                                path.backend.service.name
-                                if path.backend and path.backend.service else None
-                            ),
+                        svc_name = (
+                            path.backend.service.name
+                            if path.backend and path.backend.service else None
+                        )
+                        svc_port = None
+                        if path.backend and path.backend.service and path.backend.service.port:
+                            svc_port = (
+                                path.backend.service.port.number
+                                or path.backend.service.port.name
+                            )
+                        paths.append({
+                            "host":      rule.host or "*",
+                            "path":      path.path or "/",
+                            "path_type": path.path_type or "Prefix",
+                            "service":   svc_name or "",
+                            "port":      svc_port,
                         })
+
+            # TLS
+            tls_hosts = []
+            for t in (ing.spec.tls or []):
+                tls_hosts.extend(t.hosts or [])
+            tls_enabled = len(ing.spec.tls or []) > 0
+
+            # Address — from status.load_balancer.ingress
+            address = ""
+            if ing.status and ing.status.load_balancer and ing.status.load_balancer.ingress:
+                parts = [
+                    i.ip or i.hostname
+                    for i in ing.status.load_balancer.ingress
+                    if i.ip or i.hostname
+                ]
+                address = parts[0] if parts else ""
+
+            # Port list (deduplicated from rules / TLS presence)
+            port_set = set()
+            if paths:
+                port_set.add(80)
+            if tls_enabled:
+                port_set.add(443)
+            if not port_set and paths:
+                port_set.add(80)
+
+            ingress_class = (
+                ing.spec.ingress_class_name
+                or (ing.metadata.annotations or {}).get("kubernetes.io/ingress.class", "")
+                or ""
+            )
+
             ing_list.append({
-                "name":      ing.metadata.name,
-                "namespace": ing.metadata.namespace,
-                "rules":     rules,
-                "tls":       [{"hosts": t.hosts} for t in (ing.spec.tls or [])],
-                "class":     (ing.spec.ingress_class_name or
-                              (ing.metadata.annotations or {}).get(
-                                  "kubernetes.io/ingress.class", "")),
-                "labels":    ing.metadata.labels or {},
-                "created":   _ts(ing.metadata.creation_timestamp),
+                "name":          ing.metadata.name,
+                "namespace":     ing.metadata.namespace,
+                "hosts":         hosts,
+                "paths":         paths,
+                "tls_enabled":   tls_enabled,
+                "tls_hosts":     tls_hosts,
+                "ingress_class": ingress_class,
+                "address":       address,
+                "ports":         sorted(port_set),
+                "labels":        ing.metadata.labels or {},
+                "created":       _ts(ing.metadata.creation_timestamp),
             })
 
         netpol_list = [
@@ -1389,22 +1439,44 @@ class ClusterAgent:
         events = self.core.list_event_for_all_namespaces().items
         now    = datetime.now(timezone.utc)
 
+        all_events: List[Dict] = []
         warning_events: List[Dict] = []
         recent_events:  List[Dict] = []
 
         for ev in events:
+            src = ev.source or type("_", (), {"component": None, "host": None})()
+            last_ts = _ts(ev.last_timestamp)
+            first_ts = _ts(ev.first_timestamp)
+
+            # Compute human-readable age from last_timestamp
+            age_str = ""
+            if ev.last_timestamp:
+                age_s = (now - ev.last_timestamp).total_seconds()
+                if age_s < 60:
+                    age_str = f"{int(age_s)}s"
+                elif age_s < 3600:
+                    age_str = f"{int(age_s // 60)}m"
+                elif age_s < 86400:
+                    age_str = f"{int(age_s // 3600)}h"
+                else:
+                    age_str = f"{int(age_s // 86400)}d"
+
             rec = {
-                "name":      ev.metadata.name,
-                "namespace": ev.metadata.namespace,
-                "type":      ev.type or "Normal",
-                "reason":    ev.reason or "",
-                "message":   (ev.message or "")[:500],
-                "object_kind": ev.involved_object.kind or "",
-                "object_name": ev.involved_object.name or "",
-                "count":     ev.count or 1,
-                "first_time": _ts(ev.first_timestamp),
-                "last_time":  _ts(ev.last_timestamp),
+                "name":             ev.metadata.name,
+                "namespace":        ev.metadata.namespace,
+                "type":             ev.type or "Normal",
+                "reason":           ev.reason or "",
+                "message":          (ev.message or "")[:500],
+                "involved_object_kind": ev.involved_object.kind or "",
+                "involved_object_name": ev.involved_object.name or "",
+                "source_component": (src.component or "") if src else "",
+                "source_host":      (src.host or "") if src else "",
+                "count":            ev.count or 1,
+                "first_timestamp":  first_ts or "",
+                "last_timestamp":   last_ts or "",
+                "age":              age_str,
             }
+            all_events.append(rec)
             if ev.type == "Warning":
                 warning_events.append(rec)
             if ev.last_timestamp:
@@ -1413,13 +1485,12 @@ class ClusterAgent:
                     recent_events.append(rec)
 
         return {
-            "events": {
-                "total":          len(events),
-                "warnings":       len(warning_events),
-                "recent_count":   len(recent_events),
-                "warning_events": warning_events[:100],
-                "recent_events":  recent_events[:100],
-            }
+            "all_events":     all_events[:200],
+            "warning_events": warning_events[:100],
+            "recent_events":  recent_events[:100],
+            "total":          len(all_events),
+            "warnings":       len(warning_events),
+            "recent_count":   len(recent_events),
         }
 
     # ── domain: FinOps ───────────────────────────────────────────────────────
@@ -1857,6 +1928,23 @@ class ClusterAgent:
             self.batch.create_namespaced_job(namespace=ns, body=job)
             return {"job_name": job_name}
 
+        if command == "get_pod_logs":
+            pod_name  = params.get("pod", name)
+            container = params.get("container") or None
+            tail      = int(params.get("tail_lines", 100))
+            logs = self.core.read_namespaced_pod_log(
+                name=pod_name,
+                namespace=ns,
+                container=container,
+                tail_lines=tail,
+                timestamps=False,
+            )
+            return {"logs": logs or ""}
+
+        if command == "delete_network_policy":
+            self.net.delete_namespaced_network_policy(name=name, namespace=ns)
+            return {}
+
         raise ValueError(f"Unknown command: {command}")
 
     def _ack_command(self, cmd_id: int, success: bool,
@@ -1907,8 +1995,16 @@ class ClusterAgent:
                     pass
                 hb_cycle = 0
 
+            # Sleep in short slices so commands are picked up quickly
             try:
-                time.sleep(self.collection_interval)
+                elapsed = 0
+                while elapsed < self.collection_interval:
+                    time.sleep(3)
+                    elapsed += 3
+                    try:
+                        self._poll_and_execute_commands()
+                    except Exception:
+                        pass
             except KeyboardInterrupt:
                 logger.info("Agent stopped by user.")
                 break

@@ -151,6 +151,13 @@ const DaemonSets: React.FC = () => {
     selectCluster(val);
   };
 
+  const fmtTime = (ts: string | null | undefined): string => {
+    if (!ts) return '-';
+    try {
+      return new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    } catch { return ts; }
+  };
+
   const getStatusColor = (ds: DaemonSet): 'success' | 'warning' | 'error' => {
     if (ds.number_ready === ds.desired_number_scheduled && ds.number_misscheduled === 0) {
       return 'success';
@@ -585,17 +592,29 @@ const DaemonSets: React.FC = () => {
                     </TableCell>
                     <TableCell>{ds.age}</TableCell>
                     <TableCell>
-                      <Tooltip title="View Details">
-                        <IconButton 
-                          size="small" 
-                          onClick={() => {
-                            setSelectedDaemonSet(ds);
-                            setDetailsOpen(true);
-                          }}
-                        >
-                          <InfoIcon />
-                        </IconButton>
-                      </Tooltip>
+                      <Box display="flex" gap={1}>
+                        <Tooltip title="View Details">
+                          <IconButton
+                            size="small"
+                            onClick={() => {
+                              setSelectedDaemonSet(ds);
+                              setDetailsOpen(true);
+                            }}
+                          >
+                            <InfoIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Restart Pods">
+                          <IconButton
+                            size="small"
+                            color="primary"
+                            onClick={() => handleRestartPods(ds)}
+                            disabled={actionLoading}
+                          >
+                            <RefreshIcon />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 );
@@ -659,18 +678,35 @@ const DaemonSets: React.FC = () => {
                       </Card>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>DaemonSet Info</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Age: {selectedDaemonSet.age}
-                          </Typography>
-                          <Box mt={1}>
-                            <Typography variant="caption">Coverage: {getNodeCoverage(selectedDaemonSet)}%</Typography>
-                          </Box>
-                        </CardContent>
-                      </Card>
-                    </Grid>
+                       <Card variant="outlined">
+                         <CardContent>
+                           <Typography variant="subtitle2" gutterBottom>DaemonSet Info</Typography>
+                           <Typography>Age: {selectedDaemonSet.age}</Typography>
+                           <Typography variant="caption" color="text.secondary" display="block">
+                             Created: {fmtTime(selectedDaemonSet.created_at)}
+                           </Typography>
+                           <Typography>Node coverage: {getNodeCoverage(selectedDaemonSet)}%</Typography>
+                           {Object.keys(selectedDaemonSet.selector).length > 0 && (
+                             <>
+                               <Divider sx={{ my: 1 }} />
+                               <Typography variant="caption" color="text.secondary" display="block">Selector:</Typography>
+                               {Object.entries(selectedDaemonSet.selector).map(([k, v]) => (
+                                 <Chip key={k} label={`${k}=${v}`} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
+                               ))}
+                             </>
+                           )}
+                           {Object.keys(selectedDaemonSet.labels).length > 0 && (
+                             <>
+                               <Divider sx={{ my: 1 }} />
+                               <Typography variant="caption" color="text.secondary" display="block">Labels:</Typography>
+                               {Object.entries(selectedDaemonSet.labels).slice(0, 5).map(([k, v]) => (
+                                 <Chip key={k} label={`${k}=${v}`} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
+                               ))}
+                             </>
+                           )}
+                         </CardContent>
+                       </Card>
+                     </Grid>
                     <Grid item xs={12}>
                       <Card variant="outlined">
                         <CardContent>

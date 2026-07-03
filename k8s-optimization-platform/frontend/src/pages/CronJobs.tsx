@@ -93,6 +93,7 @@ interface CronJob {
   age: string;
   labels: { [key: string]: string };
   job_template: JobTemplate;
+  concurrency?: string;
   created_at: string;
 }
 
@@ -191,62 +192,84 @@ const CronJobs: React.FC = () => {
   };
 
   const parseSchedule = (schedule: string): string => {
-    // Parse cron schedule to human-readable format
-    if (schedule === '@yearly' || schedule === '@annually') return 'Once a year';
-    if (schedule === '@monthly') return 'Once a month';
-    if (schedule === '@weekly') return 'Once a week';
-    if (schedule === '@daily' || schedule === '@midnight') return 'Once a day';
-    if (schedule === '@hourly') return 'Once an hour';
-    
-    // Parse standard cron format: minute hour day month weekday
+    if (schedule === '@yearly' || schedule === '@annually') return 'Yearly';
+    if (schedule === '@monthly') return 'Monthly';
+    if (schedule === '@weekly') return 'Weekly';
+    if (schedule === '@daily' || schedule === '@midnight') return 'Daily';
+    if (schedule === '@hourly') return 'Hourly';
+
     const parts = schedule.split(' ');
-    if (parts.length === 5) {
-      const [minute, hour, day, month, weekday] = parts;
-      
-      if (minute === '*' && hour === '*') return 'Every minute';
-      if (hour === '*') return `Every hour at minute ${minute}`;
-      if (day === '*' && month === '*' && weekday === '*') {
-        return `Daily at ${hour}:${minute.padStart(2, '0')}`;
-      }
+    if (parts.length !== 5) return schedule;
+    const [minute, hour, day, month, weekday] = parts;
+
+    // Every N minutes: */N * * * *
+    if (minute.startsWith('*/') && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+      const n = parseInt(minute.slice(2), 10);
+      return n === 1 ? 'Every minute' : `Every ${n} minutes`;
     }
-    
+    // Every N hours: 0 */N * * *
+    if (hour.startsWith('*/') && day === '*' && month === '*' && weekday === '*') {
+      const n = parseInt(hour.slice(2), 10);
+      return n === 1 ? 'Hourly' : `Every ${n} hours`;
+    }
+    // Every minute: * * * * *
+    if (minute === '*' && hour === '*' && day === '*' && month === '*' && weekday === '*') {
+      return 'Every minute';
+    }
+    // Daily at specific time: M H * * *
+    if (day === '*' && month === '*' && weekday === '*' && !hour.includes('*') && !hour.includes('/')) {
+      return `Daily at ${hour.padStart(2,'0')}:${minute.padStart(2,'0')}`;
+    }
     return schedule;
   };
 
   const getNextRunTime = (cronJob: CronJob): string => {
     if (cronJob.suspend) return 'Suspended';
     if (!cronJob.last_schedule_time) return 'Unknown';
-    
+
     const lastRun = new Date(cronJob.last_schedule_time);
-    const schedule = cronJob.schedule;
-    
-    // Simple next run calculation
-    if (schedule === '@daily' || schedule === '@midnight') {
-      const nextRun = new Date(lastRun);
-      nextRun.setDate(nextRun.getDate() + 1);
-      return nextRun.toLocaleString();
+    const sched = cronJob.schedule;
+
+    // Compute interval from schedule
+    let intervalMs = 0;
+    if (sched === '@hourly') intervalMs = 3600_000;
+    else if (sched === '@daily' || sched === '@midnight') intervalMs = 86400_000;
+    else if (sched === '@weekly') intervalMs = 7 * 86400_000;
+    else {
+      const parts = sched.split(' ');
+      if (parts.length === 5) {
+        const [minute, hour] = parts;
+        if (minute.startsWith('*/')) intervalMs = parseInt(minute.slice(2), 10) * 60_000;
+        else if (hour.startsWith('*/')) intervalMs = parseInt(hour.slice(2), 10) * 3600_000;
+        else intervalMs = 86400_000; // daily fallback
+      }
     }
-    if (schedule === '@hourly') {
-      const nextRun = new Date(lastRun);
-      nextRun.setHours(nextRun.getHours() + 1);
-      return nextRun.toLocaleString();
-    }
-    
-    return 'Check schedule';
+    if (!intervalMs) return 'Check schedule';
+    const nextRun = new Date(lastRun.getTime() + intervalMs);
+    return nextRun.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+  };
+
+  const fmtTime = (ts: string | null | undefined): string => {
+    if (!ts) return '-';
+    try {
+      return new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    } catch { return ts; }
   };
 
   const getTimeSinceLastRun = (cronJob: CronJob): string => {
     if (!cronJob.last_schedule_time) return 'Never';
-    
+
     const lastRun = new Date(cronJob.last_schedule_time);
     const now = new Date();
     const diffMs = now.getTime() - lastRun.getTime();
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffHours / 24);
-    
+
     if (diffDays > 0) return `${diffDays}d ago`;
     if (diffHours > 0) return `${diffHours}h ago`;
-    return 'Recently';
+    const diffMins = Math.floor(diffMs / (1000 * 60));
+    if (diffMins > 0) return `${diffMins}m ago`;
+    return 'Just now';
   };
 
   // Generate investigations
@@ -747,15 +770,20 @@ const CronJobs: React.FC = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Schedule Information</Typography>
-                          <Typography>Schedule: {parseSchedule(selectedCronJob.schedule)}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Cron: {selectedCronJob.schedule}
-                          </Typography>
-                          <Divider sx={{ my: 1 }} />
-                          <Typography>Status: {selectedCronJob.suspend ? 'Suspended' : 'Active'}</Typography>
-                          <Typography>Active Jobs: {selectedCronJob.active}</Typography>
-                          <Typography>Last Run: {getTimeSinceLastRun(selectedCronJob)}</Typography>
-                          <Typography>Next Run: {getNextRunTime(selectedCronJob)}</Typography>
+                           <Typography>Schedule: <strong>{parseSchedule(selectedCronJob.schedule)}</strong></Typography>
+                           <Typography variant="caption" color="text.secondary" display="block">
+                             Cron expression: {selectedCronJob.schedule}
+                           </Typography>
+                           <Divider sx={{ my: 1 }} />
+                           <Typography>Status: <strong>{selectedCronJob.suspend ? 'Suspended' : 'Active'}</strong></Typography>
+                           <Typography>Active Jobs: {selectedCronJob.active}</Typography>
+                           <Typography variant="caption" color="text.secondary" display="block">
+                             Last scheduled: {fmtTime(selectedCronJob.last_schedule_time)} ({getTimeSinceLastRun(selectedCronJob)})
+                           </Typography>
+                           <Typography variant="caption" color="text.secondary" display="block">
+                             Last successful: {fmtTime(selectedCronJob.last_successful_time)}
+                           </Typography>
+                           <Typography>Next Run: {getNextRunTime(selectedCronJob)}</Typography>
                         </CardContent>
                       </Card>
                     </Grid>
@@ -763,10 +791,11 @@ const CronJobs: React.FC = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Job Template</Typography>
-                          <Typography>Completions: {selectedCronJob.job_template.completions || 'N/A'}</Typography>
-                          <Typography>Parallelism: {selectedCronJob.job_template.parallelism || 'N/A'}</Typography>
-                          <Typography>Backoff Limit: {selectedCronJob.job_template.backoff_limit}</Typography>
-                          <Typography>Age: {selectedCronJob.age}</Typography>
+                           <Typography>Completions: {selectedCronJob.job_template.completions ?? 'N/A'}</Typography>
+                           <Typography>Parallelism: {selectedCronJob.job_template.parallelism ?? 'N/A'}</Typography>
+                           <Typography>Backoff Limit: {selectedCronJob.job_template.backoff_limit}</Typography>
+                           <Typography>Concurrency: {selectedCronJob.concurrency || 'Allow'}</Typography>
+                           <Typography>Age: {selectedCronJob.age}</Typography>
                         </CardContent>
                       </Card>
                     </Grid>

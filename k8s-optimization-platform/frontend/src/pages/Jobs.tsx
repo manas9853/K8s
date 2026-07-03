@@ -162,9 +162,10 @@ const Jobs: React.FC = () => {
   };
 
   const getJobStatus = (job: Job): 'success' | 'warning' | 'error' | 'running' => {
-    if (job.failed > 0) return 'error';
+    if (job.failed > 0 && job.active === 0 && job.succeeded === 0) return 'error';
     if (job.succeeded > 0 && job.active === 0) return 'success';
     if (job.active > 0) return 'running';
+    if (job.failed > 0) return 'error';
     return 'warning';
   };
 
@@ -177,15 +178,34 @@ const Jobs: React.FC = () => {
   };
 
   const getStatusLabel = (job: Job): string => {
-    if (job.failed > 0) return 'Failed';
-    if (job.succeeded > 0 && job.active === 0) return 'Completed';
     if (job.active > 0) return 'Running';
+    if (job.succeeded > 0) return 'Completed';
+    if (job.failed > 0) return 'Failed';
     return 'Pending';
   };
 
   const getCompletionPercentage = (job: Job): number => {
     if (!job.completions || job.completions === 0) return 0;
     return Math.round((job.succeeded / job.completions) * 100);
+  };
+
+  /** Format raw seconds (string or number) → human-readable e.g. "7s", "3m 45s", "665d" */
+  const formatDuration = (raw: string | null | undefined): string => {
+    if (!raw) return '-';
+    const secs = parseInt(raw, 10);
+    if (isNaN(secs)) return raw;
+    if (secs < 60) return `${secs}s`;
+    if (secs < 3600) return `${Math.floor(secs / 60)}m ${secs % 60}s`;
+    if (secs < 86400) return `${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`;
+    return `${Math.floor(secs / 86400)}d`;
+  };
+
+  /** Format ISO timestamp to a locale-friendly short string. */
+  const fmtTime = (ts: string | null | undefined): string => {
+    if (!ts) return '-';
+    try {
+      return new Date(ts).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+    } catch { return ts; }
   };
 
   // Generate investigations
@@ -554,7 +574,7 @@ const Jobs: React.FC = () => {
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Typography variant="body2">{job.duration || '-'}</Typography>
+                      <Typography variant="body2">{formatDuration(job.duration)}</Typography>
                     </TableCell>
                     <TableCell>
                       <Badge badgeContent={issueCount} color="error">
@@ -653,10 +673,13 @@ const Jobs: React.FC = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Timing</Typography>
-                          <Typography>Duration: {selectedJob.duration || 'N/A'}</Typography>
+                          <Typography>Duration: <strong>{formatDuration(selectedJob.duration)}</strong></Typography>
                           <Typography>Age: {selectedJob.age}</Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            Started: {selectedJob.start_time || 'Not started'}
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Started: {fmtTime(selectedJob.start_time)}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Completed: {fmtTime(selectedJob.completion_time)}
                           </Typography>
                         </CardContent>
                       </Card>
@@ -828,9 +851,9 @@ const Jobs: React.FC = () => {
                       <ListItemIcon>
                         <TimerIcon color="primary" />
                       </ListItemIcon>
-                      <ListItemText 
+                      <ListItemText
                         primary="Duration"
-                        secondary={selectedJob.duration || 'Not completed'}
+                        secondary={formatDuration(selectedJob.duration)}
                       />
                     </ListItem>
                     <ListItem>

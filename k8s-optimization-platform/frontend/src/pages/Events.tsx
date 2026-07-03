@@ -527,13 +527,14 @@ const Events: React.FC = () => {
       </Paper>
 
       <TableContainer component={Paper}>
-        <Table>
+        <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Type</TableCell>
               <TableCell>Namespace</TableCell>
               <TableCell>Reason</TableCell>
               <TableCell>Object</TableCell>
+              <TableCell>Source</TableCell>
               <TableCell>Message</TableCell>
               <TableCell>Count</TableCell>
               <TableCell>Age</TableCell>
@@ -556,15 +557,20 @@ const Events: React.FC = () => {
                   <Chip label={event.namespace} size="small" />
                 </TableCell>
                 <TableCell>
-                  <Chip 
-                    label={event.reason} 
+                  <Chip
+                    label={event.reason}
                     color={getReasonColor(event.reason)}
-                    size="small" 
+                    size="small"
                   />
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2">
-                    {event.involved_object_kind}/{event.involved_object_name}
+                  <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
+                    {event.involved_object_kind && `${event.involved_object_kind}/`}{event.involved_object_name}
+                  </Typography>
+                </TableCell>
+                <TableCell>
+                  <Typography variant="body2" noWrap sx={{ maxWidth: 160 }}>
+                    {event.source_component}{event.source_host ? `, ${event.source_host}` : ''}
                   </Typography>
                 </TableCell>
                 <TableCell>
@@ -573,8 +579,8 @@ const Events: React.FC = () => {
                   </Typography>
                 </TableCell>
                 <TableCell>
-                  <Chip 
-                    label={event.count} 
+                  <Chip
+                    label={event.count}
                     size="small"
                     color={event.count > 10 ? 'error' : event.count > 5 ? 'warning' : 'default'}
                   />

@@ -110,9 +110,10 @@ const Logs: React.FC = () => {
       setLoading(true);
       setError(null);
       setSearchQuery('');
+      setRawLogs('');
       const tail = Math.max(1, Math.min(10000, parseInt(tailLines, 10) || 100));
       const res = await fetch(
-        `/api/v1/observability/pod-logs?namespace=${encodeURIComponent(selectedNamespace)}&pod=${encodeURIComponent(selectedPod)}&tail_lines=${tail}`
+        `${API_BASE_URL}/v1/observability/pod-logs?namespace=${encodeURIComponent(selectedNamespace)}&pod=${encodeURIComponent(selectedPod)}&tail_lines=${tail}`
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -120,7 +121,6 @@ const Logs: React.FC = () => {
       }
       const data = await res.json();
       setRawLogs(data.logs || '(no log output)');
-      // Scroll to top of log box after loading
       setTimeout(() => logBoxRef.current?.scrollTo(0, 0), 50);
     } catch (e: any) {
       setError('Failed to fetch logs: ' + e.message);
@@ -373,7 +373,14 @@ const Logs: React.FC = () => {
             </Box>
           </Box>
 
-          {loading && <LinearProgress sx={{ mb: 2 }} />}
+          {loading && (
+            <Box sx={{ mb: 2 }}>
+              <LinearProgress />
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                Fetching logs from cluster via agent — this may take up to 15s…
+              </Typography>
+            </Box>
+          )}
 
           <Paper
             ref={logBoxRef}
