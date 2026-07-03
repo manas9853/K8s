@@ -42,6 +42,7 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
+  Snackbar,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -122,6 +123,10 @@ const CronJobs: React.FC = () => {
   const [selectedCronJob, setSelectedCronJob] = useState<CronJob | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ label: string; fn: () => Promise<void> } | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => { setSelectedClusterId(activeClusterId || 'all'); }, [activeClusterId]);
 
@@ -388,20 +393,94 @@ const CronJobs: React.FC = () => {
     return recommendations;
   };
 
+  const showSnack = (message: string, severity: 'success' | 'error' = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  const askConfirm = (label: string, fn: () => Promise<void>) => {
+    setConfirmAction({ label, fn });
+    setConfirmOpen(true);
+  };
+
+  const runConfirmed = async () => {
+    if (!confirmAction) return;
+    setConfirmOpen(false);
+    setActionLoading(true);
+    try {
+      await confirmAction.fn();
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
+  /** Enqueue a command, then poll until done/failed (max 90s). Returns final result body. */
+  const runCommand = async (url: string, opts: RequestInit = {}): Promise<any> => {
+    const res = await fetch(url, opts);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+
+    const cmdId = body.command_id;
+    if (!cmdId) return body;
+
+    showSnack('Command queued — waiting for agent…');
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2500));
+      const poll = await fetch(`${API_BASE_URL}/agents/commands/${cmdId}`).catch(() => null);
+      if (!poll) continue;
+      const status = await poll.json().catch(() => ({}));
+      if (status.status === 'done') return status.result || {};
+      if (status.status === 'failed') throw new Error(status.result?.error || 'Command failed');
+    }
+    throw new Error('Timed out waiting for agent response');
+  };
+
   const handleSuspendResume = (cronJob: CronJob) => {
-    const action = cronJob.suspend ? 'resume' : 'suspend';
-    console.log(`${action} cronjob ${cronJob.name}`);
-    alert(`Would ${action} CronJob ${cronJob.name}`);
+    const newSuspend = !cronJob.suspend;
+    const actionLabel = newSuspend ? 'Suspend' : 'Resume';
+    askConfirm(
+      `${actionLabel} CronJob "${cronJob.name}" in namespace "${cronJob.namespace}"?`,
+      async () => {
+        await runCommand(
+          `${API_BASE_URL}/v1/workloads/cronjobs/${cronJob.namespace}/${cronJob.name}/suspend`,
+          {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ suspend: newSuspend }),
+          }
+        );
+        showSnack(`CronJob "${cronJob.name}" ${newSuspend ? 'suspended' : 'resumed'}`);
+        setCronJobs(prev =>
+          prev.map(cj =>
+            cj.name === cronJob.name && cj.namespace === cronJob.namespace
+              ? { ...cj, suspend: newSuspend }
+              : cj
+          )
+        );
+        if (selectedCronJob?.name === cronJob.name) {
+          setSelectedCronJob({ ...cronJob, suspend: newSuspend });
+        }
+      }
+    );
   };
 
   const handleTriggerNow = (cronJob: CronJob) => {
-    console.log(`Triggering cronjob ${cronJob.name}`);
-    alert(`Would trigger CronJob ${cronJob.name} immediately`);
+    askConfirm(
+      `Trigger an immediate job run for CronJob "${cronJob.name}" in namespace "${cronJob.namespace}"?`,
+      async () => {
+        const result = await runCommand(
+          `${API_BASE_URL}/v1/workloads/cronjobs/${cronJob.namespace}/${cronJob.name}/trigger`,
+          { method: 'POST' }
+        );
+        showSnack(`Job "${result.job_name || 'manual'}" created from CronJob "${cronJob.name}"`);
+        fetchCronJobs(selectedClusterId);
+      }
+    );
   };
 
   const handleAutoFix = (cronJob: CronJob, issue: string) => {
-    console.log(`Auto-fixing ${issue} for ${cronJob.name}`);
-    alert(`Would auto-fix: ${issue} for ${cronJob.name}`);
+    showSnack(`Auto-fix for "${issue}" is not yet automated — see Recommendations for manual steps.`, 'error');
   };
 
   const filteredCronJobs = cronJobs.filter(cronJob =>
@@ -611,10 +690,11 @@ const CronJobs: React.FC = () => {
                           </IconButton>
                         </Tooltip>
                         <Tooltip title={cronJob.suspend ? "Resume" : "Suspend"}>
-                          <IconButton 
-                            size="small" 
+                          <IconButton
+                            size="small"
                             color={cronJob.suspend ? "success" : "warning"}
                             onClick={() => handleSuspendResume(cronJob)}
+                            disabled={actionLoading}
                           >
                             {cronJob.suspend ? <PlayArrowIcon /> : <PauseIcon />}
                           </IconButton>
@@ -882,29 +962,27 @@ const CronJobs: React.FC = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Schedule Management</Typography>
-                          <Button 
-                            variant="contained" 
+                          <Button
+                            variant="contained"
                             color={selectedCronJob.suspend ? "success" : "warning"}
-                            fullWidth 
+                            fullWidth
                             sx={{ mb: 1 }}
                             onClick={() => handleSuspendResume(selectedCronJob)}
+                            disabled={actionLoading}
+                            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
                           >
                             {selectedCronJob.suspend ? 'Resume CronJob' : 'Suspend CronJob'}
                           </Button>
-                          <Button 
-                            variant="contained" 
+                          <Button
+                            variant="contained"
                             color="primary"
-                            fullWidth 
+                            fullWidth
                             sx={{ mb: 1 }}
                             onClick={() => handleTriggerNow(selectedCronJob)}
+                            disabled={actionLoading}
+                            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
                           >
                             Trigger Job Now
-                          </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            View Job History
-                          </Button>
-                          <Button variant="outlined" fullWidth>
-                            View Events
                           </Button>
                         </CardContent>
                       </Card>
@@ -938,6 +1016,30 @@ const CronJobs: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Confirm dialog */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Action</DialogTitle>
+        <DialogContent>
+          <Typography>{confirmAction?.label}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="warning" onClick={runConfirmed}>Confirm</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

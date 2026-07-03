@@ -43,6 +43,7 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
+  Snackbar,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -125,6 +126,10 @@ const Jobs: React.FC = () => {
   const [selectedJob, setSelectedJob] = useState<Job | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ label: string; fn: () => Promise<void> } | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => { setSelectedClusterId(activeClusterId || 'all'); }, [activeClusterId]);
 
@@ -300,14 +305,66 @@ const Jobs: React.FC = () => {
     return recommendations;
   };
 
+  const showSnack = (message: string, severity: 'success' | 'error' = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  const askConfirm = (label: string, fn: () => Promise<void>) => {
+    setConfirmAction({ label, fn });
+    setConfirmOpen(true);
+  };
+
+  const runConfirmed = async () => {
+    if (!confirmAction) return;
+    setConfirmOpen(false);
+    setActionLoading(true);
+    try {
+      await confirmAction.fn();
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
+  /** Enqueue a command, then poll until done/failed (max 90s). */
+  const runCommand = async (url: string, opts: RequestInit = {}): Promise<void> => {
+    const res = await fetch(url, opts);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+
+    const cmdId = body.command_id;
+    if (!cmdId) return;
+
+    showSnack('Command queued — waiting for agent…');
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2500));
+      const poll = await fetch(`${API_BASE_URL}/agents/commands/${cmdId}`).catch(() => null);
+      if (!poll) continue;
+      const status = await poll.json().catch(() => ({}));
+      if (status.status === 'done') return;
+      if (status.status === 'failed') throw new Error(status.result?.error || 'Command failed');
+    }
+    throw new Error('Timed out waiting for agent response');
+  };
+
   const handleDeleteJob = (job: Job) => {
-    console.log(`Deleting job ${job.name}`);
-    alert(`Would delete job ${job.name}`);
+    askConfirm(
+      `Delete Job "${job.name}" in namespace "${job.namespace}"? This will also delete its pods.`,
+      async () => {
+        await runCommand(
+          `${API_BASE_URL}/v1/workloads/jobs/${job.namespace}/${job.name}`,
+          { method: 'DELETE' }
+        );
+        showSnack(`Job "${job.name}" deleted`);
+        setDetailsOpen(false);
+        fetchJobs(selectedClusterId);
+      }
+    );
   };
 
   const handleAutoFix = (job: Job, issue: string) => {
-    console.log(`Auto-fixing ${issue} for ${job.name}`);
-    alert(`Would auto-fix: ${issue} for ${job.name}`);
+    showSnack(`Auto-fix for "${issue}" is not yet automated — see Recommendations for manual steps.`, 'error');
   };
 
   const filteredJobs = jobs.filter(job =>
@@ -524,10 +581,11 @@ const Jobs: React.FC = () => {
                         </Tooltip>
                         {getJobStatus(job) !== 'running' && (
                           <Tooltip title="Delete Job">
-                            <IconButton 
-                              size="small" 
+                            <IconButton
+                              size="small"
                               color="error"
                               onClick={() => handleDeleteJob(job)}
+                              disabled={actionLoading}
                             >
                               <DeleteIcon />
                             </IconButton>
@@ -810,12 +868,14 @@ const Jobs: React.FC = () => {
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Job Management</Typography>
                           {getJobStatus(selectedJob) !== 'running' && (
-                            <Button 
-                              variant="contained" 
+                            <Button
+                              variant="contained"
                               color="error"
-                              fullWidth 
+                              fullWidth
                               sx={{ mb: 1 }}
                               onClick={() => handleDeleteJob(selectedJob)}
+                              disabled={actionLoading}
+                              startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
                             >
                               Delete Job
                             </Button>
@@ -855,6 +915,30 @@ const Jobs: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Confirm dialog */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Action</DialogTitle>
+        <DialogContent>
+          <Typography>{confirmAction?.label}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={runConfirmed}>Confirm Delete</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

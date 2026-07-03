@@ -197,16 +197,14 @@ def _get_pods_from_db(cluster_id: Optional[str] = None) -> tuple[list, str]:
 
 
 def analyze_pod_resources(pod: dict, cluster_id: str) -> PodOptimization:
-    """Analyze pod using 50% waste threshold."""
-    import random
-
-    pod_name = pod.get("name", "unknown")
+    """Analyze pod resources using real agent metrics data."""
+    pod_name  = pod.get("name", "unknown")
     namespace = pod.get("namespace", "default")
-    node_name = pod.get("node_name", "unknown")
+    node_name = pod.get("node_name") or pod.get("node", "unknown") or "unknown"
     owner_kind = pod.get("owner_kind", "Pod")
 
     # Age
-    creation_time = pod.get("creation_timestamp")
+    creation_time = pod.get("creation_timestamp") or pod.get("created")
     age_days = 0
     if creation_time:
         try:
@@ -215,35 +213,42 @@ def analyze_pod_resources(pod: dict, cluster_id: str) -> PodOptimization:
         except Exception:
             pass
 
-    restarts = pod.get("restarts", 0)
+    restarts = pod.get("restarts", 0) or pod.get("total_restarts", 0)
     last_restart = f"{restarts} restarts" if restarts > 0 else "No restarts"
 
-    # Parse resource requests from containers
-    total_cpu_request = 0.0
-    total_cpu_limit = 0.0
-    total_mem_request = 0.0
-    total_mem_limit = 0.0
+    # Resource requests/limits — agent stores them at the pod level directly
+    total_cpu_request = float(pod.get("cpu_request", 0.0))
+    total_cpu_limit   = float(pod.get("cpu_limit", 0.0))
+    total_mem_request = float(pod.get("memory_request_mb", 0.0))  # already in MB
+    total_mem_limit   = float(pod.get("memory_limit_mb", 0.0))
 
-    for container in pod.get("containers", []):
-        total_cpu_request += parse_cpu(container.get("cpu_request", "0"))
-        total_cpu_limit += parse_cpu(container.get("cpu_limit", "0"))
-        total_mem_request += parse_memory(container.get("memory_request", "0"))
-        total_mem_limit += parse_memory(container.get("memory_limit", "0"))
+    # If pod-level is zero, sum from containers
+    if total_cpu_request == 0:
+        for c in pod.get("containers", []):
+            total_cpu_request += parse_cpu(str(c.get("cpu_request", "0")))
+            total_cpu_limit   += parse_cpu(str(c.get("cpu_limit", "0")))
+            total_mem_request += float(c.get("memory_request_mb", 0.0)) or \
+                                 parse_memory(str(c.get("memory_request", "0")))
+            total_mem_limit   += float(c.get("memory_limit_mb", 0.0)) or \
+                                 parse_memory(str(c.get("memory_limit", "0")))
 
-    # Simulate current usage (30-70% of request, seeded by pod name for stability)
-    random.seed(hash(pod_name))
-    usage_factor = random.uniform(0.3, 0.7)
+    # Live usage from metrics-server (0 when not available)
+    cpu_current = float(pod.get("cpu_usage_cores", 0.0))
+    mem_current = float(pod.get("memory_usage_mb", 0.0))
 
-    cpu_current = total_cpu_request * usage_factor if total_cpu_request > 0 else 0.1
-    cpu_average = cpu_current * 0.9
-    cpu_peak = cpu_current * 1.2
+    # When metrics-server data is absent fall back to 50 % of request
+    has_live = cpu_current > 0 or mem_current > 0
+    if not has_live:
+        cpu_current = total_cpu_request * 0.5 if total_cpu_request > 0 else 0.0
+        mem_current = total_mem_request * 0.5 if total_mem_request > 0 else 0.0
 
-    mem_current = total_mem_request * usage_factor if total_mem_request > 0 else 128
-    mem_average = mem_current * 0.95
-    mem_peak = mem_current * 1.15
+    cpu_average = cpu_current
+    cpu_peak    = cpu_current * 1.2 if has_live else cpu_current * 1.3
+    mem_average = mem_current
+    mem_peak    = mem_current * 1.2 if has_live else mem_current * 1.3
 
-    cpu_util = (cpu_current / total_cpu_request * 100) if total_cpu_request > 0 else 0
-    mem_util = (mem_current / total_mem_request * 100) if total_mem_request > 0 else 0
+    cpu_util = (cpu_current / total_cpu_request * 100) if total_cpu_request > 0 else 0.0
+    mem_util = (mem_current / total_mem_request * 100) if total_mem_request > 0 else 0.0
 
     cpu_waste_pct = (
         (total_cpu_request - cpu_current) / total_cpu_request * 100
@@ -543,52 +548,116 @@ async def get_memory_analysis(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _last_restart_time(pod: dict) -> str:
+    """Return the real last-restart timestamp as a human-readable string.
+
+    Sources (in priority order):
+    1. last_state_finished from any container_status (added by updated agent)
+    2. start_time of the pod (current run started after a restart)
+    3. created_at of the pod as final fallback
+    """
+    best: Optional[datetime] = None
+    for cs in pod.get("container_statuses", []):
+        finished = cs.get("last_state_finished")
+        if finished:
+            try:
+                dt = datetime.fromisoformat(finished.replace("Z", "+00:00"))
+                if best is None or dt > best:
+                    best = dt
+            except Exception:
+                pass
+
+    # Fall back to pod start_time (the pod restarted when the current run began)
+    if best is None:
+        for key in ("start_time", "created"):
+            ts = pod.get(key)
+            if ts:
+                try:
+                    best = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                    break
+                except Exception:
+                    pass
+
+    if best is None:
+        return "unknown"
+
+    delta = datetime.now(timezone.utc) - best
+    minutes = int(delta.total_seconds() // 60)
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    return f"{hours // 24}d ago"
+
+
+def _restart_reason(pod: dict) -> str:
+    """Extract the real restart reason from container state/last_state."""
+    for cs in pod.get("container_statuses", []):
+        reason = cs.get("last_state_reason")
+        if reason:
+            return reason
+        # Current state may also be informative (e.g. waiting:CrashLoopBackOff)
+        state = cs.get("state", "")
+        if isinstance(state, str) and ":" in state:
+            return state.split(":", 1)[1]
+    return "Unknown"
+
+
 @router.get("/restart-analysis", response_model=List[RestartAnalysisItem])
 async def get_restart_analysis(
     namespace: Optional[str] = Query(None),
     min_restarts: int = Query(1, description="Minimum restart count to include"),
     cluster_id: Optional[str] = Query(None),
 ):
-    """Restart analysis from agent_metrics."""
-    import random
+    """Restart analysis from agent_metrics — uses real restart counts and timestamps."""
     try:
         pods, resolved_cluster = _get_pods_from_db(cluster_id)
         result = []
         for pod in pods:
             try:
-                restarts = pod.get("restarts", 0)
+                # Agent stores restarts as total_restarts (sum of all containers)
+                restarts = int(pod.get("total_restarts") or pod.get("restarts") or 0)
                 if restarts < min_restarts:
                     continue
                 if namespace and pod.get("namespace") != namespace:
                     continue
                 opt = analyze_pod_resources(pod, resolved_cluster)
-                crash_loop = restarts > 10
-                oom_kills = 1 if restarts > 5 and opt.memory_metrics.utilization_percent > 80 else 0
+
+                # Real reason from container last_state / current waiting state
+                restart_reason = _restart_reason(pod)
+                crash_loop = (
+                    restart_reason == "CrashLoopBackOff" or restarts > 100
+                )
+                oom_kills = sum(
+                    1 for cs in pod.get("container_statuses", [])
+                    if cs.get("last_state_reason") == "OOMKilled"
+                )
+
                 if oom_kills > 0:
-                    restart_reason = "OOMKilled"
                     severity = "critical" if oom_kills > 3 else "high"
                     recommendation = (
                         f"Increase memory from {opt.memory_metrics.requested:.0f}MB "
                         f"to {opt.memory_metrics.requested * 1.5:.0f}MB"
                     )
                 elif crash_loop:
-                    restart_reason, severity = "CrashLoopBackOff", "critical"
+                    severity = "critical"
                     recommendation = "Investigate application logs and increase resources"
-                elif restarts > 5:
-                    restart_reason, severity = "Error", "high"
+                elif restarts > 50:
+                    severity = "high"
                     recommendation = "Review application health checks and resource limits"
                 else:
-                    restart_reason, severity = "Unknown", "medium"
+                    severity = "medium"
                     recommendation = "Monitor pod for additional restarts"
-                random.seed(hash(pod.get("name", "") + "restart_time"))
-                hours_ago = random.randint(1, max(opt.age_days * 24, 1))
+
                 result.append(RestartAnalysisItem(
                     pod_name=opt.pod_name, namespace=opt.namespace,
                     cluster_id=opt.cluster_id, node_name=opt.node_name,
-                    restart_count=restarts, last_restart_time=f"{hours_ago}h ago",
+                    restart_count=restarts,
+                    last_restart_time=_last_restart_time(pod),
                     restart_reason=restart_reason,
-                    cpu_at_restart=round(opt.cpu_metrics.requested * 0.85, 3),
-                    memory_at_restart=round(opt.memory_metrics.requested * 0.92, 1),
+                    cpu_at_restart=round(opt.cpu_metrics.current or opt.cpu_metrics.requested * 0.85, 3),
+                    memory_at_restart=round(opt.memory_metrics.current or opt.memory_metrics.requested * 0.92, 1),
                     oom_kills=oom_kills, crash_loop=crash_loop,
                     recommendation=recommendation, severity=severity,
                     age_days=opt.age_days,
@@ -607,8 +676,7 @@ async def get_oom_events(
     namespace: Optional[str] = Query(None),
     cluster_id: Optional[str] = Query(None),
 ):
-    """OOM events derived from agent_metrics pod restart data."""
-    import random
+    """OOM events derived from real agent_metrics pod restart data."""
     try:
         pods, resolved_cluster = _get_pods_from_db(cluster_id)
         result = []
@@ -616,24 +684,38 @@ async def get_oom_events(
             try:
                 if namespace and pod.get("namespace") != namespace:
                     continue
-                restarts = pod.get("restarts", 0)
-                opt = analyze_pod_resources(pod, resolved_cluster)
-                mem = opt.memory_metrics
-                oom_count = restarts if (restarts > 3 and mem.utilization_percent > 75) else 0
+
+                # Count actual OOMKilled last_state entries across containers
+                oom_count = sum(
+                    1 for cs in pod.get("container_statuses", [])
+                    if cs.get("last_state_reason") == "OOMKilled"
+                )
+                # Fall back: high restarts + high memory utilization heuristic
+                if oom_count == 0:
+                    restarts = int(pod.get("total_restarts") or pod.get("restarts") or 0)
+                    opt_check = analyze_pod_resources(pod, resolved_cluster)
+                    if restarts > 3 and opt_check.memory_metrics.utilization_percent > 75:
+                        oom_count = restarts
+
                 if oom_count == 0:
                     continue
+
+                opt = analyze_pod_resources(pod, resolved_cluster)
+                mem = opt.memory_metrics
                 mem_at_oom = mem.limit * 0.97 if mem.limit > 0 else mem.requested * 0.98
                 recommended_mem = max(mem_at_oom * 1.5, mem.requested * 1.4)
                 estimated_cost = (
                     (recommended_mem - mem.requested) / 1024
                 ) * MEMORY_COST_PER_GB_HOUR * 730
                 severity = "critical" if oom_count > 5 else ("high" if oom_count > 2 else "medium")
-                random.seed(hash(pod.get("name", "") + "oom_time"))
-                hours_ago = random.randint(1, max(opt.age_days * 24, 1))
+
+                # Real last OOM time from container last_state_finished
+                last_oom_time = _last_restart_time(pod)
+
                 result.append(OOMEventItem(
                     pod_name=opt.pod_name, namespace=opt.namespace,
                     cluster_id=opt.cluster_id, node_name=opt.node_name,
-                    oom_count=oom_count, last_oom_time=f"{hours_ago}h ago",
+                    oom_count=oom_count, last_oom_time=last_oom_time,
                     memory_limit=mem.limit if mem.limit > 0 else round(mem.requested * 2, 1),
                     memory_at_oom=round(mem_at_oom, 1),
                     memory_request=mem.requested,

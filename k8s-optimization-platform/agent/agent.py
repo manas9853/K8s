@@ -70,11 +70,19 @@ def _utcnow() -> str:
 
 
 def _parse_cpu(cpu_str: str) -> float:
-    """Convert Kubernetes CPU string ('500m', '2', '2000m') → cores (float)."""
+    """Convert Kubernetes CPU string → cores (float).
+
+    Handles all formats returned by both the k8s API and metrics-server:
+      '500m'     → 0.5   (millicores)
+      '7949167n' → ~0.008 (nanocores from metrics-server)
+      '2'        → 2.0   (whole cores)
+    """
     if not cpu_str:
         return 0.0
     s = str(cpu_str).strip()
-    if s.endswith("m"):
+    if s.endswith("n"):          # nanocores (metrics-server live usage)
+        return float(s[:-1]) / 1_000_000_000.0
+    if s.endswith("m"):          # millicores (resource requests/limits)
         return float(s[:-1]) / 1000.0
     try:
         return float(s)
@@ -441,6 +449,30 @@ class ClusterAgent:
         oom_events: List[Dict] = []
         restart_issues: List[Dict] = []
 
+        # ── live usage from metrics-server ────────────────────────────────────
+        # Build a lookup: (namespace, pod_name) -> {cpu_cores, memory_mb}
+        _live_usage: Dict[tuple, Dict[str, float]] = {}
+        if self.metrics_server:
+            try:
+                raw = self.custom.list_cluster_custom_object(
+                    group="metrics.k8s.io", version="v1beta1", plural="pods"
+                )
+                for item in raw.get("items", []):
+                    ns   = item["metadata"]["namespace"]
+                    name = item["metadata"]["name"]
+                    cpu_total = 0.0
+                    mem_total = 0.0
+                    for c in item.get("containers", []):
+                        usage = c.get("usage", {})
+                        cpu_total += _parse_cpu(usage.get("cpu", "0"))
+                        mem_total += _parse_memory(usage.get("memory", "0"))
+                    _live_usage[(ns, name)] = {
+                        "cpu_cores":  round(cpu_total, 4),
+                        "memory_mb":  round(mem_total / 1024 ** 2, 2),
+                    }
+            except Exception as exc:
+                logger.debug("metrics-server pod query failed: %s", exc)
+
         for pod in all_pods:
             cpu_req = mem_req = cpu_lim = mem_lim = 0.0
             containers: List[Dict] = []
@@ -512,13 +544,24 @@ class ClusterAgent:
                         "node":      pod.spec.node_name,
                     })
 
+                # Last-state reason + timestamp (for restart / OOM analysis)
+                last_reason = None
+                last_finished = None
+                if cs.last_state and cs.last_state.terminated:
+                    last_reason   = cs.last_state.terminated.reason or "Error"
+                    last_finished = _ts(cs.last_state.terminated.finished_at)
+                elif cs.state and cs.state.waiting:
+                    last_reason = cs.state.waiting.reason or "Unknown"
+
                 statuses.append({
-                    "name":          cs.name,
-                    "ready":         cs.ready,
-                    "restart_count": rc,
-                    "state":         state,
-                    "image":         cs.image,
-                    "image_id":      cs.image_id or "",
+                    "name":                 cs.name,
+                    "ready":                cs.ready,
+                    "restart_count":        rc,
+                    "state":                state,
+                    "image":                cs.image,
+                    "image_id":             cs.image_id or "",
+                    "last_state_reason":    last_reason,
+                    "last_state_finished":  last_finished,
                 })
 
             if total_restarts > 5:
@@ -530,6 +573,15 @@ class ClusterAgent:
                 })
 
             phase = (pod.status.phase or "Unknown").lower()
+            live = _live_usage.get(
+                (pod.metadata.namespace, pod.metadata.name), {}
+            )
+            # PVC mounts: names of PVCs this pod references
+            pvc_mounts = [
+                vol.persistent_volume_claim.claim_name
+                for vol in (pod.spec.volumes or [])
+                if vol.persistent_volume_claim
+            ]
             pod_list.append({
                 "name":              pod.metadata.name,
                 "namespace":         pod.metadata.namespace,
@@ -542,9 +594,13 @@ class ClusterAgent:
                 "memory_request_mb": round(mem_req / 1024 ** 2, 2),
                 "cpu_limit":         round(cpu_lim, 4),
                 "memory_limit_mb":   round(mem_lim / 1024 ** 2, 2),
+                # Live usage from metrics-server (0.0 when unavailable)
+                "cpu_usage_cores":   live.get("cpu_cores", 0.0),
+                "memory_usage_mb":   live.get("memory_mb", 0.0),
                 "total_restarts":    total_restarts,
                 "containers":        containers,
                 "container_statuses": statuses,
+                "pvc_mounts":        pvc_mounts,
                 "labels":            pod.metadata.labels or {},
                 "annotations":       {
                     k: v for k, v in (pod.metadata.annotations or {}).items()
@@ -678,49 +734,125 @@ class ClusterAgent:
                 "created": _ts(s.metadata.creation_timestamp),
             }
 
+        def _containers_from_spec(spec):
+            """Extract container info from a pod spec (template.spec)."""
+            result = []
+            for c in (spec.containers or []):
+                ports = []
+                if c.ports:
+                    for p in c.ports:
+                        ports.append({"containerPort": p.container_port, "protocol": p.protocol or "TCP"})
+                req = {}
+                lim = {}
+                if c.resources:
+                    if c.resources.requests:
+                        req = dict(c.resources.requests)
+                    if c.resources.limits:
+                        lim = dict(c.resources.limits)
+                result.append({
+                    "name": c.name,
+                    "image": c.image or "",
+                    "ports": ports,
+                    "resources": {"requests": req, "limits": lim},
+                })
+            return result
+
         def _ds(d):
+            created_at = _ts(d.metadata.creation_timestamp)
+            ds_containers = _containers_from_spec(d.spec.template.spec) if d.spec and d.spec.template and d.spec.template.spec else []
+            selector = (d.spec.selector.match_labels or {}) if d.spec and d.spec.selector else {}
             return {
-                "name":              d.metadata.name,
-                "namespace":         d.metadata.namespace,
-                "desired":           d.status.desired_number_scheduled or 0,
-                "current":           d.status.current_number_scheduled or 0,
-                "ready":             d.status.number_ready or 0,
-                "available":         d.status.number_available or 0,
-                "misscheduled":      d.status.number_misscheduled or 0,
-                "labels":            d.metadata.labels or {},
-                "update_strategy":   (d.spec.update_strategy.type
-                                      if d.spec.update_strategy else "RollingUpdate"),
-                "created":           _ts(d.metadata.creation_timestamp),
+                "name":                      d.metadata.name,
+                "namespace":                 d.metadata.namespace,
+                "desired_number_scheduled":  d.status.desired_number_scheduled or 0,
+                "current_number_scheduled":  d.status.current_number_scheduled or 0,
+                "number_ready":              d.status.number_ready or 0,
+                "number_available":          d.status.number_available or 0,
+                "number_misscheduled":       d.status.number_misscheduled or 0,
+                "labels":                    d.metadata.labels or {},
+                "selector":                  selector,
+                "containers":                ds_containers,
+                "update_strategy":           (d.spec.update_strategy.type
+                                              if d.spec.update_strategy else "RollingUpdate"),
+                "created_at":                created_at,
             }
 
         def _job(j):
+            created_at = _ts(j.metadata.creation_timestamp)
+            start_time = _ts(j.status.start_time)
+            completion_time = _ts(j.status.completion_time)
+            # Compute duration in seconds when both timestamps are available
+            duration = None
+            if start_time and completion_time:
+                try:
+                    from datetime import datetime as _dt
+                    fmt = "%Y-%m-%dT%H:%M:%S%z"
+                    t0 = _dt.fromisoformat(start_time.replace("Z", "+00:00"))
+                    t1 = _dt.fromisoformat(completion_time.replace("Z", "+00:00"))
+                    duration = str(int((t1 - t0).total_seconds()))
+                except Exception:
+                    pass
+            elif start_time:
+                try:
+                    from datetime import datetime as _dt, timezone as _tz
+                    t0 = _dt.fromisoformat(start_time.replace("Z", "+00:00"))
+                    duration = str(int((_dt.now(_tz.utc) - t0).total_seconds()))
+                except Exception:
+                    pass
+
+            job_containers = _containers_from_spec(j.spec.template.spec) if j.spec and j.spec.template and j.spec.template.spec else []
+            selector = (j.spec.selector.match_labels or {}) if j.spec and j.spec.selector else {}
+            conditions = []
+            for cond in (j.status.conditions or []):
+                conditions.append({
+                    "type": cond.type,
+                    "status": cond.status,
+                    "reason": cond.reason or "",
+                    "message": cond.message or "",
+                    "last_update_time": _ts(cond.last_transition_time),
+                })
             return {
-                "name":       j.metadata.name,
-                "namespace":  j.metadata.namespace,
-                "completions": j.spec.completions,
-                "parallelism": j.spec.parallelism,
-                "active":     j.status.active or 0,
-                "succeeded":  j.status.succeeded or 0,
-                "failed":     j.status.failed or 0,
-                "labels":     j.metadata.labels or {},
-                "created":    _ts(j.metadata.creation_timestamp),
-                "start_time": _ts(j.status.start_time),
-                "completion_time": _ts(j.status.completion_time),
-                "suspended":  bool(j.spec.suspend),
+                "name":            j.metadata.name,
+                "namespace":       j.metadata.namespace,
+                "completions":     j.spec.completions,
+                "parallelism":     j.spec.parallelism,
+                "active":          j.status.active or 0,
+                "succeeded":       j.status.succeeded or 0,
+                "failed":          j.status.failed or 0,
+                "start_time":      start_time,
+                "completion_time": completion_time,
+                "duration":        duration,
+                "labels":          j.metadata.labels or {},
+                "selector":        selector,
+                "containers":      job_containers,
+                "conditions":      conditions,
+                "created_at":      created_at,
+                "suspended":       bool(j.spec.suspend),
             }
 
         def _cj(cj):
+            created_at = _ts(cj.metadata.creation_timestamp)
+            # Build job_template summary from spec
+            jt_spec = cj.spec.job_template.spec if cj.spec and cj.spec.job_template and cj.spec.job_template.spec else None
+            jt_containers = _containers_from_spec(jt_spec.template.spec) if jt_spec and jt_spec.template and jt_spec.template.spec else []
+            job_template = {
+                "completions": jt_spec.completions if jt_spec else None,
+                "parallelism": jt_spec.parallelism if jt_spec else None,
+                "backoff_limit": jt_spec.backoff_limit if jt_spec and jt_spec.backoff_limit is not None else 6,
+                "containers": jt_containers,
+            }
             return {
-                "name":            cj.metadata.name,
-                "namespace":       cj.metadata.namespace,
-                "schedule":        cj.spec.schedule,
-                "suspend":         bool(cj.spec.suspend),
-                "active_jobs":     len(cj.status.active or []),
-                "last_schedule":   _ts(cj.status.last_schedule_time),
-                "last_success":    _ts(cj.status.last_successful_time),
-                "concurrency":     cj.spec.concurrency_policy or "Allow",
-                "labels":          cj.metadata.labels or {},
-                "created":         _ts(cj.metadata.creation_timestamp),
+                "name":                cj.metadata.name,
+                "namespace":           cj.metadata.namespace,
+                "schedule":            cj.spec.schedule,
+                "suspend":             bool(cj.spec.suspend),
+                "active":              len(cj.status.active or []),
+                "last_schedule_time":  _ts(cj.status.last_schedule_time),
+                "last_successful_time": _ts(cj.status.last_successful_time),
+                "concurrency":         cj.spec.concurrency_policy or "Allow",
+                "labels":              cj.metadata.labels or {},
+                "job_template":        job_template,
+                "created_at":          created_at,
             }
 
         # Orphaned ReplicaSets (desired > 0, no Deployment parent owns them as live)
@@ -774,10 +906,44 @@ class ClusterAgent:
 
     # ── domain: storage ──────────────────────────────────────────────────────
 
+    def _pvc_usage_from_kubelet(self) -> Dict[str, Dict[str, float]]:
+        """Query kubelet stats/summary on every node and return
+        {namespace/pvc-name: {used_bytes, avail_bytes, capacity_bytes}}.
+        Falls back to empty dict when nodes/proxy is unavailable.
+        """
+        import ast as _ast
+        result: Dict[str, Dict[str, float]] = {}
+        try:
+            for node in self.core.list_node().items:
+                node_name = node.metadata.name
+                try:
+                    raw = self.core.connect_get_node_proxy_with_path(
+                        node_name, "stats/summary"
+                    )
+                    data = _ast.literal_eval(raw)
+                    for pod in data.get("pods", []):
+                        for vol in pod.get("volume", []):
+                            ref = vol.get("pvcRef")
+                            if ref:
+                                key = f"{ref['namespace']}/{ref['name']}"
+                                result[key] = {
+                                    "used_bytes":  float(vol.get("usedBytes",  0)),
+                                    "avail_bytes": float(vol.get("availableBytes", 0)),
+                                    "cap_bytes":   float(vol.get("capacityBytes", 0)),
+                                }
+                except Exception as exc:
+                    logger.debug("kubelet stats node=%s: %s", node_name, exc)
+        except Exception as exc:
+            logger.debug("_pvc_usage_from_kubelet: %s", exc)
+        return result
+
     def _storage(self) -> Dict[str, Any]:
         pvcs = self.core.list_persistent_volume_claim_for_all_namespaces().items
         pvs  = self.core.list_persistent_volume().items
         scs  = self.storage.list_storage_class().items
+
+        # Real per-PVC filesystem usage from kubelet
+        pvc_usage = self._pvc_usage_from_kubelet()
 
         pvc_list: List[Dict] = []
         orphaned_pvcs: List[Dict] = []
@@ -786,17 +952,38 @@ class ClusterAgent:
             size = "0"
             if pvc.spec.resources and pvc.spec.resources.requests:
                 size = pvc.spec.resources.requests.get("storage", "0")
+            # Actual provisioned capacity from the bound PV (may differ from request)
+            actual_capacity = (
+                pvc.status.capacity.get("storage", size)
+                if pvc.status and pvc.status.capacity
+                else size
+            )
+            cap_bytes = _parse_memory(actual_capacity)
+            ns_name   = f"{pvc.metadata.namespace}/{pvc.metadata.name}"
+            usage     = pvc_usage.get(ns_name, {})
+            used_bytes  = usage.get("used_bytes",  0.0)
+            avail_bytes = usage.get("avail_bytes", 0.0)
+            # When kubelet reported capacity differs from API, prefer kubelet's
+            kubelet_cap = usage.get("cap_bytes", 0.0)
+            if kubelet_cap > 0:
+                cap_bytes = kubelet_cap
+
             rec = {
-                "name":          pvc.metadata.name,
-                "namespace":     pvc.metadata.namespace,
-                "status":        pvc.status.phase,
-                "volume_name":   pvc.spec.volume_name,
-                "storage_class": pvc.spec.storage_class_name,
-                "size":          size,
-                "size_bytes":    _parse_memory(size),
-                "access_modes":  pvc.spec.access_modes or [],
-                "labels":        pvc.metadata.labels or {},
-                "created":       _ts(pvc.metadata.creation_timestamp),
+                "name":             pvc.metadata.name,
+                "namespace":        pvc.metadata.namespace,
+                "status":           pvc.status.phase,
+                "volume_name":      pvc.spec.volume_name,
+                "storage_class":    pvc.spec.storage_class_name,
+                "size":             size,
+                "size_bytes":       _parse_memory(size),
+                "capacity":         actual_capacity,
+                "capacity_bytes":   cap_bytes,
+                "used_bytes":       used_bytes,
+                "avail_bytes":      avail_bytes,
+                "volume_mode":      pvc.spec.volume_mode or "Filesystem",
+                "access_modes":     pvc.spec.access_modes or [],
+                "labels":           pvc.metadata.labels or {},
+                "created":          _ts(pvc.metadata.creation_timestamp),
             }
             pvc_list.append(rec)
             if pvc.status.phase != "Bound":
@@ -868,20 +1055,34 @@ class ClusterAgent:
         svc_list: List[Dict] = []
         external_svcs: List[Dict] = []
         for svc in svcs:
+            # LoadBalancer external IPs / hostnames from status.load_balancer.ingress
+            lb_ingress = []
+            if svc.status.load_balancer and svc.status.load_balancer.ingress:
+                for ing in svc.status.load_balancer.ingress:
+                    lb_ingress.append(ing.ip or ing.hostname or "")
+            lb_ingress = [x for x in lb_ingress if x]  # drop empty
+
+            # Endpoints count for this service
+            ep_count = 0
+            for ep in eps:
+                if ep.metadata.name == svc.metadata.name and \
+                        ep.metadata.namespace == svc.metadata.namespace:
+                    for subset in (ep.subsets or []):
+                        ep_count += len(subset.addresses or [])
+                    break
+
             rec = {
-                "name":         svc.metadata.name,
-                "namespace":    svc.metadata.namespace,
-                "type":         svc.spec.type or "ClusterIP",
-                "cluster_ip":   svc.spec.cluster_ip,
-                "external_ips": svc.spec.external_i_ps or [],
-                "load_balancer_ip": (
-                    svc.status.load_balancer.ingress[0].ip
-                    if svc.status.load_balancer
-                    and svc.status.load_balancer.ingress
-                    else None
-                ),
+                "name":              svc.metadata.name,
+                "namespace":         svc.metadata.namespace,
+                "type":              svc.spec.type or "ClusterIP",
+                "cluster_ip":        svc.spec.cluster_ip,
+                "external_ips":      svc.spec.external_i_ps or [],
+                "load_balancer_ips": lb_ingress,
+                "load_balancer_ip":  lb_ingress[0] if lb_ingress else None,
+                "external_name":     svc.spec.external_name,
                 "ports": [
                     {
+                        "name":        p.name or "",
                         "port":        p.port,
                         "protocol":    p.protocol or "TCP",
                         "target_port": str(p.target_port),
@@ -889,9 +1090,15 @@ class ClusterAgent:
                     }
                     for p in (svc.spec.ports or [])
                 ],
-                "selector":  svc.spec.selector or {},
-                "labels":    svc.metadata.labels or {},
-                "created":   _ts(svc.metadata.creation_timestamp),
+                "selector":          svc.spec.selector or {},
+                "session_affinity":  svc.spec.session_affinity,
+                "labels":            svc.metadata.labels or {},
+                "annotations": {
+                    k: v for k, v in (svc.metadata.annotations or {}).items()
+                    if not k.startswith("kubectl.kubernetes.io")
+                },
+                "endpoints_count":   ep_count,
+                "created":           _ts(svc.metadata.creation_timestamp),
             }
             svc_list.append(rec)
             if svc.spec.type in ("LoadBalancer", "NodePort"):
@@ -1520,6 +1727,153 @@ class ClusterAgent:
             except Exception:
                 pass
 
+    # ── command executor ──────────────────────────────────────────────────────
+
+    def _poll_and_execute_commands(self) -> None:
+        """Fetch pending commands from the backend and execute each one."""
+        for path in ["/api/agents/commands/pending", "/api/agent/commands/pending"]:
+            try:
+                resp = self._session.get(
+                    self.platform_url + path,
+                    params={"cluster_name": self.cluster_name},
+                    timeout=10,
+                    verify=False,
+                )
+                if resp.status_code != 200:
+                    continue
+                commands = resp.json().get("commands", [])
+                for cmd in commands:
+                    self._execute_command(cmd)
+                return
+            except Exception as exc:
+                logger.debug("Command poll error (%s): %s", path, exc)
+
+    def _execute_command(self, cmd: Dict[str, Any]) -> None:
+        cmd_id  = cmd["id"]
+        command = cmd["command"]
+        params  = cmd.get("params", {})
+        logger.info("Executing command id=%d  command=%s  params=%s", cmd_id, command, params)
+        try:
+            result = self._run_k8s_command(command, params)
+            self._ack_command(cmd_id, success=True, result=result)
+        except Exception as exc:
+            logger.error("Command id=%d failed: %s", cmd_id, exc)
+            self._ack_command(cmd_id, success=False, result={"error": str(exc)})
+
+    def _run_k8s_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
+        """Execute a single kubectl-style command and return a result dict."""
+        ns   = params["namespace"]
+        name = params["name"]
+
+        if command == "restart_deployment":
+            import datetime as _dt
+            ts = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.apps.patch_namespaced_deployment(
+                name=name, namespace=ns,
+                body={"spec": {"template": {"metadata": {"annotations": {
+                    "kubectl.kubernetes.io/restartedAt": ts
+                }}}}})
+            return {"restartedAt": ts}
+
+        if command == "scale_deployment":
+            replicas = int(params["replicas"])
+            self.apps.patch_namespaced_deployment(
+                name=name, namespace=ns,
+                body={"spec": {"replicas": replicas}})
+            return {"replicas": replicas}
+
+        if command == "delete_deployment":
+            self.apps.delete_namespaced_deployment(name=name, namespace=ns)
+            return {}
+
+        if command == "patch_deployment_resources":
+            reqs, lims = {}, {}
+            if params.get("cpu_request"):    reqs["cpu"]    = params["cpu_request"]
+            if params.get("memory_request"): reqs["memory"] = params["memory_request"]
+            if params.get("cpu_limit"):      lims["cpu"]    = params["cpu_limit"]
+            if params.get("memory_limit"):   lims["memory"] = params["memory_limit"]
+            resources = {}
+            if reqs: resources["requests"] = reqs
+            if lims: resources["limits"]   = lims
+            container_entry: Dict[str, Any] = {"resources": resources}
+            if params.get("container_name"):
+                container_entry["name"] = params["container_name"]
+            self.apps.patch_namespaced_deployment(
+                name=name, namespace=ns,
+                body={"spec": {"template": {"spec": {"containers": [container_entry]}}}})
+            return {"patched": resources}
+
+        if command == "scale_statefulset":
+            replicas = int(params["replicas"])
+            self.apps.patch_namespaced_stateful_set(
+                name=name, namespace=ns,
+                body={"spec": {"replicas": replicas}})
+            return {"replicas": replicas}
+
+        if command == "restart_daemonset":
+            import datetime as _dt
+            ts = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+            self.apps.patch_namespaced_daemon_set(
+                name=name, namespace=ns,
+                body={"spec": {"template": {"metadata": {"annotations": {
+                    "kubectl.kubernetes.io/restartedAt": ts
+                }}}}})
+            return {"restartedAt": ts}
+
+        if command == "delete_pod":
+            self.core.delete_namespaced_pod(name=name, namespace=ns)
+            return {}
+
+        if command == "delete_job":
+            from kubernetes import client as _k8s
+            self.batch.delete_namespaced_job(
+                name=name, namespace=ns,
+                body=_k8s.V1DeleteOptions(propagation_policy="Foreground"))
+            return {}
+
+        if command == "suspend_cronjob":
+            suspend = bool(params.get("suspend", True))
+            self.batch.patch_namespaced_cron_job(
+                name=name, namespace=ns,
+                body={"spec": {"suspend": suspend}})
+            return {"suspend": suspend}
+
+        if command == "trigger_cronjob":
+            import datetime as _dt
+            from kubernetes import client as _k8s
+            cj = self.batch.read_namespaced_cron_job(name=name, namespace=ns)
+            ts_str = _dt.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            job_name = f"{name}-manual-{ts_str}"[:63]
+            job = _k8s.V1Job(
+                api_version="batch/v1",
+                kind="Job",
+                metadata=_k8s.V1ObjectMeta(
+                    name=job_name,
+                    namespace=ns,
+                    annotations={"cronjob.kubernetes.io/instantiate": "manual"},
+                ),
+                spec=cj.spec.job_template.spec,
+            )
+            self.batch.create_namespaced_job(namespace=ns, body=job)
+            return {"job_name": job_name}
+
+        raise ValueError(f"Unknown command: {command}")
+
+    def _ack_command(self, cmd_id: int, success: bool,
+                     result: Optional[Dict[str, Any]] = None) -> None:
+        for path in ["/api/agents/commands", "/api/agent/commands"]:
+            try:
+                resp = self._session.post(
+                    f"{self.platform_url}{path}/{cmd_id}/ack",
+                    json={"success": success, "result": result or {}},
+                    timeout=10,
+                    verify=False,
+                )
+                if resp.status_code == 200:
+                    return
+            except Exception as exc:
+                logger.debug("ack_command error (%s): %s", path, exc)
+
     # ── main loop ─────────────────────────────────────────────────────────────
 
     def run(self) -> None:
@@ -1530,6 +1884,12 @@ class ClusterAgent:
         hb_cycle = 0
 
         while True:
+            try:
+                # Execute any pending commands FIRST (low-latency writes)
+                self._poll_and_execute_commands()
+            except Exception as exc:
+                logger.error("Command poll error: %s", exc)
+
             try:
                 data = self.collect()
                 self.send(data)

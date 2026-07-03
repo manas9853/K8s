@@ -1,9 +1,10 @@
 """
 Workloads API - Kubernetes workload management endpoints
 Reads workload data from agent_metrics stored in Supabase/Postgres (db_manager).
-Scale/patch actions are executed directly via the Kubernetes API (k8s_client).
+Write actions are dispatched via the agent command queue (agent executes them
+inside the cluster) — the backend never calls the Kubernetes API directly.
 """
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -14,15 +15,27 @@ from database.db import db_manager
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Lazy import so module still loads when k8s is not configured
-def _get_apps_api():
-    try:
-        from services.k8s_client import k8s_client
-        if k8s_client and k8s_client.is_connected():
-            return k8s_client.get_apps_api()
-    except Exception:
-        pass
-    return None
+
+def _resolve_cluster(cluster_id: Optional[str]) -> str:
+    """Return the cluster_name to use for command enqueue / data lookup."""
+    if cluster_id:
+        return cluster_id
+    clusters = db_manager.get_all_clusters()
+    if not clusters:
+        raise HTTPException(status_code=503, detail="No registered clusters")
+    return clusters[0]["cluster_name"]
+
+
+def _enqueue(cluster_id: Optional[str], command: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    """Enqueue a command for the agent and return the command id."""
+    cluster_name = _resolve_cluster(cluster_id)
+    cmd_id = db_manager.enqueue_command(cluster_name, command, params)
+    if not cmd_id:
+        raise HTTPException(status_code=500, detail="Failed to enqueue command")
+    logger.info("Enqueued command %s id=%d cluster=%s params=%s",
+                command, cmd_id, cluster_name, params)
+    return {"command_id": cmd_id, "status": "pending",
+            "poll_url": f"/api/agents/commands/{cmd_id}"}
 
 
 # ---------------------------------------------------------------------------
@@ -304,43 +317,6 @@ async def list_statefulsets(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-class ScaleRequest(BaseModel):
-    replicas: int
-
-
-@router.post("/statefulsets/{namespace}/{name}/scale")
-async def scale_statefulset(
-    namespace: str,
-    name: str,
-    body: ScaleRequest,
-    cluster_id: Optional[str] = Query(None),
-):
-    """Scale a StatefulSet to the requested replica count by patching directly via the K8s API."""
-    if body.replicas < 0:
-        raise HTTPException(status_code=400, detail="replicas must be >= 0")
-
-    apps_v1 = _get_apps_api()
-    if apps_v1 is None:
-        raise HTTPException(
-            status_code=503,
-            detail="Kubernetes API not reachable from the backend. Ensure the backend pod has cluster credentials or a kubeconfig."
-        )
-
-    try:
-        from kubernetes import client as k8s_client_mod
-        patch = {"spec": {"replicas": body.replicas}}
-        apps_v1.patch_namespaced_stateful_set(
-            name=name,
-            namespace=namespace,
-            body=patch,
-        )
-        logger.info(f"Scaled StatefulSet {namespace}/{name} to {body.replicas} replicas")
-        return {"success": True, "name": name, "namespace": namespace, "replicas": body.replicas}
-    except Exception as e:
-        logger.error(f"Error scaling statefulset {namespace}/{name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
 @router.get("/daemonsets", response_model=List[DaemonSetInfo])
 async def list_daemonsets(
     namespace: Optional[str] = Query(None),
@@ -356,6 +332,7 @@ async def list_daemonsets(
         for ds in items:
             if namespace and ds.get("namespace") != namespace:
                 continue
+            created_at = ds.get("created_at", "")
             result.append(DaemonSetInfo(
                 name=ds.get("name", ""),
                 namespace=ds.get("namespace", ""),
@@ -364,11 +341,11 @@ async def list_daemonsets(
                 number_ready=ds.get("number_ready", 0),
                 number_available=ds.get("number_available", 0),
                 number_misscheduled=ds.get("number_misscheduled", 0),
-                age=ds.get("age", ""),
+                age=ds.get("age") or _format_age(created_at),
                 labels=ds.get("labels", {}),
                 selector=ds.get("selector", {}),
                 containers=ds.get("containers", []),
-                created_at=ds.get("created_at", ""),
+                created_at=created_at,
             ))
         logger.info(f"Found {len(result)} daemonsets")
         return result
@@ -392,6 +369,7 @@ async def list_jobs(
         for j in items:
             if namespace and j.get("namespace") != namespace:
                 continue
+            created_at = j.get("created_at", "")
             result.append(JobInfo(
                 name=j.get("name", ""),
                 namespace=j.get("namespace", ""),
@@ -403,12 +381,12 @@ async def list_jobs(
                 start_time=j.get("start_time"),
                 completion_time=j.get("completion_time"),
                 duration=j.get("duration"),
-                age=j.get("age", ""),
+                age=j.get("age") or _format_age(created_at),
                 labels=j.get("labels", {}),
                 selector=j.get("selector", {}),
                 containers=j.get("containers", []),
                 conditions=j.get("conditions", []),
-                created_at=j.get("created_at", ""),
+                created_at=created_at,
             ))
         logger.info(f"Found {len(result)} jobs")
         return result
@@ -432,6 +410,7 @@ async def list_cronjobs(
         for cj in items:
             if namespace and cj.get("namespace") != namespace:
                 continue
+            created_at = cj.get("created_at", "")
             result.append(CronJobInfo(
                 name=cj.get("name", ""),
                 namespace=cj.get("namespace", ""),
@@ -440,10 +419,10 @@ async def list_cronjobs(
                 active=cj.get("active", 0),
                 last_schedule_time=cj.get("last_schedule_time"),
                 last_successful_time=cj.get("last_successful_time"),
-                age=cj.get("age", ""),
+                age=cj.get("age") or _format_age(created_at),
                 labels=cj.get("labels", {}),
                 job_template=cj.get("job_template", {}),
-                created_at=cj.get("created_at", ""),
+                created_at=created_at,
             ))
         logger.info(f"Found {len(result)} cronjobs")
         return result
@@ -453,194 +432,111 @@ async def list_cronjobs(
 
 
 # ---------------------------------------------------------------------------
-# Write endpoints — mutate the real Kubernetes cluster
+# Write endpoints — all enqueue a command for the agent to execute
 # ---------------------------------------------------------------------------
 
+class ScaleRequest(BaseModel):
+    replicas: int
+
 class PatchResourcesRequest(BaseModel):
-    """Patch resource requests/limits on a deployment container."""
-    container_name: Optional[str] = None   # if None, patches the first container
-    cpu_request:    Optional[str] = None   # e.g. "200m"
+    container_name: Optional[str] = None
+    cpu_request:    Optional[str] = None
     cpu_limit:      Optional[str] = None
-    memory_request: Optional[str] = None   # e.g. "256Mi"
+    memory_request: Optional[str] = None
     memory_limit:   Optional[str] = None
 
+class SuspendRequest(BaseModel):
+    suspend: bool
+
+
+# ── Deployments ──────────────────────────────────────────────────────────────
 
 @router.post("/deployments/{namespace}/{name}/scale")
-async def scale_deployment(
-    namespace: str,
-    name: str,
-    body: ScaleRequest,
-    cluster_id: Optional[str] = Query(None),
-):
-    """Scale a Deployment to the requested replica count via the K8s API."""
+async def scale_deployment(namespace: str, name: str, body: ScaleRequest,
+                           cluster_id: Optional[str] = Query(None)):
     if body.replicas < 0:
         raise HTTPException(status_code=400, detail="replicas must be >= 0")
-
-    apps_v1 = _get_apps_api()
-    if apps_v1 is None:
-        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
-
-    try:
-        apps_v1.patch_namespaced_deployment(
-            name=name,
-            namespace=namespace,
-            body={"spec": {"replicas": body.replicas}},
-        )
-        logger.info(f"Scaled Deployment {namespace}/{name} to {body.replicas} replicas")
-        return {"success": True, "name": name, "namespace": namespace, "replicas": body.replicas}
-    except Exception as e:
-        logger.error(f"Error scaling deployment {namespace}/{name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return _enqueue(cluster_id, "scale_deployment",
+                    {"namespace": namespace, "name": name, "replicas": body.replicas})
 
 
 @router.post("/deployments/{namespace}/{name}/patch-resources")
-async def patch_deployment_resources(
-    namespace: str,
-    name: str,
-    body: PatchResourcesRequest,
-    cluster_id: Optional[str] = Query(None),
-):
-    """
-    Update CPU/memory requests and limits on a Deployment's container.
-    Only the fields provided in the request body are changed.
-    """
-    apps_v1 = _get_apps_api()
-    if apps_v1 is None:
-        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
-
-    # Build resource dict — only include fields that were supplied
-    resource_patch: Dict[str, Any] = {}
-    if body.cpu_request or body.memory_request:
-        resource_patch["requests"] = {
-            k: v for k, v in {
-                "cpu": body.cpu_request,
-                "memory": body.memory_request,
-            }.items() if v is not None
-        }
-    if body.cpu_limit or body.memory_limit:
-        resource_patch["limits"] = {
-            k: v for k, v in {
-                "cpu": body.cpu_limit,
-                "memory": body.memory_limit,
-            }.items() if v is not None
-        }
-
-    if not resource_patch:
+async def patch_deployment_resources(namespace: str, name: str, body: PatchResourcesRequest,
+                                     cluster_id: Optional[str] = Query(None)):
+    params: Dict[str, Any] = {"namespace": namespace, "name": name}
+    if body.container_name: params["container_name"] = body.container_name
+    if body.cpu_request:    params["cpu_request"]    = body.cpu_request
+    if body.cpu_limit:      params["cpu_limit"]      = body.cpu_limit
+    if body.memory_request: params["memory_request"] = body.memory_request
+    if body.memory_limit:   params["memory_limit"]   = body.memory_limit
+    if len(params) == 2:
         raise HTTPException(status_code=400, detail="No resource fields to patch")
-
-    # Strategic merge patch — K8s merges by container name
-    container_entry: Dict[str, Any] = {"resources": resource_patch}
-    if body.container_name:
-        container_entry["name"] = body.container_name
-
-    patch_body = {
-        "spec": {
-            "template": {
-                "spec": {
-                    "containers": [container_entry]
-                }
-            }
-        }
-    }
-
-    try:
-        apps_v1.patch_namespaced_deployment(
-            name=name,
-            namespace=namespace,
-            body=patch_body,
-        )
-        logger.info(f"Patched resources on Deployment {namespace}/{name}: {resource_patch}")
-        return {"success": True, "name": name, "namespace": namespace, "patched": resource_patch}
-    except Exception as e:
-        logger.error(f"Error patching deployment {namespace}/{name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return _enqueue(cluster_id, "patch_deployment_resources", params)
 
 
 @router.post("/deployments/{namespace}/{name}/restart")
-async def restart_deployment(
-    namespace: str,
-    name: str,
-    cluster_id: Optional[str] = Query(None),
-):
-    """
-    Trigger a rolling restart of a Deployment by patching the pod-template
-    annotation `kubectl.kubernetes.io/restartedAt`.
-    """
-    apps_v1 = _get_apps_api()
-    if apps_v1 is None:
-        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
-
-    import datetime as _dt
-    restart_time = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
-    patch_body = {
-        "spec": {
-            "template": {
-                "metadata": {
-                    "annotations": {
-                        "kubectl.kubernetes.io/restartedAt": restart_time
-                    }
-                }
-            }
-        }
-    }
-
-    try:
-        apps_v1.patch_namespaced_deployment(
-            name=name,
-            namespace=namespace,
-            body=patch_body,
-        )
-        logger.info(f"Triggered rolling restart of Deployment {namespace}/{name}")
-        return {"success": True, "name": name, "namespace": namespace, "restartedAt": restart_time}
-    except Exception as e:
-        logger.error(f"Error restarting deployment {namespace}/{name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+async def restart_deployment(namespace: str, name: str,
+                             cluster_id: Optional[str] = Query(None)):
+    return _enqueue(cluster_id, "restart_deployment",
+                    {"namespace": namespace, "name": name})
 
 
 @router.delete("/deployments/{namespace}/{name}")
-async def delete_deployment(
-    namespace: str,
-    name: str,
-    cluster_id: Optional[str] = Query(None),
-):
-    """Delete a Deployment from the cluster."""
-    apps_v1 = _get_apps_api()
-    if apps_v1 is None:
-        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
-
-    try:
-        apps_v1.delete_namespaced_deployment(name=name, namespace=namespace)
-        logger.info(f"Deleted Deployment {namespace}/{name}")
-        return {"success": True, "name": name, "namespace": namespace}
-    except Exception as e:
-        logger.error(f"Error deleting deployment {namespace}/{name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+async def delete_deployment(namespace: str, name: str,
+                            cluster_id: Optional[str] = Query(None)):
+    return _enqueue(cluster_id, "delete_deployment",
+                    {"namespace": namespace, "name": name})
 
 
 @router.delete("/pods/{namespace}/{name}")
-async def delete_pod(
-    namespace: str,
-    name: str,
-    cluster_id: Optional[str] = Query(None),
-):
-    """
-    Delete (evict) a Pod from the cluster.
-    The owning controller (Deployment/RS) will reschedule it immediately.
-    """
-    apps_v1 = _get_apps_api()
-    if apps_v1 is None:
-        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
+async def delete_pod(namespace: str, name: str,
+                     cluster_id: Optional[str] = Query(None)):
+    return _enqueue(cluster_id, "delete_pod",
+                    {"namespace": namespace, "name": name})
 
-    try:
-        from services.k8s_client import k8s_client as _kc
-        if _kc is None:
-            raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
-        core_v1 = _kc.get_core_api()
-        core_v1.delete_namespaced_pod(name=name, namespace=namespace)
-        logger.info(f"Deleted Pod {namespace}/{name}")
-        return {"success": True, "name": name, "namespace": namespace}
-    except Exception as e:
-        logger.error(f"Error deleting pod {namespace}/{name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+
+# ── StatefulSets ─────────────────────────────────────────────────────────────
+
+@router.post("/statefulsets/{namespace}/{name}/scale")
+async def scale_statefulset(namespace: str, name: str, body: ScaleRequest,
+                            cluster_id: Optional[str] = Query(None)):
+    if body.replicas < 0:
+        raise HTTPException(status_code=400, detail="replicas must be >= 0")
+    return _enqueue(cluster_id, "scale_statefulset",
+                    {"namespace": namespace, "name": name, "replicas": body.replicas})
+
+
+# ── DaemonSets ───────────────────────────────────────────────────────────────
+
+@router.post("/daemonsets/{namespace}/{name}/restart")
+async def restart_daemonset(namespace: str, name: str,
+                            cluster_id: Optional[str] = Query(None)):
+    return _enqueue(cluster_id, "restart_daemonset",
+                    {"namespace": namespace, "name": name})
+
+
+# ── Jobs ─────────────────────────────────────────────────────────────────────
+
+@router.delete("/jobs/{namespace}/{name}")
+async def delete_job(namespace: str, name: str,
+                     cluster_id: Optional[str] = Query(None)):
+    return _enqueue(cluster_id, "delete_job",
+                    {"namespace": namespace, "name": name})
+
+
+# ── CronJobs ─────────────────────────────────────────────────────────────────
+
+@router.patch("/cronjobs/{namespace}/{name}/suspend")
+async def suspend_resume_cronjob(namespace: str, name: str, body: SuspendRequest,
+                                 cluster_id: Optional[str] = Query(None)):
+    return _enqueue(cluster_id, "suspend_cronjob",
+                    {"namespace": namespace, "name": name, "suspend": body.suspend})
+
+
+@router.post("/cronjobs/{namespace}/{name}/trigger")
+async def trigger_cronjob(namespace: str, name: str,
+                           cluster_id: Optional[str] = Query(None)):
+    return _enqueue(cluster_id, "trigger_cronjob",
+                    {"namespace": namespace, "name": name})
 
 # Made with Bob

@@ -279,4 +279,38 @@ async def agent_receiver_health():
         "timestamp":            datetime.utcnow().isoformat(),
     }
 
+
+# ── /commands — agent polls for work, backend enqueues write actions ──────────
+
+@router.get("/commands/pending")
+async def get_pending_commands(
+    cluster_name: str,
+    token: str = Depends(verify_token),
+):
+    """Agent polls this endpoint every cycle to get pending write commands."""
+    commands = db_manager.get_pending_commands(cluster_name)
+    return {"commands": commands}
+
+
+@router.post("/commands/{command_id}/ack")
+async def ack_command(
+    command_id: int,
+    body: Dict[str, Any],
+    token: str = Depends(verify_token),
+):
+    """Agent calls this after executing a command to report success/failure."""
+    success = body.get("success", False)
+    result  = body.get("result", {})
+    db_manager.ack_command(command_id, success, result)
+    return {"status": "ok"}
+
+
+@router.get("/commands/{command_id}")
+async def get_command_status(command_id: int):
+    """Frontend long-polls to check if a command has been executed."""
+    cmd = db_manager.get_command(command_id)
+    if not cmd:
+        raise HTTPException(status_code=404, detail="Command not found")
+    return cmd
+
 # Made with Bob

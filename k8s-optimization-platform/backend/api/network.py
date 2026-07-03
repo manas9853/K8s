@@ -7,6 +7,7 @@ when the cluster is unreachable — that is acceptable for EC2.
 from fastapi import APIRouter, HTTPException, Query
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
+from datetime import datetime, timezone
 import logging
 
 from database.db import db_manager
@@ -14,6 +15,27 @@ from utils.dummy_data import get_dummy_data
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _format_age(ts: Optional[str]) -> str:
+    if not ts:
+        return ""
+    try:
+        created = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        delta = datetime.now(timezone.utc) - created
+        minutes = max(int(delta.total_seconds() // 60), 0)
+        if minutes < 60:    return f"{minutes}m"
+        hours = minutes // 60
+        if hours < 24:      return f"{hours}h"
+        days = hours // 24
+        if days < 30:       return f"{days}d"
+        months = days // 30
+        if months < 12:     return f"{months}mo"
+        return f"{months // 12}y"
+    except Exception:
+        return ""
 
 
 # ---------------------------------------------------------------------------
@@ -26,6 +48,7 @@ class ServiceModel(BaseModel):
     type: str
     cluster_ip: Optional[str] = None
     external_ips: List[str] = []
+    load_balancer_ips: List[str] = []
     ports: List[Dict[str, Any]] = []
     selector: Dict[str, str] = {}
     age: str = ""
@@ -147,19 +170,21 @@ async def get_services(
         for svc in items:
             if namespace and svc.get("namespace") != namespace:
                 continue
+            created = svc.get("created") or svc.get("created_at", "")
             result.append(ServiceModel(
                 name=svc.get("name", ""),
                 namespace=svc.get("namespace", ""),
                 type=svc.get("type", "ClusterIP"),
                 cluster_ip=svc.get("cluster_ip"),
-                external_ips=svc.get("external_ips", []),
+                external_ips=svc.get("external_ips") or [],
+                load_balancer_ips=svc.get("load_balancer_ips") or [],
                 ports=svc.get("ports", []),
                 selector=svc.get("selector", {}),
-                age=svc.get("age", ""),
+                age=_format_age(created),
                 endpoints_count=svc.get("endpoints_count", 0),
                 labels=svc.get("labels", {}),
                 annotations=svc.get("annotations", {}),
-                created_at=svc.get("created_at", ""),
+                created_at=created,
                 session_affinity=svc.get("session_affinity"),
                 load_balancer_ip=svc.get("load_balancer_ip"),
                 external_name=svc.get("external_name"),

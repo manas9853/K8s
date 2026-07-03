@@ -61,9 +61,11 @@ interface Service {
   type: string;
   cluster_ip: string;
   external_ips: string[];
+  load_balancer_ips: string[];
   ports: ServicePort[];
   selector: { [key: string]: string };
   age: string;
+  endpoints_count: number;
   labels: { [key: string]: string };
   annotations: { [key: string]: string };
   created_at: string;
@@ -645,54 +647,98 @@ const Services: React.FC = () => {
       </Paper>
 
       <TableContainer component={Paper}>
-        <Table>
+        <Table size="small">
           <TableHead>
             <TableRow>
               <TableCell>Type</TableCell>
-              <TableCell>Name</TableCell>
               <TableCell>Namespace</TableCell>
+              <TableCell>Name</TableCell>
               <TableCell>Cluster IP</TableCell>
-              <TableCell>External Access</TableCell>
+              <TableCell>External IP</TableCell>
               <TableCell>Ports</TableCell>
+              <TableCell>Selector</TableCell>
               <TableCell>Age</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredServices.map((service) => (
-              <TableRow
-                key={`${service.namespace}-${service.name}`}
-                hover
-                onClick={() => handleRowClick(service)}
-                sx={{ cursor: 'pointer' }}
-              >
-                <TableCell>
-                  <Tooltip title={service.type}>
+            {filteredServices.map((service) => {
+              // Compute the external IP to show (like kubectl get svc)
+              const externalIP =
+                (service.load_balancer_ips && service.load_balancer_ips.length > 0)
+                  ? service.load_balancer_ips.join(', ')
+                  : service.external_ips.length > 0
+                    ? service.external_ips.join(', ')
+                    : '<none>';
+
+              // Format ports like kubectl: port:nodePort/protocol
+              const portStr = service.ports.map(p =>
+                p.node_port
+                  ? `${p.port}:${p.node_port}/${p.protocol}`
+                  : `${p.port}/${p.protocol}`
+              ).join(', ');
+
+              // Selector like: app=foo,tier=db
+              const selectorStr = Object.entries(service.selector || {})
+                .map(([k, v]) => `${k}=${v}`).join(', ') || '<none>';
+
+              return (
+                <TableRow
+                  key={`${service.namespace}-${service.name}`}
+                  hover
+                  onClick={() => handleRowClick(service)}
+                  sx={{ cursor: 'pointer' }}
+                >
+                  <TableCell>
                     <Chip
                       icon={getTypeIcon(service.type)}
                       label={service.type}
                       color={getTypeColor(service.type)}
                       size="small"
                     />
-                  </Tooltip>
-                </TableCell>
-                <TableCell>{service.name}</TableCell>
-                <TableCell>
-                  <Chip label={service.namespace} size="small" />
-                </TableCell>
-                <TableCell>{service.cluster_ip}</TableCell>
-                <TableCell>
-                  {isExternallyAccessible(service) ? (
-                    <Chip label="External" color="warning" size="small" icon={<PublicIcon />} />
-                  ) : (
-                    <Chip label="Internal" size="small" icon={<LockIcon />} />
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Chip label={service.ports.length} size="small" />
-                </TableCell>
-                <TableCell>{service.age}</TableCell>
-              </TableRow>
-            ))}
+                  </TableCell>
+                  <TableCell>
+                    <Chip label={service.namespace} size="small" variant="outlined" />
+                  </TableCell>
+                  <TableCell sx={{ fontWeight: 500 }}>{service.name}</TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                    {service.cluster_ip || '<none>'}
+                  </TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
+                    {externalIP !== '<none>' ? (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        <PublicIcon sx={{ fontSize: 14, color: 'warning.main' }} />
+                        <Typography variant="body2" fontFamily="monospace">{externalIP}</Typography>
+                      </Box>
+                    ) : (
+                      <Typography variant="body2" color="text.disabled">&lt;none&gt;</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem', maxWidth: 260 }}>
+                    <Tooltip title={portStr} arrow>
+                      <Typography
+                        variant="body2"
+                        fontFamily="monospace"
+                        sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}
+                      >
+                        {portStr || '—'}
+                      </Typography>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell sx={{ maxWidth: 200 }}>
+                    <Tooltip title={selectorStr} arrow>
+                      <Typography
+                        variant="body2"
+                        color="text.secondary"
+                        sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 200, fontSize: '0.75rem' }}
+                      >
+                        {selectorStr}
+                      </Typography>
+                    </Tooltip>
+                  </TableCell>
+                  <TableCell>{service.age}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>

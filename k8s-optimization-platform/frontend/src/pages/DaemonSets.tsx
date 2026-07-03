@@ -43,6 +43,7 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
+  Snackbar,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -115,6 +116,10 @@ const DaemonSets: React.FC = () => {
   const [selectedDaemonSet, setSelectedDaemonSet] = useState<DaemonSet | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(0);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ label: string; fn: () => Promise<void> } | null>(null);
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' });
 
   useEffect(() => { setSelectedClusterId(activeClusterId || 'all'); }, [activeClusterId]);
 
@@ -289,14 +294,65 @@ const DaemonSets: React.FC = () => {
     return recommendations;
   };
 
-  const handleAutoFix = (ds: DaemonSet, issue: string) => {
-    console.log(`Auto-fixing ${issue} for ${ds.name}`);
-    alert(`Would auto-fix: ${issue} for ${ds.name}`);
+  const showSnack = (message: string, severity: 'success' | 'error' = 'success') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  const askConfirm = (label: string, fn: () => Promise<void>) => {
+    setConfirmAction({ label, fn });
+    setConfirmOpen(true);
+  };
+
+  const runConfirmed = async () => {
+    if (!confirmAction) return;
+    setConfirmOpen(false);
+    setActionLoading(true);
+    try {
+      await confirmAction.fn();
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  };
+
+  /** Enqueue a command, then poll until done/failed (max 60s). */
+  const runCommand = async (url: string, opts: RequestInit = {}): Promise<void> => {
+    const res = await fetch(url, opts);
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `HTTP ${res.status}`);
+
+    const cmdId = body.command_id;
+    if (!cmdId) return; // already executed synchronously
+
+    showSnack('Command queued — waiting for agent…');
+    const deadline = Date.now() + 90_000;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2500));
+      const poll = await fetch(`${API_BASE_URL}/agents/commands/${cmdId}`).catch(() => null);
+      if (!poll) continue;
+      const status = await poll.json().catch(() => ({}));
+      if (status.status === 'done') return;
+      if (status.status === 'failed') throw new Error(status.result?.error || 'Command failed');
+    }
+    throw new Error('Timed out waiting for agent response');
   };
 
   const handleRestartPods = (ds: DaemonSet) => {
-    console.log(`Restarting pods for ${ds.name}`);
-    alert(`Would restart all pods for ${ds.name}`);
+    askConfirm(
+      `Restart all pods for DaemonSet "${ds.name}" in namespace "${ds.namespace}"?`,
+      async () => {
+        await runCommand(
+          `${API_BASE_URL}/v1/workloads/daemonsets/${ds.namespace}/${ds.name}/restart`,
+          { method: 'POST' }
+        );
+        showSnack(`Rolling restart triggered for ${ds.name}`);
+        fetchDaemonSets(selectedClusterId);
+      }
+    );
+  };
+
+  const handleAutoFix = (ds: DaemonSet, issue: string) => {
+    showSnack(`Auto-fix for "${issue}" is not yet automated — see Recommendations for manual steps.`, 'error');
   };
 
   const filteredDaemonSets = daemonsets.filter(ds =>
@@ -666,14 +722,15 @@ const DaemonSets: React.FC = () => {
                               Recommended Action:
                             </Typography>
                             <Typography variant="body2">{inv.action}</Typography>
-                            <Button 
-                              size="small" 
-                              variant="contained" 
-                              sx={{ mt: 1 }}
-                              onClick={() => handleAutoFix(selectedDaemonSet, inv.title)}
-                            >
-                              Auto-Fix
-                            </Button>
+                            <Button
+                                size="small"
+                                variant="contained"
+                                sx={{ mt: 1 }}
+                                onClick={() => handleAutoFix(selectedDaemonSet, inv.title)}
+                                disabled={actionLoading}
+                              >
+                                Auto-Fix
+                              </Button>
                           </Box>
                         )}
                       </AccordionDetails>
@@ -724,11 +781,12 @@ const DaemonSets: React.FC = () => {
                         <Typography variant="body2" paragraph>{rec.impact}</Typography>
                         <Typography variant="caption" color="text.secondary">Action:</Typography>
                         <Typography variant="body2">{rec.action}</Typography>
-                        <Button 
-                          size="small" 
-                          variant="outlined" 
+                        <Button
+                          size="small"
+                          variant="outlined"
                           sx={{ mt: 1 }}
                           onClick={() => handleAutoFix(selectedDaemonSet, rec.title)}
+                          disabled={actionLoading}
                         >
                           Apply Recommendation
                         </Button>
@@ -816,49 +874,19 @@ const DaemonSets: React.FC = () => {
                       <Card variant="outlined">
                         <CardContent>
                           <Typography variant="subtitle2" gutterBottom>Pod Management</Typography>
-                          <Button 
-                            variant="contained" 
-                            fullWidth 
+                          <Button
+                            variant="contained"
+                            fullWidth
                             sx={{ mb: 1 }}
                             onClick={() => handleRestartPods(selectedDaemonSet)}
+                            disabled={actionLoading}
+                            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
                           >
                             Restart All Pods
                           </Button>
                           <Typography variant="caption" color="text.secondary">
-                            Restarts pods on all {selectedDaemonSet.desired_number_scheduled} nodes
+                            Rolling restart on all {selectedDaemonSet.desired_number_scheduled} nodes — pods are replaced one at a time
                           </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Troubleshooting</Typography>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            View Pod Logs (All Nodes)
-                          </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            View Events
-                          </Button>
-                          <Button variant="outlined" fullWidth>
-                            Check Node Taints
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Automated Fixes</Typography>
-                          <Button variant="contained" color="success" fullWidth sx={{ mb: 1 }}>
-                            Apply All Safe Recommendations
-                          </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            Fix Resource Limits
-                          </Button>
-                          <Button variant="outlined" fullWidth>
-                            Update Image Tags
-                          </Button>
                         </CardContent>
                       </Card>
                     </Grid>
@@ -872,6 +900,30 @@ const DaemonSets: React.FC = () => {
           </>
         )}
       </Dialog>
+
+      {/* Confirm dialog */}
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Confirm Action</DialogTitle>
+        <DialogContent>
+          <Typography>{confirmAction?.label}</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="warning" onClick={runConfirmed}>Confirm</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar feedback */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar(s => ({ ...s, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity={snackbar.severity} onClose={() => setSnackbar(s => ({ ...s, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

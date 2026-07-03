@@ -127,6 +127,24 @@ class DatabaseManager:
                 ON agent_metrics(timestamp DESC)
             """)
 
+            # ── agent_commands — write-back queue ─────────────────────────────
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS agent_commands (
+                    id           BIGSERIAL PRIMARY KEY,
+                    cluster_name TEXT NOT NULL,
+                    command      TEXT NOT NULL,
+                    params       JSONB NOT NULL DEFAULT '{}',
+                    status       TEXT NOT NULL DEFAULT 'pending',
+                    result       JSONB,
+                    created_at   TEXT NOT NULL,
+                    updated_at   TEXT NOT NULL
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_agent_commands_cluster_status
+                ON agent_commands(cluster_name, status)
+            """)
+
             conn.commit()
             logger.info("Schema init/migration complete")
 
@@ -383,6 +401,91 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting clusters with recent metrics: {e}")
             return []
+
+    # ── Command queue operations ───────────────────────────────────────────────
+
+    def enqueue_command(self, cluster_name: str, command: str,
+                        params: Dict[str, Any]) -> Optional[int]:
+        """Insert a pending command and return its id."""
+        try:
+            now = datetime.utcnow().isoformat()
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO agent_commands (cluster_name, command, params, status, created_at, updated_at)
+                    VALUES (%s, %s, %s, 'pending', %s, %s)
+                    RETURNING id
+                """, (cluster_name, command, json.dumps(params), now, now))
+                row = cur.fetchone()
+                conn.commit()
+                return row["id"] if row else None
+        except Exception as e:
+            logger.error(f"enqueue_command error: {e}")
+            return None
+
+    def get_pending_commands(self, cluster_name: str, limit: int = 20) -> List[Dict[str, Any]]:
+        """Fetch pending commands for the agent to execute."""
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT id, command, params
+                    FROM agent_commands
+                    WHERE cluster_name = %s AND status = 'pending'
+                    ORDER BY id ASC
+                    LIMIT %s
+                """, (cluster_name, limit))
+                rows = cur.fetchall()
+                result = []
+                for r in rows:
+                    params = r["params"]
+                    if isinstance(params, str):
+                        params = json.loads(params)
+                    result.append({"id": r["id"], "command": r["command"], "params": params})
+                return result
+        except Exception as e:
+            logger.error(f"get_pending_commands error: {e}")
+            return []
+
+    def ack_command(self, command_id: int, success: bool,
+                    result: Optional[Dict[str, Any]] = None) -> bool:
+        """Mark a command as done or failed with an optional result payload."""
+        try:
+            now = datetime.utcnow().isoformat()
+            status = "done" if success else "failed"
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE agent_commands
+                    SET status = %s, result = %s, updated_at = %s
+                    WHERE id = %s
+                """, (status, json.dumps(result or {}), now, command_id))
+                conn.commit()
+                return True
+        except Exception as e:
+            logger.error(f"ack_command error: {e}")
+            return False
+
+    def get_command(self, command_id: int) -> Optional[Dict[str, Any]]:
+        """Fetch a single command row (used by the backend to poll for result)."""
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT id, cluster_name, command, params, status, result, created_at, updated_at
+                    FROM agent_commands WHERE id = %s
+                """, (command_id,))
+                row = cur.fetchone()
+                if not row:
+                    return None
+                d = dict(row)
+                for field in ("params", "result"):
+                    if isinstance(d.get(field), str):
+                        d[field] = json.loads(d[field])
+                return d
+        except Exception as e:
+            logger.error(f"get_command error: {e}")
+            return None
 
     def close(self):
         if self._pool:

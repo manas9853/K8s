@@ -332,41 +332,119 @@ class ComprehensiveClusterAgent:
                     "created_at": created_iso,
                 })
             
+            def _containers_from_spec(spec):
+                result = []
+                for c in (spec.containers or []):
+                    ports = []
+                    if c.ports:
+                        for p in c.ports:
+                            ports.append({"containerPort": p.container_port, "protocol": p.protocol or "TCP"})
+                    req = {}
+                    lim = {}
+                    if c.resources:
+                        if c.resources.requests:
+                            req = dict(c.resources.requests)
+                        if c.resources.limits:
+                            lim = dict(c.resources.limits)
+                    result.append({
+                        "name": c.name,
+                        "image": c.image or "",
+                        "ports": ports,
+                        "resources": {"requests": req, "limits": lim},
+                    })
+                return result
+
             daemonset_list = []
             for ds in daemonsets.items:
+                created_at = ds.metadata.creation_timestamp.isoformat() if ds.metadata.creation_timestamp else None
+                ds_containers = _containers_from_spec(ds.spec.template.spec) if ds.spec and ds.spec.template and ds.spec.template.spec else []
+                selector = (ds.spec.selector.match_labels or {}) if ds.spec and ds.spec.selector else {}
                 daemonset_list.append({
-                    "name": ds.metadata.name,
-                    "namespace": ds.metadata.namespace,
-                    "desired": ds.status.desired_number_scheduled,
-                    "current": ds.status.current_number_scheduled,
-                    "ready": ds.status.number_ready,
-                    "labels": ds.metadata.labels or {},
-                    "created": ds.metadata.creation_timestamp.isoformat() if ds.metadata.creation_timestamp else None
+                    "name":                      ds.metadata.name,
+                    "namespace":                 ds.metadata.namespace,
+                    "desired_number_scheduled":  ds.status.desired_number_scheduled or 0,
+                    "current_number_scheduled":  ds.status.current_number_scheduled or 0,
+                    "number_ready":              ds.status.number_ready or 0,
+                    "number_available":          ds.status.number_available or 0,
+                    "number_misscheduled":       ds.status.number_misscheduled or 0,
+                    "labels":                    ds.metadata.labels or {},
+                    "selector":                  selector,
+                    "containers":                ds_containers,
+                    "created_at":                created_at,
                 })
             
             job_list = []
             for j in jobs.items:
+                created_at = j.metadata.creation_timestamp.isoformat() if j.metadata.creation_timestamp else None
+                start_time = j.status.start_time.isoformat() if j.status.start_time else None
+                completion_time = j.status.completion_time.isoformat() if j.status.completion_time else None
+                duration = None
+                if start_time and completion_time:
+                    try:
+                        from datetime import datetime as _dt
+                        t0 = _dt.fromisoformat(start_time.replace("Z", "+00:00"))
+                        t1 = _dt.fromisoformat(completion_time.replace("Z", "+00:00"))
+                        duration = str(int((t1 - t0).total_seconds()))
+                    except Exception:
+                        pass
+                elif start_time:
+                    try:
+                        from datetime import datetime as _dt, timezone as _tz
+                        t0 = _dt.fromisoformat(start_time.replace("Z", "+00:00"))
+                        duration = str(int((_dt.now(_tz.utc) - t0).total_seconds()))
+                    except Exception:
+                        pass
+                job_containers = _containers_from_spec(j.spec.template.spec) if j.spec and j.spec.template and j.spec.template.spec else []
+                selector = (j.spec.selector.match_labels or {}) if j.spec and j.spec.selector else {}
+                conditions = []
+                for cond in (j.status.conditions or []):
+                    conditions.append({
+                        "type": cond.type,
+                        "status": cond.status,
+                        "reason": cond.reason or "",
+                        "message": cond.message or "",
+                        "last_update_time": cond.last_transition_time.isoformat() if cond.last_transition_time else None,
+                    })
                 job_list.append({
-                    "name": j.metadata.name,
-                    "namespace": j.metadata.namespace,
-                    "completions": j.spec.completions,
-                    "succeeded": j.status.succeeded or 0,
-                    "failed": j.status.failed or 0,
-                    "active": j.status.active or 0,
-                    "labels": j.metadata.labels or {},
-                    "created": j.metadata.creation_timestamp.isoformat() if j.metadata.creation_timestamp else None
+                    "name":            j.metadata.name,
+                    "namespace":       j.metadata.namespace,
+                    "completions":     j.spec.completions,
+                    "parallelism":     j.spec.parallelism,
+                    "active":          j.status.active or 0,
+                    "succeeded":       j.status.succeeded or 0,
+                    "failed":          j.status.failed or 0,
+                    "start_time":      start_time,
+                    "completion_time": completion_time,
+                    "duration":        duration,
+                    "labels":          j.metadata.labels or {},
+                    "selector":        selector,
+                    "containers":      job_containers,
+                    "conditions":      conditions,
+                    "created_at":      created_at,
                 })
             
             cronjob_list = []
             for cj in cronjobs.items:
+                created_at = cj.metadata.creation_timestamp.isoformat() if cj.metadata.creation_timestamp else None
+                jt_spec = cj.spec.job_template.spec if cj.spec and cj.spec.job_template and cj.spec.job_template.spec else None
+                jt_containers = _containers_from_spec(jt_spec.template.spec) if jt_spec and jt_spec.template and jt_spec.template.spec else []
+                job_template = {
+                    "completions": jt_spec.completions if jt_spec else None,
+                    "parallelism": jt_spec.parallelism if jt_spec else None,
+                    "backoff_limit": jt_spec.backoff_limit if jt_spec and jt_spec.backoff_limit is not None else 6,
+                    "containers": jt_containers,
+                }
                 cronjob_list.append({
-                    "name": cj.metadata.name,
-                    "namespace": cj.metadata.namespace,
-                    "schedule": cj.spec.schedule,
-                    "suspend": cj.spec.suspend or False,
-                    "last_schedule": cj.status.last_schedule_time.isoformat() if cj.status.last_schedule_time else None,
-                    "labels": cj.metadata.labels or {},
-                    "created": cj.metadata.creation_timestamp.isoformat() if cj.metadata.creation_timestamp else None
+                    "name":                cj.metadata.name,
+                    "namespace":           cj.metadata.namespace,
+                    "schedule":            cj.spec.schedule,
+                    "suspend":             cj.spec.suspend or False,
+                    "active":              len(cj.status.active or []),
+                    "last_schedule_time":  cj.status.last_schedule_time.isoformat() if cj.status.last_schedule_time else None,
+                    "last_successful_time": cj.status.last_successful_time.isoformat() if cj.status.last_successful_time else None,
+                    "labels":              cj.metadata.labels or {},
+                    "job_template":        job_template,
+                    "created_at":          created_at,
                 })
             
             return {

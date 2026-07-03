@@ -55,6 +55,9 @@ interface PVC {
   status: string;
   volume: string;
   capacity: string;
+  used_capacity: string;
+  free_capacity: string;
+  utilization_percent: number;
   access_modes: string[];
   storage_class: string;
   age: string;
@@ -62,7 +65,7 @@ interface PVC {
   annotations: { [key: string]: string };
   created_at: string;
   volume_mode?: string;
-  used_by_pods?: string[];
+  used_by_pods: string[];
 }
 
 interface Investigation {
@@ -634,7 +637,9 @@ const PVCs: React.FC = () => {
               <TableCell>Status</TableCell>
               <TableCell>Name</TableCell>
               <TableCell>Namespace</TableCell>
-              <TableCell>Capacity</TableCell>
+              <TableCell>Provisioned</TableCell>
+              <TableCell>Used</TableCell>
+              <TableCell>Free</TableCell>
               <TableCell>Storage Class</TableCell>
               <TableCell>Access Modes</TableCell>
               <TableCell>Used By</TableCell>
@@ -642,7 +647,10 @@ const PVCs: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredPVCs.map((pvc) => (
+            {filteredPVCs.map((pvc) => {
+              const hasUsage = pvc.used_capacity !== 'N/A' && pvc.utilization_percent > 0;
+              const barColor = pvc.utilization_percent >= 85 ? 'error' : pvc.utilization_percent >= 60 ? 'warning' : 'primary';
+              return (
               <TableRow
                 key={`${pvc.namespace}-${pvc.name}`}
                 hover
@@ -658,7 +666,37 @@ const PVCs: React.FC = () => {
                 <TableCell>
                   <Chip label={pvc.namespace} size="small" />
                 </TableCell>
-                <TableCell>{pvc.capacity}</TableCell>
+                <TableCell>
+                  <Typography variant="body2" fontWeight={500}>{pvc.capacity}</Typography>
+                </TableCell>
+                <TableCell>
+                  {hasUsage ? (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 130 }}>
+                      <Box sx={{ flex: 1 }}>
+                        <LinearProgress
+                          variant="determinate"
+                          value={Math.min(pvc.utilization_percent, 100)}
+                          sx={{ height: 6, borderRadius: 3 }}
+                          color={barColor}
+                        />
+                      </Box>
+                      <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
+                        {pvc.used_capacity} ({pvc.utilization_percent.toFixed(1)}%)
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Chip label="N/A" size="small" variant="outlined" />
+                  )}
+                </TableCell>
+                <TableCell>
+                  {hasUsage ? (
+                    <Typography variant="body2" color={pvc.utilization_percent >= 85 ? 'error' : 'text.secondary'}>
+                      {pvc.free_capacity}
+                    </Typography>
+                  ) : (
+                    <Typography variant="body2" color="success.main">{pvc.free_capacity}</Typography>
+                  )}
+                </TableCell>
                 <TableCell>{pvc.storage_class || 'default'}</TableCell>
                 <TableCell>
                   {pvc.access_modes.map(mode => (
@@ -666,15 +704,28 @@ const PVCs: React.FC = () => {
                   ))}
                 </TableCell>
                 <TableCell>
-                  <Chip
-                    label={pvc.used_by_pods?.length || 0}
-                    size="small"
-                    color={pvc.used_by_pods && pvc.used_by_pods.length > 0 ? 'success' : 'default'}
-                  />
+                  {pvc.used_by_pods.length === 0 ? (
+                    <Tooltip title="Not mounted by any pod — potential cost saving" arrow>
+                      <Chip label="Not Bound" size="small" color="warning" />
+                    </Tooltip>
+                  ) : (
+                    <Tooltip title={pvc.used_by_pods.join(', ')} arrow>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, maxWidth: 200 }}>
+                        {pvc.used_by_pods.slice(0, 2).map(pod => (
+                          <Chip key={pod} label={pod} size="small" color="success"
+                            sx={{ maxWidth: 140, '& .MuiChip-label': { overflow: 'hidden', textOverflow: 'ellipsis' } }} />
+                        ))}
+                        {pvc.used_by_pods.length > 2 && (
+                          <Chip label={`+${pvc.used_by_pods.length - 2} more`} size="small" variant="outlined" />
+                        )}
+                      </Box>
+                    </Tooltip>
+                  )}
                 </TableCell>
                 <TableCell>{pvc.age}</TableCell>
               </TableRow>
-            ))}
+              );
+            })}
           </TableBody>
         </Table>
       </TableContainer>
