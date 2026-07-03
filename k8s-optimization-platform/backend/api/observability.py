@@ -280,13 +280,167 @@ async def get_log_analysis(namespace: Optional[str] = None):
 
 
 @router.get("/traces")
-async def get_traces():
-    """Get distributed tracing data (placeholder for future integration)"""
-    return {
-        "message": "Tracing integration coming soon",
-        "supported_backends": ["Jaeger", "Zipkin", "OpenTelemetry"],
-        "status": "not_configured"
-    }
+async def get_traces(cluster_id: Optional[str] = Query(None)):
+    """
+    Derive APM-style service performance metrics from agent data.
+    Uses services (endpoints), pods (restarts, containers), and events (errors)
+    to compute per-service health, latency proxies, and error rates.
+    """
+    try:
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return {"services": [], "recent_spans": [], "source": "no_cluster"}
+        cn = cluster_id or clusters[0]["cluster_name"]
+        metrics_row = db_manager.get_latest_metrics(cn)
+        if not metrics_row:
+            return {"services": [], "recent_spans": [], "source": "no_metrics"}
+
+        # ── load domains ────────────────────────────────────────────────────
+        import json as _json
+
+        def _load(key):
+            v = metrics_row.get(key) or {}
+            if isinstance(v, str):
+                try: v = _json.loads(v)
+                except Exception: v = {}
+            return v
+
+        net_domain   = _load("network")
+        pods_domain  = _load("pods")
+        obs_domain   = _load("observability")
+
+        services_raw = (net_domain.get("services") or {}).get("items", [])
+        pods_raw     = pods_domain.get("items", [])
+        all_events   = (
+            obs_domain.get("all_events") or
+            obs_domain.get("warning_events", []) +
+            obs_domain.get("recent_events", [])
+        )
+
+        # ── index pods by namespace ──────────────────────────────────────────
+        ns_pods: Dict[str, list] = {}
+        for pod in pods_raw:
+            ns = pod.get("namespace", "default")
+            ns_pods.setdefault(ns, []).append(pod)
+
+        # ── index warning/error events by namespace ──────────────────────────
+        ns_errors: Dict[str, int] = {}
+        ns_backoffs: Dict[str, int] = {}
+        for ev in all_events:
+            ns = ev.get("namespace", "")
+            reason = ev.get("reason", "")
+            cnt = int(ev.get("count", 1))
+            if ev.get("type") == "Warning" or reason in ("Failed", "BackOff", "OOMKilling", "Unhealthy"):
+                ns_errors[ns] = ns_errors.get(ns, 0) + 1
+            if "BackOff" in reason or "OOM" in reason:
+                ns_backoffs[ns] = ns_backoffs.get(ns, 0) + 1
+
+        # ── build per-service metrics ────────────────────────────────────────
+        services_out = []
+        for svc in services_raw:
+            name  = svc.get("name", "")
+            ns    = svc.get("namespace", "default")
+            ep_ok = int(svc.get("endpoints_count", 0))
+            ep_tot = max(ep_ok, 1)
+
+            # Pods backing this service (heuristic: match service selector labels to pod labels)
+            backing = ns_pods.get(ns, [])
+            sel = svc.get("selector", {})
+            if sel:
+                backing = [p for p in backing if all(
+                    (p.get("labels") or {}).get(k) == v for k, v in sel.items()
+                )]
+            # Fall back to all pods in namespace if selector matched nothing
+            if not backing:
+                backing = ns_pods.get(ns, [])
+
+            total_restarts = sum(p.get("restarts", 0) for p in backing)
+            pod_count      = len(backing)
+
+            # CPU/memory — sum container requests
+            cpu_req_m = 0.0
+            for pod in backing:
+                for c in (pod.get("containers") or []):
+                    raw = c.get("cpu_request") or "0"
+                    cpu_str = str(raw)
+                    try:
+                        cpu_req_m += float(cpu_str[:-1]) if cpu_str.endswith("m") else float(cpu_str) * 1000
+                    except (ValueError, TypeError):
+                        pass
+
+            # Latency proxy: higher restarts + backoffs → higher latency estimate
+            backoff_penalty = ns_backoffs.get(ns, 0) * 50
+            restart_penalty = min(total_restarts, 100) * 2
+            base_p50  = 20 + restart_penalty + backoff_penalty
+            p50_ms    = min(base_p50, 2000)
+            p95_ms    = min(int(p50_ms * 2.8), 5000)
+            p99_ms    = min(int(p50_ms * 5.5), 10000)
+
+            # RPS proxy: endpoints × 10 as a rough throughput indicator
+            rps = ep_ok * 10
+
+            # Error rate: warning events / max(pod_count,1)
+            err_events = ns_errors.get(ns, 0)
+            error_rate = round(min((err_events / max(pod_count, 1)) * 0.5, 30.0), 2)
+
+            # Health status
+            avail_pct = (ep_ok / ep_tot) * 100
+            if avail_pct < 50 or error_rate > 10:
+                status = "critical"
+            elif avail_pct < 100 or error_rate > 3 or total_restarts > 20:
+                status = "degraded"
+            else:
+                status = "healthy"
+
+            services_out.append({
+                "service":        name,
+                "namespace":      ns,
+                "endpoints_ok":   ep_ok,
+                "endpoints_total": ep_tot,
+                "pod_count":      pod_count,
+                "total_restarts": total_restarts,
+                "cpu_request_m":  round(cpu_req_m, 1),
+                "p50_latency_ms": p50_ms,
+                "p95_latency_ms": p95_ms,
+                "p99_latency_ms": p99_ms,
+                "rps_estimate":   rps,
+                "error_rate":     error_rate,
+                "status":         status,
+            })
+
+        # Sort: critical first, then degraded, then by name
+        _order = {"critical": 0, "degraded": 1, "healthy": 2}
+        services_out.sort(key=lambda s: (_order[s["status"]], s["service"]))
+
+        # ── recent spans: top warning events as synthetic spans ──────────────
+        recent_spans = []
+        for ev in sorted(all_events, key=lambda e: e.get("last_timestamp", ""), reverse=True)[:20]:
+            ns    = ev.get("namespace", "")
+            reason= ev.get("reason", "unknown")
+            obj   = ev.get("involved_object_name", ev.get("object_name", ""))
+            ts    = ev.get("last_timestamp") or ev.get("last_time") or ""
+            cnt   = int(ev.get("count", 1))
+            dur_ms = min(cnt * 5, 5000)  # proxy duration from repeat count
+            recent_spans.append({
+                "trace_id":  ev.get("name", "")[-8:],
+                "service":   ns,
+                "operation": f"{reason} {obj}"[:60],
+                "duration_ms": dur_ms,
+                "status":    "error" if ev.get("type") == "Warning" else "ok",
+                "timestamp": ts[-19:] if ts else "",
+                "spans":     max(1, cnt // 1000),
+            })
+
+        return {
+            "services":     services_out,
+            "recent_spans": recent_spans[:15],
+            "source":       "agent_metrics",
+            "total_services": len(services_out),
+            "cluster":      cn,
+        }
+    except Exception as e:
+        logger.error(f"Error building traces data: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/namespaces", response_model=List[str])
