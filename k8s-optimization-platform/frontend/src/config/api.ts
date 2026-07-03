@@ -1,11 +1,9 @@
 /**
  * API Configuration
  * Dev: relative URLs proxied by react-scripts to localhost:8000
- * Prod: REACT_APP_API_URL points to EC2 backend (http://98.82.224.39)
+ * Prod: falls back to the EC2 backend base URL
  */
-const _backendBase = process.env.REACT_APP_API_URL
-  ? process.env.REACT_APP_API_URL.replace(/\/$/, '')
-  : '';
+const _backendBase = (process.env.REACT_APP_API_URL || 'https://api.bookmyturff.com').replace(/\/$/, '');
 
 export const API_BASE_URL = `${_backendBase}/api`;
 

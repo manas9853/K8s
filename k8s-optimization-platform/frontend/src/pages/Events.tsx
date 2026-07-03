@@ -89,13 +89,33 @@ const Events: React.FC = () => {
       setLoading(true);
       setError(null);
       const response = await fetch(`${API_BASE_URL}/v1/observability/events${clusterParam}`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
-      const data = await response.json();
-      setEvents(data);
+
+      const raw = await response.json();
+
+      // Normalise: the backend may return the old shape (involved_object: {kind, name})
+      // or the new flat shape (involved_object_kind, involved_object_name).
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const normalised: KubernetesEvent[] = raw.map((e: any) => ({
+        name:                  e.name ?? '',
+        namespace:             e.namespace ?? '',
+        type:                  e.type ?? 'Normal',
+        reason:                e.reason ?? '',
+        message:               e.message ?? '',
+        involved_object_kind:  e.involved_object_kind  ?? e.involved_object?.kind  ?? '',
+        involved_object_name:  e.involved_object_name  ?? e.involved_object?.name  ?? '',
+        source_component:      e.source_component ?? '',
+        source_host:           e.source_host      ?? '',
+        first_timestamp:       e.first_timestamp  ?? '',
+        last_timestamp:        e.last_timestamp   ?? '',
+        count:                 e.count ?? 1,
+        age:                   e.age   ?? '',
+      }));
+
+      setEvents(normalised);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch events');
       console.error('Error fetching events:', err);
