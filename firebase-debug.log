@@ -1,0 +1,11 @@
+[debug] [2026-07-03T11:38:58.809Z] ----------------------------------------------------------------------
+[debug] [2026-07-03T11:38:58.811Z] Command:       /opt/homebrew/Cellar/node/25.6.1/bin/node /opt/homebrew/bin/firebase deploy --only hosting --project k8s-6d5ba
+[debug] [2026-07-03T11:38:58.811Z] CLI Version:   15.22.3
+[debug] [2026-07-03T11:38:58.811Z] Platform:      darwin
+[debug] [2026-07-03T11:38:58.811Z] Node Version:  v25.6.1
+[debug] [2026-07-03T11:38:58.811Z] Detected Agent: unknown
+[debug] [2026-07-03T11:38:58.811Z] Time:          Fri Jul 03 2026 17:08:58 GMT+0530 (India Standard Time)
+[debug] [2026-07-03T11:38:58.811Z] ----------------------------------------------------------------------
+[debug] 
+[error] 
+[error] Error: Not in a Firebase app directory (could not locate firebase.json)

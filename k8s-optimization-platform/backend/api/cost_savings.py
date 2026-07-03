@@ -1,446 +1,310 @@
 """
-Cost Savings API - Feature 5: Cost Savings Analytics
-Updated with real Kubernetes data integration
+Cost Savings API
+Derives current-vs-optimised cost figures from real pod data in the agent DB.
+Uses the same algorithm as recommendations.py:
+  recommended = max(minimum, actual_usage * 1.3)
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
-from typing import List, Dict
+from typing import List, Optional
 from datetime import datetime, timedelta
+import json
 import logging
-import random
 
-# Import Kubernetes client
-from services.k8s_client import k8s_client
+from database.db import db_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Check if Kubernetes is available
-K8S_AVAILABLE = k8s_client is not None and k8s_client.is_connected()
+# ── cost constants (match recommendations.py) ─────────────────────────────────
+CPU_COST_PER_CORE_HOUR  = 0.04    # $/core/hour
+MEM_COST_PER_GB_HOUR    = 0.005   # $/GB/hour
+HOURS_PER_MONTH         = 730
+MIN_CPU_CORES           = 0.010
+MIN_MEM_MB              = 16.0
+BUFFER                  = 1.3
 
-# Cost constants (matching recommendations.py)
-CPU_COST_PER_CORE_HOUR = 0.04
-MEMORY_COST_PER_GB_HOUR = 0.005
-HOURS_PER_MONTH = 730
 
-# Thresholds from audit.sh
-MIN_CPU_MILLICORES = 10
-MIN_MEMORY_MB = 16
-BUFFER_MULTIPLIER = 1.3
-OVER_PROVISIONING_THRESHOLD = 0.5
-
+# ── Pydantic models ───────────────────────────────────────────────────────────
 
 class CostBreakdown(BaseModel):
-    category: str
-    current_cost: float
-    optimized_cost: float
-    savings: float
+    category:        str
+    current_cost:    float
+    optimized_cost:  float
+    savings:         float
     savings_percent: float
-
 
 class TrendData(BaseModel):
-    month: str
-    current_cost: float
+    month:          str
+    current_cost:   float
     optimized_cost: float
-    savings: float
-
+    savings:        float
 
 class SavingsByEntity(BaseModel):
-    name: str
-    current_cost: float
-    optimized_cost: float
-    savings: float
+    name:            str
+    current_cost:    float
+    optimized_cost:  float
+    savings:         float
     savings_percent: float
-
 
 class CostSavingsOverview(BaseModel):
-    current_monthly_cost: float
-    current_yearly_cost: float
+    current_monthly_cost:   float
+    current_yearly_cost:    float
     optimized_monthly_cost: float
-    optimized_yearly_cost: float
-    monthly_savings: float
-    yearly_savings: float
-    savings_percent: float
-    cost_breakdown: List[CostBreakdown]
-    trend_data: List[TrendData]
-    savings_by_cluster: List[SavingsByEntity]
-    savings_by_namespace: List[SavingsByEntity]
-    savings_by_team: List[SavingsByEntity]
+    optimized_yearly_cost:  float
+    monthly_savings:        float
+    yearly_savings:         float
+    savings_percent:        float
+    cost_breakdown:         List[CostBreakdown]
+    trend_data:             List[TrendData]
+    savings_by_cluster:     List[SavingsByEntity]
+    savings_by_namespace:   List[SavingsByEntity]
+    savings_by_team:        List[SavingsByEntity]
     savings_by_application: List[SavingsByEntity]
 
 
-def parse_cpu(cpu_str: str) -> float:
-    """Parse CPU string to cores (e.g., '500m' -> 0.5, '2' -> 2.0)"""
-    if not cpu_str or cpu_str == '0':
-        return 0.0
-    try:
-        if cpu_str.endswith('m'):
-            return float(cpu_str[:-1]) / 1000
-        elif cpu_str.endswith('n'):
-            return float(cpu_str[:-1]) / 1000000000
-        elif cpu_str.endswith('u'):
-            return float(cpu_str[:-1]) / 1000000
-        else:
-            return float(cpu_str)
-    except (ValueError, AttributeError):
-        return 0.0
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _monthly_cost(cpu_cores: float, mem_mb: float) -> float:
+    return (
+        cpu_cores * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH
+        + (mem_mb / 1024) * MEM_COST_PER_GB_HOUR * HOURS_PER_MONTH
+    )
+
+def _get_pods(cluster_id: Optional[str]) -> tuple[str, list]:
+    cluster_name = cluster_id or ""
+    if not cluster_name:
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return ("", [])
+        cluster_name = clusters[0]["cluster_name"]
+    metrics = db_manager.get_latest_metrics(cluster_name)
+    if not metrics:
+        return (cluster_name, [])
+    pods_domain = metrics.get("pods") or {}
+    if isinstance(pods_domain, str):
+        pods_domain = json.loads(pods_domain)
+    items = pods_domain.get("items", []) if isinstance(pods_domain, dict) else []
+    return (cluster_name, items)
 
 
-def parse_memory(mem_str: str) -> float:
-    """Parse memory string to GB (e.g., '512Mi' -> 0.5, '2Gi' -> 2.0)"""
-    if not mem_str or mem_str == '0':
-        return 0.0
-    try:
-        if mem_str.endswith('Ki'):
-            return float(mem_str[:-2]) / (1024 * 1024)
-        elif mem_str.endswith('Mi'):
-            return float(mem_str[:-2]) / 1024
-        elif mem_str.endswith('Gi'):
-            return float(mem_str[:-2])
-        elif mem_str.endswith('K'):
-            return float(mem_str[:-1]) / (1000 * 1000)
-        elif mem_str.endswith('M'):
-            return float(mem_str[:-1]) / 1000
-        elif mem_str.endswith('G'):
-            return float(mem_str[:-1])
-        else:
-            # Assume bytes
-            return float(mem_str) / (1024 * 1024 * 1024)
-    except (ValueError, AttributeError):
-        return 0.0
+def _build_overview(cluster_name: str, pods: list) -> CostSavingsOverview:
+    # ── per-namespace accumulators ────────────────────────────────────────────
+    ns_cur_cpu:  dict = {}
+    ns_cur_mem:  dict = {}
+    ns_opt_cpu:  dict = {}
+    ns_opt_mem:  dict = {}
 
+    # ── per-team (label) accumulators ────────────────────────────────────────
+    team_cur: dict = {}
+    team_opt: dict = {}
 
-def calculate_cost_from_pods(pods: List[dict]) -> dict:
-    """Calculate current and optimized costs from pod data"""
-    namespace_data = {}
-    total_current_cpu = 0.0
-    total_current_memory = 0.0
-    total_optimized_cpu = 0.0
-    total_optimized_memory = 0.0
-    
+    # ── per-app (owner_name) accumulators ────────────────────────────────────
+    app_cur: dict = {}
+    app_opt: dict = {}
+
+    total_cur_cpu = total_cur_mem = 0.0
+    total_opt_cpu = total_opt_mem = 0.0
+
     for pod in pods:
-        namespace = pod.get('namespace', 'default')
-        
-        if namespace not in namespace_data:
-            namespace_data[namespace] = {
-                'current_cpu': 0.0,
-                'current_memory': 0.0,
-                'optimized_cpu': 0.0,
-                'optimized_memory': 0.0,
-                'pod_count': 0
-            }
-        
-        namespace_data[namespace]['pod_count'] += 1
-        
-        for container in pod.get('containers', []):
-            # Current resources (requests)
-            cpu_request = parse_cpu(container.get('cpu_request', '0'))
-            memory_request = parse_memory(container.get('memory_request', '0'))
-            
-            # Simulated usage (30-70% of request for realistic calculation)
-            usage_factor = random.uniform(0.3, 0.7)
-            cpu_usage = cpu_request * usage_factor
-            memory_usage = memory_request * usage_factor
-            
-            # Calculate optimized values with 30% buffer
-            optimized_cpu = max(
-                MIN_CPU_MILLICORES / 1000,
-                cpu_usage * BUFFER_MULTIPLIER
-            )
-            optimized_memory = max(
-                MIN_MEMORY_MB / 1024,
-                memory_usage * BUFFER_MULTIPLIER
-            )
-            
-            # Accumulate totals
-            total_current_cpu += cpu_request
-            total_current_memory += memory_request
-            total_optimized_cpu += optimized_cpu
-            total_optimized_memory += optimized_memory
-            
-            # Accumulate by namespace
-            namespace_data[namespace]['current_cpu'] += cpu_request
-            namespace_data[namespace]['current_memory'] += memory_request
-            namespace_data[namespace]['optimized_cpu'] += optimized_cpu
-            namespace_data[namespace]['optimized_memory'] += optimized_memory
-    
-    # Calculate costs
-    current_monthly_cost = (
-        total_current_cpu * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
-        total_current_memory * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
-    )
-    
-    optimized_monthly_cost = (
-        total_optimized_cpu * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
-        total_optimized_memory * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
-    )
-    
-    return {
-        'current_monthly_cost': current_monthly_cost,
-        'optimized_monthly_cost': optimized_monthly_cost,
-        'monthly_savings': current_monthly_cost - optimized_monthly_cost,
-        'namespace_data': namespace_data,
-        'total_current_cpu': total_current_cpu,
-        'total_current_memory': total_current_memory,
-        'total_optimized_cpu': total_optimized_cpu,
-        'total_optimized_memory': total_optimized_memory
-    }
+        if pod.get("status") != "Running":
+            continue
 
+        ns       = pod.get("namespace", "default")
+        cpu_req  = float(pod.get("cpu_request",       0.0))
+        mem_req  = float(pod.get("memory_request_mb", 0.0))
+        cpu_use  = float(pod.get("cpu_usage_cores",   0.0))
+        mem_use  = float(pod.get("memory_usage_mb",   0.0))
 
-@router.get("/overview", response_model=CostSavingsOverview)
-async def get_cost_savings_overview():
-    """Get comprehensive cost savings overview with real K8s data"""
-    
-    if not K8S_AVAILABLE:
-        logger.warning("Kubernetes not configured, returning dummy data")
-        return _get_dummy_overview()
-    
-    try:
-        # Get real pod data
-        pods = k8s_client.list_pods()
-        
-        if not pods:
-            logger.warning("No pods found, returning dummy data")
-            return _get_dummy_overview()
-        
-        # Calculate costs from real data
-        cost_data = calculate_cost_from_pods(pods)
-        
-        current_monthly = cost_data['current_monthly_cost']
-        optimized_monthly = cost_data['optimized_monthly_cost']
-        monthly_savings = cost_data['monthly_savings']
-        savings_percent = (
-            (monthly_savings / current_monthly * 100)
-            if current_monthly > 0 else 0
-        )
-        
-        # Calculate cost breakdown by resource type
-        cpu_current = (
-            cost_data['total_current_cpu'] *
-            CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH
-        )
-        cpu_optimized = (
-            cost_data['total_optimized_cpu'] *
-            CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH
-        )
-        memory_current = (
-            cost_data['total_current_memory'] *
-            MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
-        )
-        memory_optimized = (
-            cost_data['total_optimized_memory'] *
-            MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
-        )
-        
-        cost_breakdown = [
-            CostBreakdown(
-                category="Compute (CPU)",
-                current_cost=cpu_current,
-                optimized_cost=cpu_optimized,
-                savings=cpu_current - cpu_optimized,
-                savings_percent=(
-                    ((cpu_current - cpu_optimized) / cpu_current * 100)
-                    if cpu_current > 0 else 0
-                )
-            ),
-            CostBreakdown(
-                category="Memory",
-                current_cost=memory_current,
-                optimized_cost=memory_optimized,
-                savings=memory_current - memory_optimized,
-                savings_percent=(
-                    ((memory_current - memory_optimized) / memory_current * 100)
-                    if memory_current > 0 else 0
-                )
-            )
-        ]
-        
-        # Generate 6 months trend data
-        base_date = datetime.now()
-        trend_data = []
-        for i in range(5, -1, -1):
-            month_date = base_date - timedelta(days=30 * i)
-            month_name = month_date.strftime("%b %Y")
-            
-            # Simulate gradual improvement (2% per month)
-            improvement = 1.0 + (i * 0.02)
-            current = current_monthly * improvement
-            optimized = optimized_monthly * improvement
-            
-            trend_data.append(TrendData(
-                month=month_name,
-                current_cost=current,
-                optimized_cost=optimized,
-                savings=current - optimized
-            ))
-        
-        # Savings by cluster (single cluster for now)
-        cluster_info = k8s_client.get_cluster_info()
-        cluster_name = cluster_info.get('cluster_id', 'current-cluster')
-        
-        savings_by_cluster = [
-            SavingsByEntity(
-                name=cluster_name,
-                current_cost=current_monthly,
-                optimized_cost=optimized_monthly,
-                savings=monthly_savings,
-                savings_percent=savings_percent
-            )
-        ]
-        
-        # Savings by namespace (top 10)
-        savings_by_namespace = []
-        for namespace, data in sorted(
-            cost_data['namespace_data'].items(),
-            key=lambda x: (
-                (x[1]['current_cpu'] * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
-                 x[1]['current_memory'] * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH) -
-                (x[1]['optimized_cpu'] * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
-                 x[1]['optimized_memory'] * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH)
-            ),
-            reverse=True
-        )[:10]:
-            ns_current = (
-                data['current_cpu'] * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
-                data['current_memory'] * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
-            )
-            ns_optimized = (
-                data['optimized_cpu'] * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
-                data['optimized_memory'] * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
-            )
-            ns_savings = ns_current - ns_optimized
-            
-            savings_by_namespace.append(SavingsByEntity(
-                name=namespace,
-                current_cost=ns_current,
-                optimized_cost=ns_optimized,
-                savings=ns_savings,
-                savings_percent=(
-                    (ns_savings / ns_current * 100) if ns_current > 0 else 0
-                )
-            ))
-        
-        # Savings by team (simulated from namespace labels)
-        savings_by_team = []
-        
-        # Savings by application (simulated from namespace patterns)
-        savings_by_application = []
-        
-        return CostSavingsOverview(
-            current_monthly_cost=current_monthly,
-            current_yearly_cost=current_monthly * 12,
-            optimized_monthly_cost=optimized_monthly,
-            optimized_yearly_cost=optimized_monthly * 12,
-            monthly_savings=monthly_savings,
-            yearly_savings=monthly_savings * 12,
-            savings_percent=savings_percent,
-            cost_breakdown=cost_breakdown,
-            trend_data=trend_data,
-            savings_by_cluster=savings_by_cluster,
-            savings_by_namespace=savings_by_namespace,
-            savings_by_team=savings_by_team,
-            savings_by_application=savings_by_application
-        )
-    
-    except Exception as e:
-        logger.error(f"Error calculating cost savings: {e}")
-        return _get_dummy_overview()
+        # No request set → nothing to optimise
+        if cpu_req == 0 and mem_req == 0:
+            continue
 
+        # No usage data → use request as-is for current; skip optimised savings
+        if cpu_use == 0.0 and mem_use == 0.0:
+            # Still count it toward current cost
+            rec_cpu = cpu_req
+            rec_mem = mem_req
+        else:
+            rec_cpu = max(MIN_CPU_CORES, cpu_use * BUFFER)
+            rec_mem = max(MIN_MEM_MB,    mem_use * BUFFER)
 
-def _get_dummy_overview() -> CostSavingsOverview:
-    """Return dummy data when Kubernetes is not available"""
-    current_monthly = 62500.0
-    optimized_monthly = 53750.0
-    monthly_savings = current_monthly - optimized_monthly
-    savings_percent = (monthly_savings / current_monthly) * 100
-    
+        # Totals
+        total_cur_cpu += cpu_req;  total_cur_mem += mem_req
+        total_opt_cpu += rec_cpu;  total_opt_mem += rec_mem
+
+        # By namespace
+        ns_cur_cpu[ns] = ns_cur_cpu.get(ns, 0.0) + cpu_req
+        ns_cur_mem[ns] = ns_cur_mem.get(ns, 0.0) + mem_req
+        ns_opt_cpu[ns] = ns_opt_cpu.get(ns, 0.0) + rec_cpu
+        ns_opt_mem[ns] = ns_opt_mem.get(ns, 0.0) + rec_mem
+
+        # By team label
+        team = (pod.get("labels") or {}).get("team", "unknown")
+        team_cur[team] = team_cur.get(team, (0.0, 0.0))
+        team_opt[team] = team_opt.get(team, (0.0, 0.0))
+        team_cur[team] = (team_cur[team][0] + cpu_req, team_cur[team][1] + mem_req)
+        team_opt[team] = (team_opt[team][0] + rec_cpu, team_opt[team][1] + rec_mem)
+
+        # By app (owner_name)
+        app = pod.get("owner_name") or pod.get("workload_name") or pod.get("name", "unknown")
+        app_cur[app] = app_cur.get(app, (0.0, 0.0))
+        app_opt[app] = app_opt.get(app, (0.0, 0.0))
+        app_cur[app] = (app_cur[app][0] + cpu_req, app_cur[app][1] + mem_req)
+        app_opt[app] = (app_opt[app][0] + rec_cpu, app_opt[app][1] + rec_mem)
+
+    # ── totals ────────────────────────────────────────────────────────────────
+    cur_monthly = _monthly_cost(total_cur_cpu, total_cur_mem)
+    opt_monthly = _monthly_cost(total_opt_cpu, total_opt_mem)
+    savings     = cur_monthly - opt_monthly
+    savings_pct = (savings / cur_monthly * 100) if cur_monthly > 0 else 0.0
+
+    # ── cost breakdown by resource type ──────────────────────────────────────
+    cpu_cur_cost = total_cur_cpu * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH
+    cpu_opt_cost = total_opt_cpu * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH
+    mem_cur_cost = (total_cur_mem / 1024) * MEM_COST_PER_GB_HOUR * HOURS_PER_MONTH
+    mem_opt_cost = (total_opt_mem / 1024) * MEM_COST_PER_GB_HOUR * HOURS_PER_MONTH
+
     cost_breakdown = [
         CostBreakdown(
             category="Compute (CPU)",
-            current_cost=28000.0,
-            optimized_cost=22400.0,
-            savings=5600.0,
-            savings_percent=20.0
+            current_cost=round(cpu_cur_cost, 2),
+            optimized_cost=round(cpu_opt_cost, 2),
+            savings=round(cpu_cur_cost - cpu_opt_cost, 2),
+            savings_percent=round((cpu_cur_cost - cpu_opt_cost) / cpu_cur_cost * 100, 1)
+                if cpu_cur_cost > 0 else 0.0,
         ),
         CostBreakdown(
             category="Memory",
-            current_cost=18500.0,
-            optimized_cost=16650.0,
-            savings=1850.0,
-            savings_percent=10.0
-        )
+            current_cost=round(mem_cur_cost, 2),
+            optimized_cost=round(mem_opt_cost, 2),
+            savings=round(mem_cur_cost - mem_opt_cost, 2),
+            savings_percent=round((mem_cur_cost - mem_opt_cost) / mem_cur_cost * 100, 1)
+                if mem_cur_cost > 0 else 0.0,
+        ),
     ]
-    
-    base_date = datetime.now()
+
+    # ── 6-month trend (real current as baseline, show what savings would be) ─
+    now = datetime.now()
     trend_data = []
     for i in range(5, -1, -1):
-        month_date = base_date - timedelta(days=30 * i)
-        month_name = month_date.strftime("%b %Y")
-        current = 62500 + (i * 500)
-        optimized = 53750 + (i * 300)
+        dt   = now - timedelta(days=30 * i)
+        # Older months: assume cost was ~2%/month higher (cluster growth)
+        factor = 1.0 + i * 0.02
+        mc = cur_monthly * factor
+        mo = opt_monthly * factor
         trend_data.append(TrendData(
-            month=month_name,
-            current_cost=current,
-            optimized_cost=optimized,
-            savings=current - optimized
+            month=dt.strftime("%b %Y"),
+            current_cost=round(mc, 2),
+            optimized_cost=round(mo, 2),
+            savings=round(mc - mo, 2),
         ))
-    
+
+    # ── by cluster ───────────────────────────────────────────────────────────
     savings_by_cluster = [
         SavingsByEntity(
-            name="prod-cluster",
-            current_cost=current_monthly,
-            optimized_cost=optimized_monthly,
-            savings=monthly_savings,
-            savings_percent=savings_percent
+            name=cluster_name,
+            current_cost=round(cur_monthly, 2),
+            optimized_cost=round(opt_monthly, 2),
+            savings=round(savings, 2),
+            savings_percent=round(savings_pct, 1),
         )
     ]
-    
-    savings_by_namespace = [
-        SavingsByEntity(
-            name="analytics",
-            current_cost=15000.0,
-            optimized_cost=11500.0,
-            savings=3500.0,
-            savings_percent=23.3
-        )
-    ]
-    
+
+    # ── by namespace (top 10 by savings) ─────────────────────────────────────
+    ns_savings_list = []
+    for ns in ns_cur_cpu:
+        c = _monthly_cost(ns_cur_cpu[ns], ns_cur_mem.get(ns, 0.0))
+        o = _monthly_cost(ns_opt_cpu[ns], ns_opt_mem.get(ns, 0.0))
+        s = c - o
+        ns_savings_list.append(SavingsByEntity(
+            name=ns,
+            current_cost=round(c, 2),
+            optimized_cost=round(o, 2),
+            savings=round(s, 2),
+            savings_percent=round(s / c * 100, 1) if c > 0 else 0.0,
+        ))
+    ns_savings_list.sort(key=lambda x: x.savings, reverse=True)
+
+    # ── by team ───────────────────────────────────────────────────────────────
+    team_list = []
+    for team, (tc, tm) in team_cur.items():
+        oc, om = team_opt.get(team, (tc, tm))
+        c = _monthly_cost(tc, tm)
+        o = _monthly_cost(oc, om)
+        s = c - o
+        team_list.append(SavingsByEntity(
+            name=team,
+            current_cost=round(c, 2),
+            optimized_cost=round(o, 2),
+            savings=round(s, 2),
+            savings_percent=round(s / c * 100, 1) if c > 0 else 0.0,
+        ))
+    team_list.sort(key=lambda x: x.savings, reverse=True)
+
+    # ── by application (top 10) ───────────────────────────────────────────────
+    app_list = []
+    for app, (ac, am) in app_cur.items():
+        oc, om = app_opt.get(app, (ac, am))
+        c = _monthly_cost(ac, am)
+        o = _monthly_cost(oc, om)
+        s = c - o
+        if s > 0.01:
+            app_list.append(SavingsByEntity(
+                name=app,
+                current_cost=round(c, 2),
+                optimized_cost=round(o, 2),
+                savings=round(s, 2),
+                savings_percent=round(s / c * 100, 1) if c > 0 else 0.0,
+            ))
+    app_list.sort(key=lambda x: x.savings, reverse=True)
+
     return CostSavingsOverview(
-        current_monthly_cost=current_monthly,
-        current_yearly_cost=current_monthly * 12,
-        optimized_monthly_cost=optimized_monthly,
-        optimized_yearly_cost=optimized_monthly * 12,
-        monthly_savings=monthly_savings,
-        yearly_savings=monthly_savings * 12,
-        savings_percent=savings_percent,
+        current_monthly_cost=round(cur_monthly, 2),
+        current_yearly_cost=round(cur_monthly * 12, 2),
+        optimized_monthly_cost=round(opt_monthly, 2),
+        optimized_yearly_cost=round(opt_monthly * 12, 2),
+        monthly_savings=round(savings, 2),
+        yearly_savings=round(savings * 12, 2),
+        savings_percent=round(savings_pct, 1),
         cost_breakdown=cost_breakdown,
         trend_data=trend_data,
         savings_by_cluster=savings_by_cluster,
-        savings_by_namespace=savings_by_namespace,
-        savings_by_team=[],
-        savings_by_application=[]
+        savings_by_namespace=ns_savings_list[:10],
+        savings_by_team=team_list,
+        savings_by_application=app_list[:10],
     )
 
 
-@router.get("/summary")
-async def get_cost_summary():
-    """Get quick cost summary"""
-    overview = await get_cost_savings_overview()
-    
-    top_namespace = "N/A"
-    if overview.savings_by_namespace:
-        top_namespace = max(
-            overview.savings_by_namespace,
-            key=lambda x: x.savings
-        ).name
-    
-    return {
-        "current_monthly_cost": overview.current_monthly_cost,
-        "optimized_monthly_cost": overview.optimized_monthly_cost,
-        "monthly_savings": overview.monthly_savings,
-        "yearly_savings": overview.yearly_savings,
-        "savings_percent": overview.savings_percent,
-        "top_savings_opportunity": top_namespace
-    }
+# ── routes ────────────────────────────────────────────────────────────────────
 
-# Made with Bob
+@router.get("/overview", response_model=CostSavingsOverview)
+async def get_cost_savings_overview(cluster_id: Optional[str] = Query(None)):
+    """Real cost savings derived from agent pod requests vs. optimised sizing."""
+    try:
+        cluster_name, pods = _get_pods(cluster_id)
+        if not pods:
+            logger.warning("No pod data in DB for cluster_id=%s", cluster_id)
+            raise HTTPException(status_code=503, detail="No cluster data available yet — agent may still be collecting")
+        return _build_overview(cluster_name, pods)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("Error building cost savings overview: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/summary")
+async def get_cost_summary(cluster_id: Optional[str] = Query(None)):
+    """Quick cost summary (used by dashboard widgets)."""
+    overview = await get_cost_savings_overview(cluster_id)
+    top_ns = max(overview.savings_by_namespace, key=lambda x: x.savings).name \
+             if overview.savings_by_namespace else "N/A"
+    return {
+        "current_monthly_cost":   overview.current_monthly_cost,
+        "optimized_monthly_cost": overview.optimized_monthly_cost,
+        "monthly_savings":        overview.monthly_savings,
+        "yearly_savings":         overview.yearly_savings,
+        "savings_percent":        overview.savings_percent,
+        "top_savings_opportunity": top_ns,
+    }

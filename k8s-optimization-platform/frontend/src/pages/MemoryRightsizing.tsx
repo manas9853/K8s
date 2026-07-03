@@ -63,7 +63,7 @@ const MemoryRightsizing: React.FC = () => {
   const fetchMemoryRecommendations = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/v1/recommendations${clusterParam}`);
+      const response = await fetch(`${API_BASE_URL}/v1/recommendations/${clusterParam}`);
       if (!response.ok) throw new Error('Failed to fetch recommendations');
       const data = await response.json();
       

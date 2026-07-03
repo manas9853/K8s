@@ -45,7 +45,7 @@ const OptimizationReports: React.FC = () => {
     setLoading(true);
     try {
       const [recRes, savingsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/v1/recommendations${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/recommendations/${clusterParam}`),
         fetch(`${API_BASE_URL}/v1/cost-savings/overview${clusterParam}`),
       ]);
 

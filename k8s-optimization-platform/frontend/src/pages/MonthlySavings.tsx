@@ -1,268 +1,131 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Container,
-  Typography,
-  Paper,
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  CircularProgress,
-  Alert,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  LinearProgress
+  Box, Typography, Grid, Card, CardContent, Paper, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress,
+  CircularProgress, Alert, IconButton
 } from '@mui/material';
-import { Refresh, TrendingDown, AttachMoney, Savings } from '@mui/icons-material';
+import { Refresh, Savings, TrendingDown } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 
-interface SavingsByEntity {
-  name: string;
-  current_cost: number;
-  optimized_cost: number;
-  savings: number;
-  savings_percent: number;
+interface SavingsByEntity { name: string; current_cost: number; optimized_cost: number; savings: number; savings_percent: number; }
+interface CostData {
+  current_monthly_cost: number; optimized_monthly_cost: number;
+  monthly_savings: number; savings_percent: number;
+  savings_by_namespace: SavingsByEntity[];
+  savings_by_cluster: SavingsByEntity[];
+  savings_by_application: SavingsByEntity[];
 }
 
-interface MonthlySavingsData {
-  total_monthly_savings: number;
-  savings_percent: number;
-  current_monthly_cost: number;
-  optimized_monthly_cost: number;
-  savings_by_cluster: SavingsByEntity[];
-  savings_by_namespace: SavingsByEntity[];
-  savings_by_workload_type: SavingsByEntity[];
-  top_savings_opportunities: Array<{
-    workload: string;
-    namespace: string;
-    current_cost: number;
-    optimized_cost: number;
-    savings: number;
-  }>;
-}
+const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 const MonthlySavings: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [data, setData] = useState<MonthlySavingsData | null>(null);
+  const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, [clusterParam]);
-
   const fetchData = async () => {
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/v1/recommendations${clusterParam}`);
-      if (!response.ok) throw new Error('Failed to fetch recommendations');
-      const recommendations = await response.json();
-      
-      // Calculate monthly savings from recommendations
-      const totalSavings = recommendations.reduce((sum: number, rec: any) => 
-        sum + (rec.estimated_monthly_savings || 0), 0
-      );
-      
-      const currentCost = totalSavings / 0.3; // Assume 30% savings potential
-      const optimizedCost = currentCost - totalSavings;
-      
-      // Group by cluster
-      const clusterMap = new Map<string, { current: number; savings: number }>();
-      recommendations.forEach((rec: any) => {
-        const cluster = rec.cluster_id || 'unknown';
-        const existing = clusterMap.get(cluster) || { current: 0, savings: 0 };
-        existing.savings += rec.estimated_monthly_savings || 0;
-        existing.current += (rec.estimated_monthly_savings || 0) / 0.3;
-        clusterMap.set(cluster, existing);
-      });
-      
-      // Group by namespace
-      const namespaceMap = new Map<string, { current: number; savings: number }>();
-      recommendations.forEach((rec: any) => {
-        const ns = rec.namespace || 'unknown';
-        const existing = namespaceMap.get(ns) || { current: 0, savings: 0 };
-        existing.savings += rec.estimated_monthly_savings || 0;
-        existing.current += (rec.estimated_monthly_savings || 0) / 0.3;
-        namespaceMap.set(ns, existing);
-      });
-      
-      // Group by workload type
-      const workloadMap = new Map<string, { current: number; savings: number }>();
-      recommendations.forEach((rec: any) => {
-        const type = rec.workload_type || 'unknown';
-        const existing = workloadMap.get(type) || { current: 0, savings: 0 };
-        existing.savings += rec.estimated_monthly_savings || 0;
-        existing.current += (rec.estimated_monthly_savings || 0) / 0.3;
-        workloadMap.set(type, existing);
-      });
-      
-      const savingsByCluster = Array.from(clusterMap.entries()).map(([name, data]) => ({
-        name,
-        current_cost: data.current,
-        optimized_cost: data.current - data.savings,
-        savings: data.savings,
-        savings_percent: (data.savings / data.current) * 100
-      })).sort((a, b) => b.savings - a.savings);
-      
-      const savingsByNamespace = Array.from(namespaceMap.entries()).map(([name, data]) => ({
-        name,
-        current_cost: data.current,
-        optimized_cost: data.current - data.savings,
-        savings: data.savings,
-        savings_percent: (data.savings / data.current) * 100
-      })).sort((a, b) => b.savings - a.savings);
-      
-      const savingsByWorkloadType = Array.from(workloadMap.entries()).map(([name, data]) => ({
-        name,
-        current_cost: data.current,
-        optimized_cost: data.current - data.savings,
-        savings: data.savings,
-        savings_percent: (data.savings / data.current) * 100
-      })).sort((a, b) => b.savings - a.savings);
-      
-      const topOpportunities = recommendations
-        .filter((rec: any) => rec.estimated_monthly_savings > 0)
-        .sort((a: any, b: any) => b.estimated_monthly_savings - a.estimated_monthly_savings)
-        .slice(0, 10)
-        .map((rec: any) => ({
-          workload: rec.workload_name,
-          namespace: rec.namespace,
-          current_cost: (rec.estimated_monthly_savings || 0) / 0.3,
-          optimized_cost: (rec.estimated_monthly_savings || 0) / 0.3 - (rec.estimated_monthly_savings || 0),
-          savings: rec.estimated_monthly_savings || 0
-        }));
-      
-      setData({
-        total_monthly_savings: totalSavings,
-        savings_percent: (totalSavings / currentCost) * 100,
-        current_monthly_cost: currentCost,
-        optimized_monthly_cost: optimizedCost,
-        savings_by_cluster: savingsByCluster,
-        savings_by_namespace: savingsByNamespace,
-        savings_by_workload_type: savingsByWorkloadType,
-        top_savings_opportunities: topOpportunities
-      });
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
+      setLoading(true); setError(null);
+      const r = await fetch(`${API_BASE_URL}/v1/cost-savings/overview${clusterParam}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to fetch'); }
+    finally { setLoading(false); }
   };
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
+  useEffect(() => { fetchData(); }, [clusterParam]);
 
-  if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
-  if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-  if (!data) return null;
+  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
+  if (error)   return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
+  if (!data)   return null;
+
+  // Build top opportunities from savings_by_application (already sorted by savings)
+  const topOpps = data.savings_by_application.slice(0, 10);
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      {/* Header */}
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4">Monthly Savings Analysis</Typography>
-          <Typography variant="body2" color="textSecondary">
-            Detailed breakdown of potential monthly cost savings
-          </Typography>
+          <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>Monthly Savings Analysis</Typography>
+          <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>Detailed breakdown of potential monthly cost savings</Typography>
         </Box>
-        <IconButton onClick={fetchData} color="primary"><Refresh /></IconButton>
+        <IconButton onClick={fetchData} sx={{ color: '#4ade80' }}><Refresh /></IconButton>
       </Box>
 
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
+      {/* KPI cards */}
+      <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={3}>
-          <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #4ade8033' }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Savings />
-                <Typography variant="h6">Total Monthly Savings</Typography>
+                <Savings sx={{ color: '#4ade80' }} />
+                <Typography variant="body2" sx={{ color: '#8b95a9', textTransform: 'uppercase', fontSize: 11 }}>Total Monthly Savings</Typography>
               </Box>
-              <Typography variant="h3">{formatCurrency(data.total_monthly_savings)}</Typography>
-              <Typography variant="body2">{data.savings_percent.toFixed(1)}% reduction</Typography>
+              <Typography variant="h4" sx={{ color: '#4ade80', fontWeight: 700 }}>{fmt(data.monthly_savings)}</Typography>
+              <Typography variant="body2" sx={{ color: '#8b95a9' }}>{data.savings_percent.toFixed(1)}% reduction</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card>
+          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
             <CardContent>
-              <Typography color="textSecondary" gutterBottom>Current Monthly Cost</Typography>
-              <Typography variant="h4">{formatCurrency(data.current_monthly_cost)}</Typography>
-              <Typography variant="body2" color="error">Before optimization</Typography>
+              <Typography variant="body2" sx={{ color: '#8b95a9', mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Current Monthly Cost</Typography>
+              <Typography variant="h4" sx={{ color: '#f87171', fontWeight: 700 }}>{fmt(data.current_monthly_cost)}</Typography>
+              <Typography variant="body2" sx={{ color: '#8b95a9' }}>Before optimisation</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card>
+          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
             <CardContent>
-              <Typography color="textSecondary" gutterBottom>Optimized Monthly Cost</Typography>
-              <Typography variant="h4" color="success.main">{formatCurrency(data.optimized_monthly_cost)}</Typography>
-              <Typography variant="body2" color="success.main">After optimization</Typography>
+              <Typography variant="body2" sx={{ color: '#8b95a9', mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Optimised Monthly Cost</Typography>
+              <Typography variant="h4" sx={{ color: '#4ade80', fontWeight: 700 }}>{fmt(data.optimized_monthly_cost)}</Typography>
+              <Typography variant="body2" sx={{ color: '#8b95a9' }}>After optimisation</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card>
+          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
             <CardContent>
-              <Typography color="textSecondary" gutterBottom>Savings Opportunities</Typography>
-              <Typography variant="h4">{data.top_savings_opportunities.length}</Typography>
-              <Typography variant="body2">Top workloads to optimize</Typography>
+              <Typography variant="body2" sx={{ color: '#8b95a9', mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Top Opportunities</Typography>
+              <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{topOpps.length}</Typography>
+              <Typography variant="body2" sx={{ color: '#8b95a9' }}>Workloads to optimise</Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      {/* Top Savings Opportunities */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>Top 10 Savings Opportunities</Typography>
+      {/* Top savings opportunities table */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Top Savings Opportunities (by Application)</Typography>
         <TableContainer>
-          <Table>
+          <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Workload</TableCell>
-                <TableCell>Namespace</TableCell>
-                <TableCell align="right">Current Cost</TableCell>
-                <TableCell align="right">Optimized Cost</TableCell>
-                <TableCell align="right">Monthly Savings</TableCell>
-                <TableCell align="right">Progress</TableCell>
+                {['Application','Current Cost','Optimised Cost','Monthly Savings','Reduction'].map(h => (
+                  <TableCell key={h} sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}
+                    align={h === 'Application' ? 'left' : 'right'}>{h}</TableCell>
+                ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {data.top_savings_opportunities.map((opp, idx) => (
-                <TableRow key={idx} hover>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="bold">{opp.workload}</Typography>
+              {topOpps.map((opp, i) => (
+                <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
+                  <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245', fontWeight: 600 }}>{opp.name}</TableCell>
+                  <TableCell align="right" sx={{ color: '#f87171', borderColor: '#2a3245' }}>{fmt(opp.current_cost)}</TableCell>
+                  <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(opp.optimized_cost)}</TableCell>
+                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                    <Chip icon={<TrendingDown sx={{ fontSize: 14 }} />} label={fmt(opp.savings)}
+                      size="small" sx={{ bgcolor: '#14532d', color: '#4ade80', fontSize: 12 }} />
                   </TableCell>
-                  <TableCell>
-                    <Chip label={opp.namespace} size="small" />
-                  </TableCell>
-                  <TableCell align="right">{formatCurrency(opp.current_cost)}</TableCell>
-                  <TableCell align="right">{formatCurrency(opp.optimized_cost)}</TableCell>
-                  <TableCell align="right">
-                    <Chip 
-                      label={formatCurrency(opp.savings)} 
-                      color="success" 
-                      size="small"
-                      icon={<TrendingDown />}
-                    />
-                  </TableCell>
-                  <TableCell align="right" sx={{ width: 150 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <LinearProgress 
-                        variant="determinate" 
-                        value={(opp.savings / opp.current_cost) * 100} 
-                        sx={{ flexGrow: 1, height: 8, borderRadius: 4 }}
-                        color="success"
-                      />
-                      <Typography variant="caption">
-                        {((opp.savings / opp.current_cost) * 100).toFixed(0)}%
-                      </Typography>
+                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end' }}>
+                      <LinearProgress variant="determinate" value={Math.min(opp.savings_percent, 100)}
+                        sx={{ width: 80, height: 6, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: '#4ade80' } }} />
+                      <Typography variant="caption" sx={{ color: '#8b95a9', minWidth: 36 }}>{opp.savings_percent.toFixed(1)}%</Typography>
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -272,108 +135,42 @@ const MonthlySavings: React.FC = () => {
         </TableContainer>
       </Paper>
 
-      {/* Savings by Category */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Savings by Cluster</Typography>
-            <TableContainer>
+      {/* Savings by category */}
+      <Grid container spacing={2}>
+        {[
+          { title: 'By Cluster', items: data.savings_by_cluster },
+          { title: 'By Namespace (Top 10)', items: data.savings_by_namespace.slice(0, 10) },
+        ].map(({ title, items }) => (
+          <Grid item xs={12} md={6} key={title}>
+            <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+              <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>{title}</Typography>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Cluster</TableCell>
-                    <TableCell align="right">Savings</TableCell>
-                    <TableCell align="right">%</TableCell>
+                    <TableCell sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12 }}>Name</TableCell>
+                    <TableCell align="right" sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12 }}>Savings</TableCell>
+                    <TableCell align="right" sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12 }}>%</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {data.savings_by_cluster.map((item, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>{item.name}</TableCell>
-                      <TableCell align="right">{formatCurrency(item.savings)}</TableCell>
-                      <TableCell align="right">
-                        <Chip 
-                          label={`${item.savings_percent.toFixed(1)}%`} 
-                          size="small" 
-                          color="success"
-                        />
+                  {items.map((item, i) => (
+                    <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
+                      <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245' }}>{item.name}</TableCell>
+                      <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245', fontWeight: 600 }}>{fmt(item.savings)}</TableCell>
+                      <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                        <Chip label={`${item.savings_percent.toFixed(1)}%`} size="small"
+                          sx={{ bgcolor: '#14532d', color: '#4ade80', fontSize: 11 }} />
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
-            </TableContainer>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Savings by Namespace</Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Namespace</TableCell>
-                    <TableCell align="right">Savings</TableCell>
-                    <TableCell align="right">%</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.savings_by_namespace.slice(0, 10).map((item, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>{item.name}</TableCell>
-                      <TableCell align="right">{formatCurrency(item.savings)}</TableCell>
-                      <TableCell align="right">
-                        <Chip 
-                          label={`${item.savings_percent.toFixed(1)}%`} 
-                          size="small" 
-                          color="success"
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Savings by Workload Type</Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Type</TableCell>
-                    <TableCell align="right">Savings</TableCell>
-                    <TableCell align="right">%</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {data.savings_by_workload_type.map((item, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>{item.name}</TableCell>
-                      <TableCell align="right">{formatCurrency(item.savings)}</TableCell>
-                      <TableCell align="right">
-                        <Chip 
-                          label={`${item.savings_percent.toFixed(1)}%`} 
-                          size="small" 
-                          color="success"
-                        />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        </Grid>
+            </Paper>
+          </Grid>
+        ))}
       </Grid>
-    </Container>
+    </Box>
   );
 };
 
 export default MonthlySavings;
-
-// Made with Bob

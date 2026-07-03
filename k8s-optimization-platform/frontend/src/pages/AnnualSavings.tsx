@@ -1,300 +1,208 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Container,
-  Typography,
-  Paper,
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  CircularProgress,
-  Alert,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip
+  Box, Typography, Grid, Card, CardContent, Paper, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Chip, LinearProgress,
+  CircularProgress, Alert, IconButton
 } from '@mui/material';
 import { Refresh, CalendarToday, TrendingUp, AccountBalance } from '@mui/icons-material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../config/api';
 
-interface AnnualProjection {
-  quarter: string;
-  current_cost: number;
-  optimized_cost: number;
-  savings: number;
+interface TrendItem { month: string; current_cost: number; optimized_cost: number; savings: number; }
+interface CostData {
+  current_monthly_cost: number; current_yearly_cost: number;
+  optimized_monthly_cost: number; optimized_yearly_cost: number;
+  monthly_savings: number; yearly_savings: number; savings_percent: number;
+  trend_data: TrendItem[];
+  savings_by_namespace: { name: string; savings: number; savings_percent: number }[];
 }
 
-interface AnnualSavingsData {
-  total_annual_savings: number;
-  current_annual_cost: number;
-  optimized_annual_cost: number;
-  savings_percent: number;
-  quarterly_projections: AnnualProjection[];
-  roi_metrics: {
-    payback_period_months: number;
-    roi_percent: number;
-    implementation_cost: number;
-  };
-  cumulative_savings: Array<{
-    month: string;
-    savings: number;
-    cumulative: number;
-  }>;
-}
+const fmt  = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtK = (n: number) => n >= 1000 ? `$${(n/1000).toFixed(1)}k` : `$${n.toFixed(0)}`;
 
 const AnnualSavings: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [data, setData] = useState<AnnualSavingsData | null>(null);
+  const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchData();
-  }, [clusterParam]);
-
   const fetchData = async () => {
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/v1/recommendations${clusterParam}`);
-      if (!response.ok) throw new Error('Failed to fetch recommendations');
-      const recommendations = await response.json();
-      
-      // Calculate annual savings
-      const monthlySavings = recommendations.reduce((sum: number, rec: any) => 
-        sum + (rec.estimated_monthly_savings || 0), 0
-      );
-      const annualSavings = monthlySavings * 12;
-      const currentAnnualCost = (monthlySavings / 0.3) * 12;
-      const optimizedAnnualCost = currentAnnualCost - annualSavings;
-      
-      // Quarterly projections
-      const quarterlyProjections = [
-        { quarter: 'Q1', current_cost: currentAnnualCost / 4, optimized_cost: optimizedAnnualCost / 4, savings: annualSavings / 4 },
-        { quarter: 'Q2', current_cost: currentAnnualCost / 4, optimized_cost: optimizedAnnualCost / 4, savings: annualSavings / 4 },
-        { quarter: 'Q3', current_cost: currentAnnualCost / 4, optimized_cost: optimizedAnnualCost / 4, savings: annualSavings / 4 },
-        { quarter: 'Q4', current_cost: currentAnnualCost / 4, optimized_cost: optimizedAnnualCost / 4, savings: annualSavings / 4 }
-      ];
-      
-      // Cumulative savings over 12 months
-      const cumulativeSavings = Array.from({ length: 12 }, (_, i) => ({
-        month: `Month ${i + 1}`,
-        savings: monthlySavings,
-        cumulative: monthlySavings * (i + 1)
-      }));
-      
-      // ROI metrics
-      const implementationCost = annualSavings * 0.1; // Assume 10% of annual savings as implementation cost
-      const paybackPeriodMonths = implementationCost / monthlySavings;
-      const roiPercent = ((annualSavings - implementationCost) / implementationCost) * 100;
-      
-      setData({
-        total_annual_savings: annualSavings,
-        current_annual_cost: currentAnnualCost,
-        optimized_annual_cost: optimizedAnnualCost,
-        savings_percent: (annualSavings / currentAnnualCost) * 100,
-        quarterly_projections: quarterlyProjections,
-        roi_metrics: {
-          payback_period_months: paybackPeriodMonths,
-          roi_percent: roiPercent,
-          implementation_cost: implementationCost
-        },
-        cumulative_savings: cumulativeSavings
-      });
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
+      setLoading(true); setError(null);
+      const r = await fetch(`${API_BASE_URL}/v1/cost-savings/overview${clusterParam}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to fetch'); }
+    finally { setLoading(false); }
   };
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
+  useEffect(() => { fetchData(); }, [clusterParam]);
 
-  if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
-  if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-  if (!data) return null;
+  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
+  if (error)   return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
+  if (!data)   return null;
+
+  // Quarterly breakdown from annual
+  const qSavings  = data.yearly_savings / 4;
+  const qCurrent  = data.current_yearly_cost / 4;
+  const qOptimised = data.optimized_yearly_cost / 4;
+  const quarters = ['Q1', 'Q2', 'Q3', 'Q4'].map(q => ({
+    quarter: q, current_cost: qCurrent, optimized_cost: qOptimised, savings: qSavings,
+  }));
+
+  // Cumulative monthly from trend data
+  let cumulative = 0;
+  const cumulative12 = data.trend_data.map(t => {
+    cumulative += t.savings;
+    return { ...t, cumulative };
+  });
+
+  // ROI (assume 10% of annual savings as implementation effort)
+  const implCost = data.yearly_savings * 0.1;
+  const payback  = data.monthly_savings > 0 ? implCost / data.monthly_savings : 0;
+  const roi      = implCost > 0 ? ((data.yearly_savings - implCost) / implCost) * 100 : 0;
+
+  const tooltipStyle = { backgroundColor: '#1e2433', border: '1px solid #2a3245', color: '#e8eaf0' };
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      {/* Header */}
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4">Annual Savings Projection</Typography>
-          <Typography variant="body2" color="textSecondary">
-            12-month cost savings forecast and ROI analysis
-          </Typography>
+          <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>Annual Savings Projection</Typography>
+          <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>12-month cost savings forecast and ROI analysis</Typography>
         </Box>
-        <IconButton onClick={fetchData} color="primary"><Refresh /></IconButton>
+        <IconButton onClick={fetchData} sx={{ color: '#4ade80' }}><Refresh /></IconButton>
       </Box>
 
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white' }}>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <CalendarToday />
-                <Typography variant="h6">Total Annual Savings</Typography>
-              </Box>
-              <Typography variant="h3">{formatCurrency(data.total_annual_savings)}</Typography>
-              <Typography variant="body2">{data.savings_percent.toFixed(1)}% reduction</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Current Annual Cost</Typography>
-              <Typography variant="h4">{formatCurrency(data.current_annual_cost)}</Typography>
-              <Typography variant="body2" color="error">Before optimization</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Optimized Annual Cost</Typography>
-              <Typography variant="h4" color="success.main">{formatCurrency(data.optimized_annual_cost)}</Typography>
-              <Typography variant="body2" color="success.main">After optimization</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>ROI</Typography>
-              <Typography variant="h4" color="primary.main">{data.roi_metrics.roi_percent.toFixed(0)}%</Typography>
-              <Typography variant="body2">Return on investment</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* KPI cards */}
+      <Grid container spacing={2} mb={3}>
+        {[
+          { label: 'Total Annual Savings', value: fmt(data.yearly_savings), sub: `${data.savings_percent.toFixed(1)}% reduction`, icon: <CalendarToday />, accent: '#4ade80' },
+          { label: 'Current Annual Cost',  value: fmt(data.current_yearly_cost),   sub: 'Before optimisation', icon: <AccountBalance />, accent: '#f87171' },
+          { label: 'Optimised Annual Cost',value: fmt(data.optimized_yearly_cost), sub: 'After optimisation',  icon: <TrendingUp />,    accent: '#4ade80' },
+          { label: 'Annual ROI',           value: `${roi.toFixed(0)}%`,            sub: `Payback: ${payback.toFixed(1)} months`, icon: <TrendingUp />, accent: '#e8eaf0' },
+        ].map(({ label, value, sub, icon, accent }) => (
+          <Grid item xs={12} md={3} key={label}>
+            <Card sx={{ bgcolor: '#1e2433', border: `1px solid ${accent}22` }}>
+              <CardContent>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                  <Box sx={{ color: accent }}>{icon}</Box>
+                  <Typography variant="body2" sx={{ color: '#8b95a9', textTransform: 'uppercase', fontSize: 11 }}>{label}</Typography>
+                </Box>
+                <Typography variant="h4" sx={{ color: accent, fontWeight: 700 }}>{value}</Typography>
+                <Typography variant="body2" sx={{ color: '#8b95a9' }}>{sub}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
-      {/* ROI Metrics */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>Investment & ROI Analysis</Typography>
-        <Grid container spacing={3}>
+      {/* ROI summary */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Investment & ROI Analysis</Typography>
+        <Grid container spacing={3} textAlign="center">
           <Grid item xs={12} md={4}>
-            <Box sx={{ textAlign: 'center', p: 2 }}>
-              <AccountBalance sx={{ fontSize: 48, color: 'primary.main', mb: 1 }} />
-              <Typography variant="h5" color="primary">{formatCurrency(data.roi_metrics.implementation_cost)}</Typography>
-              <Typography variant="body2" color="textSecondary">Estimated Implementation Cost</Typography>
-            </Box>
+            <AccountBalance sx={{ fontSize: 40, color: '#8b95a9', mb: 1 }} />
+            <Typography variant="h5" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{fmt(implCost)}</Typography>
+            <Typography variant="body2" sx={{ color: '#8b95a9' }}>Estimated Implementation Cost</Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Box sx={{ textAlign: 'center', p: 2 }}>
-              <CalendarToday sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
-              <Typography variant="h5" color="success.main">{data.roi_metrics.payback_period_months.toFixed(1)} months</Typography>
-              <Typography variant="body2" color="textSecondary">Payback Period</Typography>
-            </Box>
+            <CalendarToday sx={{ fontSize: 40, color: '#4ade80', mb: 1 }} />
+            <Typography variant="h5" sx={{ color: '#4ade80', fontWeight: 700 }}>{payback.toFixed(1)} months</Typography>
+            <Typography variant="body2" sx={{ color: '#8b95a9' }}>Payback Period</Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Box sx={{ textAlign: 'center', p: 2 }}>
-              <TrendingUp sx={{ fontSize: 48, color: 'info.main', mb: 1 }} />
-              <Typography variant="h5" color="info.main">{data.roi_metrics.roi_percent.toFixed(0)}%</Typography>
-              <Typography variant="body2" color="textSecondary">Annual ROI</Typography>
-            </Box>
+            <TrendingUp sx={{ fontSize: 40, color: '#4ade80', mb: 1 }} />
+            <Typography variant="h5" sx={{ color: '#4ade80', fontWeight: 700 }}>{roi.toFixed(0)}%</Typography>
+            <Typography variant="body2" sx={{ color: '#8b95a9' }}>Annual ROI</Typography>
           </Grid>
         </Grid>
       </Paper>
 
-      {/* Quarterly Projections */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>Quarterly Savings Projection</Typography>
-        <Box sx={{ height: 400, mt: 2 }}>
+      {/* Quarterly bar chart */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Quarterly Savings Projection</Typography>
+        <Box sx={{ height: 300 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.quarterly_projections}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="quarter" />
-              <YAxis />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              <Legend />
-              <Bar dataKey="current_cost" fill="#ef5350" name="Current Cost" />
-              <Bar dataKey="optimized_cost" fill="#66bb6a" name="Optimized Cost" />
-              <Bar dataKey="savings" fill="#42a5f5" name="Savings" />
+            <BarChart data={quarters} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
+              <XAxis dataKey="quarter" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ color: '#8b95a9' }} />
+              <Bar dataKey="current_cost"   fill="#f87171" name="Current Cost" radius={[4,4,0,0]} />
+              <Bar dataKey="optimized_cost" fill="#4ade80" name="Optimised Cost" radius={[4,4,0,0]} />
+              <Bar dataKey="savings"        fill="#e8eaf0" name="Savings" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </Box>
+
+        {/* Table */}
         <TableContainer sx={{ mt: 2 }}>
-          <Table>
+          <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Quarter</TableCell>
-                <TableCell align="right">Current Cost</TableCell>
-                <TableCell align="right">Optimized Cost</TableCell>
-                <TableCell align="right">Savings</TableCell>
-                <TableCell align="right">Savings %</TableCell>
+                {['Quarter','Current Cost','Optimised Cost','Savings','Savings %'].map(h => (
+                  <TableCell key={h} sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}
+                    align={h === 'Quarter' ? 'left' : 'right'}>{h}</TableCell>
+                ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {data.quarterly_projections.map((quarter) => (
-                <TableRow key={quarter.quarter}>
-                  <TableCell><Chip label={quarter.quarter} color="primary" /></TableCell>
-                  <TableCell align="right">{formatCurrency(quarter.current_cost)}</TableCell>
-                  <TableCell align="right">{formatCurrency(quarter.optimized_cost)}</TableCell>
-                  <TableCell align="right">
-                    <Chip 
-                      label={formatCurrency(quarter.savings)} 
-                      color="success" 
-                      size="small"
-                    />
+              {quarters.map(q => (
+                <TableRow key={q.quarter} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
+                  <TableCell sx={{ borderColor: '#2a3245' }}><Chip label={q.quarter} size="small" sx={{ bgcolor: '#2a3245', color: '#e8eaf0' }} /></TableCell>
+                  <TableCell align="right" sx={{ color: '#f87171', borderColor: '#2a3245' }}>{fmt(q.current_cost)}</TableCell>
+                  <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(q.optimized_cost)}</TableCell>
+                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                    <Chip label={fmt(q.savings)} size="small" sx={{ bgcolor: '#14532d', color: '#4ade80' }} />
                   </TableCell>
-                  <TableCell align="right">
-                    {((quarter.savings / quarter.current_cost) * 100).toFixed(1)}%
-                  </TableCell>
+                  <TableCell align="right" sx={{ color: '#8b95a9', borderColor: '#2a3245' }}>{data.savings_percent.toFixed(1)}%</TableCell>
                 </TableRow>
               ))}
-              <TableRow sx={{ bgcolor: 'action.hover', fontWeight: 'bold' }}>
-                <TableCell><strong>Annual Total</strong></TableCell>
-                <TableCell align="right"><strong>{formatCurrency(data.current_annual_cost)}</strong></TableCell>
-                <TableCell align="right"><strong>{formatCurrency(data.optimized_annual_cost)}</strong></TableCell>
-                <TableCell align="right">
-                  <Chip 
-                    label={formatCurrency(data.total_annual_savings)} 
-                    color="success"
-                  />
+              <TableRow sx={{ bgcolor: '#252e42' }}>
+                <TableCell sx={{ color: '#e8eaf0', fontWeight: 700, borderColor: '#2a3245' }}>Annual Total</TableCell>
+                <TableCell align="right" sx={{ color: '#f87171', fontWeight: 700, borderColor: '#2a3245' }}>{fmt(data.current_yearly_cost)}</TableCell>
+                <TableCell align="right" sx={{ color: '#4ade80', fontWeight: 700, borderColor: '#2a3245' }}>{fmt(data.optimized_yearly_cost)}</TableCell>
+                <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                  <Chip label={fmt(data.yearly_savings)} sx={{ bgcolor: '#14532d', color: '#4ade80', fontWeight: 700 }} />
                 </TableCell>
-                <TableCell align="right"><strong>{data.savings_percent.toFixed(1)}%</strong></TableCell>
+                <TableCell align="right" sx={{ color: '#e8eaf0', fontWeight: 700, borderColor: '#2a3245' }}>{data.savings_percent.toFixed(1)}%</TableCell>
               </TableRow>
             </TableBody>
           </Table>
         </TableContainer>
       </Paper>
 
-      {/* Cumulative Savings */}
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>Cumulative Savings Over 12 Months</Typography>
+      {/* Cumulative table */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Cumulative Savings Over 6 Months</Typography>
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Month</TableCell>
-                <TableCell align="right">Monthly Savings</TableCell>
-                <TableCell align="right">Cumulative Savings</TableCell>
-                <TableCell align="right">Progress</TableCell>
+                {['Month','Monthly Savings','Cumulative Savings','Progress'].map(h => (
+                  <TableCell key={h} sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}
+                    align={h === 'Month' ? 'left' : 'right'}>{h}</TableCell>
+                ))}
               </TableRow>
             </TableHead>
             <TableBody>
-              {data.cumulative_savings.map((month, idx) => (
-                <TableRow key={idx}>
-                  <TableCell>{month.month}</TableCell>
-                  <TableCell align="right">{formatCurrency(month.savings)}</TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" fontWeight="bold" color="success.main">
-                      {formatCurrency(month.cumulative)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Chip 
-                      label={`${((month.cumulative / data.total_annual_savings) * 100).toFixed(0)}%`}
-                      size="small"
-                      color={idx === 11 ? 'success' : 'default'}
-                    />
+              {cumulative12.map((m, i) => (
+                <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
+                  <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245' }}>{m.month}</TableCell>
+                  <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(m.savings)}</TableCell>
+                  <TableCell align="right" sx={{ color: '#4ade80', fontWeight: 700, borderColor: '#2a3245' }}>{fmt(m.cumulative)}</TableCell>
+                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end' }}>
+                      <LinearProgress variant="determinate"
+                        value={data.yearly_savings > 0 ? Math.min((m.cumulative / data.yearly_savings) * 100, 100) : 0}
+                        sx={{ width: 80, height: 6, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: '#4ade80' } }} />
+                      <Chip label={`${data.yearly_savings > 0 ? Math.min(((m.cumulative / data.yearly_savings) * 100), 100).toFixed(0) : 0}%`}
+                        size="small" sx={{ bgcolor: i === cumulative12.length - 1 ? '#14532d' : '#2a3245', color: '#4ade80', fontSize: 11 }} />
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))}
@@ -302,10 +210,8 @@ const AnnualSavings: React.FC = () => {
           </Table>
         </TableContainer>
       </Paper>
-    </Container>
+    </Box>
   );
 };
 
 export default AnnualSavings;
-
-// Made with Bob

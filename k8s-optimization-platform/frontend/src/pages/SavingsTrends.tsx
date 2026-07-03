@@ -1,371 +1,227 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Container,
-  Typography,
-  Paper,
-  Box,
-  Grid,
-  Card,
-  CardContent,
-  CircularProgress,
-  Alert,
-  IconButton,
-  Chip,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel
+  Box, Typography, Grid, Card, CardContent, Paper, Chip,
+  CircularProgress, Alert, IconButton, Select, MenuItem, FormControl, InputLabel
 } from '@mui/material';
 import { Refresh, TrendingUp, TrendingDown, ShowChart } from '@mui/icons-material';
-import { LineChart, Line, AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import {
+  LineChart, Line, AreaChart, Area, BarChart, Bar,
+  XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
+} from 'recharts';
 import { API_BASE_URL } from '../config/api';
 
-interface TrendData {
-  month: string;
-  current_cost: number;
-  optimized_cost: number;
-  savings: number;
-  cumulative_savings: number;
-  optimization_rate: number;
+interface TrendItem { month: string; current_cost: number; optimized_cost: number; savings: number; }
+interface CostData {
+  monthly_savings: number; yearly_savings: number; savings_percent: number;
+  current_monthly_cost: number; optimized_monthly_cost: number;
+  trend_data: TrendItem[];
 }
 
-interface SavingsTrendsData {
-  total_savings: number;
-  monthly_trend: TrendData[];
-  projected_annual_savings: number;
-  optimization_velocity: number;
-  avg_monthly_savings: number;
-  peak_savings_month: string;
-  trend_direction: 'increasing' | 'decreasing' | 'stable';
-}
+const fmt  = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtK = (n: number) => n >= 1000 ? `$${(n/1000).toFixed(1)}k` : `$${n.toFixed(0)}`;
+const tooltipStyle = { backgroundColor: '#1e2433', border: '1px solid #2a3245', color: '#e8eaf0' };
 
 const SavingsTrends: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [data, setData] = useState<SavingsTrendsData | null>(null);
+  const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'3m' | '6m' | '12m'>('6m');
 
-  useEffect(() => {
-    fetchData();
-  }, [timeRange, clusterParam]);
-
   const fetchData = async () => {
     try {
-      setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/v1/recommendations${clusterParam}`);
-      if (!response.ok) throw new Error('Failed to fetch recommendations');
-      const recommendations = await response.json();
-      
-      // Calculate current monthly savings
-      const currentMonthlySavings = recommendations.reduce((sum: number, rec: any) => 
-        sum + (rec.estimated_monthly_savings || 0), 0
-      );
-      
-      // Generate historical trend data (simulated for demo)
-      const months = timeRange === '3m' ? 3 : timeRange === '6m' ? 6 : 12;
-      const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      const currentMonth = new Date().getMonth();
-      
-      const monthlyTrend: TrendData[] = [];
-      let cumulativeSavings = 0;
-      
-      for (let i = months - 1; i >= 0; i--) {
-        const monthIndex = (currentMonth - i + 12) % 12;
-        const monthName = monthNames[monthIndex];
-        
-        // Simulate gradual improvement in optimization
-        const optimizationProgress = (months - i) / months;
-        const monthlySavings = currentMonthlySavings * (0.5 + optimizationProgress * 0.5);
-        const currentCost = monthlySavings / 0.3;
-        const optimizedCost = currentCost - monthlySavings;
-        
-        cumulativeSavings += monthlySavings;
-        
-        monthlyTrend.push({
-          month: monthName,
-          current_cost: currentCost,
-          optimized_cost: optimizedCost,
-          savings: monthlySavings,
-          cumulative_savings: cumulativeSavings,
-          optimization_rate: (monthlySavings / currentCost) * 100
-        });
-      }
-      
-      // Calculate metrics
-      const avgMonthlySavings = monthlyTrend.reduce((sum, m) => sum + m.savings, 0) / monthlyTrend.length;
-      const peakMonth = monthlyTrend.reduce((max, m) => m.savings > max.savings ? m : max, monthlyTrend[0]);
-      
-      // Calculate trend direction
-      const firstHalf = monthlyTrend.slice(0, Math.floor(monthlyTrend.length / 2));
-      const secondHalf = monthlyTrend.slice(Math.floor(monthlyTrend.length / 2));
-      const firstHalfAvg = firstHalf.reduce((sum, m) => sum + m.savings, 0) / firstHalf.length;
-      const secondHalfAvg = secondHalf.reduce((sum, m) => sum + m.savings, 0) / secondHalf.length;
-      
-      let trendDirection: 'increasing' | 'decreasing' | 'stable' = 'stable';
-      const changePercent = ((secondHalfAvg - firstHalfAvg) / firstHalfAvg) * 100;
-      if (changePercent > 10) trendDirection = 'increasing';
-      else if (changePercent < -10) trendDirection = 'decreasing';
-      
-      // Calculate optimization velocity (rate of improvement)
-      const optimizationVelocity = changePercent;
-      
-      setData({
-        total_savings: cumulativeSavings,
-        monthly_trend: monthlyTrend,
-        projected_annual_savings: currentMonthlySavings * 12,
-        optimization_velocity: optimizationVelocity,
-        avg_monthly_savings: avgMonthlySavings,
-        peak_savings_month: peakMonth.month,
-        trend_direction: trendDirection
-      });
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
+      setLoading(true); setError(null);
+      const r = await fetch(`${API_BASE_URL}/v1/cost-savings/overview${clusterParam}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+    } catch (e) { setError(e instanceof Error ? e.message : 'Failed to fetch'); }
+    finally { setLoading(false); }
   };
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
+  useEffect(() => { fetchData(); }, [clusterParam]);
 
-  if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
-  if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-  if (!data) return null;
+  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
+  if (error)   return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
+  if (!data)   return null;
 
-  const getTrendIcon = () => {
-    if (data.trend_direction === 'increasing') return <TrendingUp sx={{ color: 'success.main' }} />;
-    if (data.trend_direction === 'decreasing') return <TrendingDown sx={{ color: 'error.main' }} />;
-    return <ShowChart sx={{ color: 'info.main' }} />;
-  };
+  // Filter trend data to selected time range, add cumulative
+  const months = timeRange === '3m' ? 3 : timeRange === '12m' ? 12 : 6;
+  const sliced = data.trend_data.slice(-Math.min(months, data.trend_data.length));
+  let cum = 0;
+  const trend = sliced.map(t => { cum += t.savings; return { ...t, cumulative_savings: cum, optimization_rate: t.current_cost > 0 ? (t.savings / t.current_cost) * 100 : 0 }; });
 
-  const getTrendColor = () => {
-    if (data.trend_direction === 'increasing') return 'success';
-    if (data.trend_direction === 'decreasing') return 'error';
-    return 'info';
-  };
+  const totalSavings   = trend.reduce((s, t) => s + t.savings, 0);
+  const avgMonthly     = trend.length > 0 ? totalSavings / trend.length : 0;
+  const peakMonth      = trend.reduce((m, t) => t.savings > m.savings ? t : m, trend[0] || { month: '—', savings: 0 });
+
+  // Trend direction: compare second half vs first half
+  const half1 = trend.slice(0, Math.floor(trend.length / 2));
+  const half2 = trend.slice(Math.floor(trend.length / 2));
+  const avg1  = half1.length ? half1.reduce((s, t) => s + t.savings, 0) / half1.length : 0;
+  const avg2  = half2.length ? half2.reduce((s, t) => s + t.savings, 0) / half2.length : 0;
+  const velocity = avg1 > 0 ? ((avg2 - avg1) / avg1) * 100 : 0;
+  const direction: 'increasing' | 'decreasing' | 'stable' =
+    velocity > 5 ? 'increasing' : velocity < -5 ? 'decreasing' : 'stable';
+
+  const trendColor = direction === 'increasing' ? '#4ade80' : direction === 'decreasing' ? '#f87171' : '#e8eaf0';
+  const TrendIcon  = direction === 'increasing' ? TrendingUp : direction === 'decreasing' ? TrendingDown : ShowChart;
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      {/* Header */}
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4">Savings Trends Analysis</Typography>
-          <Typography variant="body2" color="textSecondary">
-            Historical savings trends and future projections
-          </Typography>
+          <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>Savings Trends Analysis</Typography>
+          <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>Historical savings trends and future projections</Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <FormControl size="small" sx={{ minWidth: 120 }}>
-            <InputLabel>Time Range</InputLabel>
-            <Select
-              value={timeRange}
-              label="Time Range"
-              onChange={(e) => setTimeRange(e.target.value as '3m' | '6m' | '12m')}
-            >
+        <Box display="flex" gap={1} alignItems="center">
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel sx={{ color: '#8b95a9' }}>Time Range</InputLabel>
+            <Select value={timeRange} label="Time Range"
+              onChange={e => setTimeRange(e.target.value as '3m' | '6m' | '12m')}
+              sx={{ color: '#e8eaf0', bgcolor: '#1e2433', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2a3245' } }}>
               <MenuItem value="3m">Last 3 Months</MenuItem>
               <MenuItem value="6m">Last 6 Months</MenuItem>
               <MenuItem value="12m">Last 12 Months</MenuItem>
             </Select>
           </FormControl>
-          <IconButton onClick={fetchData} color="primary"><Refresh /></IconButton>
+          <IconButton onClick={fetchData} sx={{ color: '#4ade80' }}><Refresh /></IconButton>
         </Box>
       </Box>
 
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Total Savings (Period)</Typography>
-              <Typography variant="h4">{formatCurrency(data.total_savings)}</Typography>
-              <Typography variant="body2" color="success.main">
-                Cumulative savings
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Avg Monthly Savings</Typography>
-              <Typography variant="h4">{formatCurrency(data.avg_monthly_savings)}</Typography>
-              <Typography variant="body2" color="textSecondary">
-                Per month average
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Optimization Velocity</Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {getTrendIcon()}
-                <Typography variant="h4">
-                  {Math.abs(data.optimization_velocity).toFixed(1)}%
-                </Typography>
-              </Box>
-              <Chip 
-                label={data.trend_direction.toUpperCase()} 
-                color={getTrendColor() as any}
-                size="small"
-                sx={{ mt: 1 }}
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
-            <CardContent>
-              <Typography gutterBottom>Projected Annual Savings</Typography>
-              <Typography variant="h4">{formatCurrency(data.projected_annual_savings)}</Typography>
-              <Typography variant="body2">
-                Based on current trend
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* KPI cards */}
+      <Grid container spacing={2} mb={3}>
+        {[
+          { label: 'Total Savings (Period)', value: fmt(totalSavings),          sub: 'Cumulative savings',              color: '#4ade80' },
+          { label: 'Avg Monthly Savings',    value: fmt(avgMonthly),             sub: 'Per month average',               color: '#e8eaf0' },
+          { label: 'Optimisation Velocity',  value: `${Math.abs(velocity).toFixed(1)}%`, sub: direction.toUpperCase(), color: trendColor },
+          { label: 'Projected Annual',       value: fmt(data.monthly_savings * 12), sub: 'Based on current run-rate',    color: '#4ade80' },
+        ].map(({ label, value, sub, color }) => (
+          <Grid item xs={12} md={3} key={label}>
+            <Card sx={{ bgcolor: '#1e2433', border: `1px solid ${color}22` }}>
+              <CardContent>
+                <Typography variant="body2" sx={{ color: '#8b95a9', textTransform: 'uppercase', fontSize: 11, mb: 1 }}>{label}</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {label === 'Optimisation Velocity' && <TrendIcon sx={{ color }} />}
+                  <Typography variant="h4" sx={{ color, fontWeight: 700 }}>{value}</Typography>
+                </Box>
+                {label === 'Optimisation Velocity'
+                  ? <Chip label={direction.toUpperCase()} size="small" sx={{ mt: 1, bgcolor: color + '22', color, border: `1px solid ${color}44` }} />
+                  : <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>{sub}</Typography>}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
-      {/* Cumulative Savings Trend */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>Cumulative Savings Over Time</Typography>
-        <Box sx={{ height: 300, mt: 2 }}>
+      {/* Cumulative savings area */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Cumulative Savings Over Time</Typography>
+        <Box sx={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={data.monthly_trend}>
+            <AreaChart data={trend}>
               <defs>
-                <linearGradient id="colorSavings" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#8884d8" stopOpacity={0.8}/>
-                  <stop offset="95%" stopColor="#8884d8" stopOpacity={0}/>
+                <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor="#4ade80" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#4ade80" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              <Legend />
-              <Area 
-                type="monotone" 
-                dataKey="cumulative_savings" 
-                stroke="#8884d8" 
-                fillOpacity={1} 
-                fill="url(#colorSavings)"
-                name="Cumulative Savings"
-              />
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
+              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ color: '#8b95a9' }} />
+              <Area type="monotone" dataKey="cumulative_savings" stroke="#4ade80" strokeWidth={2}
+                fill="url(#grad)" name="Cumulative Savings" dot={{ r: 3, fill: '#4ade80' }} />
             </AreaChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
-      {/* Monthly Savings Trend */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>Monthly Savings Trend</Typography>
-        <Box sx={{ height: 300, mt: 2 }}>
+      {/* Monthly savings bar */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Monthly Savings</Typography>
+        <Box sx={{ height: 260 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data.monthly_trend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              <Legend />
-              <Bar dataKey="savings" fill="#66bb6a" name="Monthly Savings" />
+            <BarChart data={trend} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
+              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ color: '#8b95a9' }} />
+              <Bar dataKey="savings" fill="#4ade80" name="Monthly Savings" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
-      {/* Cost Comparison Trend */}
-      <Paper sx={{ p: 3, mb: 3 }}>
-        <Typography variant="h6" gutterBottom>Cost Comparison: Current vs Optimized</Typography>
-        <Box sx={{ height: 300, mt: 2 }}>
+      {/* Current vs Optimised line */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Cost Comparison: Current vs Optimised</Typography>
+        <Box sx={{ height: 260 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.monthly_trend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
-              <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="current_cost" 
-                stroke="#ef5350" 
-                strokeWidth={2}
-                name="Current Cost"
-                dot={{ r: 4 }}
-              />
-              <Line 
-                type="monotone" 
-                dataKey="optimized_cost" 
-                stroke="#66bb6a" 
-                strokeWidth={2}
-                name="Optimized Cost"
-                dot={{ r: 4 }}
-              />
+            <LineChart data={trend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
+              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ color: '#8b95a9' }} />
+              <Line type="monotone" dataKey="current_cost"   stroke="#f87171" strokeWidth={2} name="Current Cost"   dot={{ r: 4, fill: '#f87171' }} />
+              <Line type="monotone" dataKey="optimized_cost" stroke="#4ade80" strokeWidth={2} name="Optimised Cost" dot={{ r: 4, fill: '#4ade80' }} />
             </LineChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
-      {/* Optimization Rate Trend */}
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>Optimization Rate Trend</Typography>
-        <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
-          Percentage of cost savings achieved each month
-        </Typography>
-        <Box sx={{ height: 300 }}>
+      {/* Optimisation rate line */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 1 }}>Optimisation Rate Trend</Typography>
+        <Typography variant="body2" sx={{ color: '#8b95a9', mb: 2 }}>Percentage of cost savings achievable each month</Typography>
+        <Box sx={{ height: 240 }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.monthly_trend}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis tickFormatter={(value) => `${value.toFixed(0)}%`} />
-              <Tooltip formatter={(value: number) => `${value.toFixed(2)}%`} />
-              <Legend />
-              <Line 
-                type="monotone" 
-                dataKey="optimization_rate" 
-                stroke="#9c27b0" 
-                strokeWidth={2}
-                name="Optimization Rate"
-                dot={{ r: 4 }}
-              />
+            <LineChart data={trend}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
+              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <YAxis tickFormatter={v => `${v.toFixed(0)}%`} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} contentStyle={tooltipStyle} />
+              <Legend wrapperStyle={{ color: '#8b95a9' }} />
+              <Line type="monotone" dataKey="optimization_rate" stroke="#4ade80" strokeWidth={2} name="Optimisation Rate" dot={{ r: 4, fill: '#4ade80' }} />
             </LineChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
-      {/* Insights */}
-      <Paper sx={{ p: 3, mt: 3, bgcolor: 'info.light', color: 'info.contrastText' }}>
-        <Typography variant="h6" gutterBottom>Key Insights</Typography>
+      {/* Key insights */}
+      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Key Insights</Typography>
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
-            <Typography variant="body2">
-              • Peak savings month: <strong>{data.peak_savings_month}</strong>
-            </Typography>
-            <Typography variant="body2">
-              • Trend direction: <strong>{data.trend_direction.toUpperCase()}</strong>
-            </Typography>
-            <Typography variant="body2">
-              • Optimization velocity: <strong>{data.optimization_velocity > 0 ? '+' : ''}{data.optimization_velocity.toFixed(1)}%</strong>
-            </Typography>
+            {[
+              ['Peak savings month', peakMonth.month],
+              ['Trend direction', direction.toUpperCase()],
+              ['Optimisation velocity', `${velocity > 0 ? '+' : ''}${velocity.toFixed(1)}%`],
+            ].map(([k, v]) => (
+              <Typography key={k} variant="body2" sx={{ color: '#8b95a9', mb: 0.5 }}>
+                • {k}: <strong style={{ color: '#c8cdd8' }}>{v}</strong>
+              </Typography>
+            ))}
           </Grid>
           <Grid item xs={12} md={6}>
-            <Typography variant="body2">
-              • Average monthly savings: <strong>{formatCurrency(data.avg_monthly_savings)}</strong>
-            </Typography>
-            <Typography variant="body2">
-              • Total period savings: <strong>{formatCurrency(data.total_savings)}</strong>
-            </Typography>
-            <Typography variant="body2">
-              • Projected annual impact: <strong>{formatCurrency(data.projected_annual_savings)}</strong>
-            </Typography>
+            {[
+              ['Avg monthly savings', fmt(avgMonthly)],
+              ['Total period savings', fmt(totalSavings)],
+              ['Projected annual impact', fmt(data.monthly_savings * 12)],
+            ].map(([k, v]) => (
+              <Typography key={k} variant="body2" sx={{ color: '#8b95a9', mb: 0.5 }}>
+                • {k}: <strong style={{ color: '#4ade80' }}>{v}</strong>
+              </Typography>
+            ))}
           </Grid>
         </Grid>
       </Paper>
-    </Container>
+    </Box>
   );
 };
 
 export default SavingsTrends;
-
-// Made with Bob

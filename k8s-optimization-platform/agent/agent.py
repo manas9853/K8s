@@ -1485,8 +1485,8 @@ class ClusterAgent:
                     recent_events.append(rec)
 
         return {
-            "all_events":     all_events[:200],
-            "warning_events": warning_events[:100],
+            "all_events":     all_events,
+            "warning_events": warning_events,
             "recent_events":  recent_events[:100],
             "total":          len(all_events),
             "warnings":       len(warning_events),
