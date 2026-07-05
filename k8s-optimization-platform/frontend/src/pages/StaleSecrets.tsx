@@ -4,7 +4,8 @@ import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, TextField,
-  InputAdornment, Paper,
+  InputAdornment, Paper, Select, MenuItem, FormControl, InputLabel,
+  SelectChangeEvent,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -57,6 +58,17 @@ const fmtDate = (s: string) => {
 const riskColor = (r: string) =>
   r === 'High' ? T.red : r === 'Medium' ? T.yellow : T.green;
 
+// ─── Shared select sx (matches ZombieResources) ───────────────────────────────
+const selectSx = {
+  color: T.body, bgcolor: T.bg,
+  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+  '& .MuiSvgIcon-root':                            { color: T.muted },
+};
+
+const menuProps = { PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } };
+
 // ─── Stat card ────────────────────────────────────────────────────────────────
 const StatCard: React.FC<{ label: string; value: number | string; sub?: string; accent?: string }> =
   ({ label, value, sub, accent }) => (
@@ -76,18 +88,19 @@ const StatCard: React.FC<{ label: string; value: number | string; sub?: string; 
 // ─── Main component ───────────────────────────────────────────────────────────
 const StaleSecrets: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [items,   setItems]   = useState<StaleSecret[]>([]);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
-  const [search,  setSearch]  = useState('');
+  const [items,     setItems]     = useState<StaleSecret[]>([]);
+  const [summary,   setSummary]   = useState<Summary | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [error,     setError]     = useState<string | null>(null);
+  const [search,    setSearch]    = useState('');
+  const [nsFilter,  setNsFilter]  = useState('all');
+  const [riskFilter,setRiskFilter]= useState('all');
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const url = `${API_BASE_URL}/v1/cleanup/stale-secrets${clusterParam}`;
-      const res = await fetch(url);
+      const res = await fetch(`${API_BASE_URL}/v1/cleanup/stale-secrets${clusterParam}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setSummary(data.summary ?? null);
@@ -112,17 +125,21 @@ const StaleSecrets: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filtered = useMemo(() =>
-    items.filter(i =>
-      i.resource_name.toLowerCase().includes(search.toLowerCase()) ||
-      i.namespace.toLowerCase().includes(search.toLowerCase()) ||
-      i.reason.toLowerCase().includes(search.toLowerCase())
-    ), [items, search]);
-
   const uniqueNamespaces = useMemo(() => Array.from(new Set(items.map(i => i.namespace))).sort(), [items]);
   const highRisk  = items.filter(i => i.risk_level === 'High').length;
-  const medRisk   = items.filter(i => i.risk_level === 'Medium').length;
   const safeCount = items.filter(i => i.can_delete).length;
+
+  const filtered = useMemo(() =>
+    items.filter(i => {
+      const q = search.toLowerCase();
+      const matchSearch =
+        i.resource_name.toLowerCase().includes(q) ||
+        i.namespace.toLowerCase().includes(q) ||
+        i.reason.toLowerCase().includes(q);
+      const matchNs   = nsFilter   === 'all' || i.namespace  === nsFilter;
+      const matchRisk = riskFilter === 'all' || i.risk_level === riskFilter;
+      return matchSearch && matchNs && matchRisk;
+    }), [items, search, nsFilter, riskFilter]);
 
   const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
@@ -146,7 +163,7 @@ const StaleSecrets: React.FC = () => {
         <Box>
           <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Stale Secrets</Typography>
           <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
-            Secrets not referenced by any pod or service account
+            {filtered.length} of {items.length} secrets not referenced by any pod or service account
           </Typography>
         </Box>
         <IconButton onClick={fetchData} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
@@ -183,21 +200,51 @@ const StaleSecrets: React.FC = () => {
 
       {items.length > 0 && (
         <>
-          {/* Search */}
+          {/* Filters */}
           <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3 }}>
-            <TextField
-              fullWidth size="small"
-              placeholder="Search by name, namespace, reason…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              InputProps={{
-                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
-                sx: { color: T.text, fontSize: 13, bgcolor: T.bg, borderRadius: 1,
-                  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
-                },
-              }}
-            />
+            <Grid container spacing={2} alignItems="center">
+              <Grid item xs={12} md={5}>
+                <TextField
+                  fullWidth size="small"
+                  placeholder="Search by name, namespace, reason…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  InputProps={{
+                    startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+                    sx: { color: T.body, bgcolor: T.bg,
+                      '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+                      '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+                      '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+                    },
+                  }}
+                  InputLabelProps={{ sx: { color: T.muted } }}
+                />
+              </Grid>
+              <Grid item xs={6} md={3.5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel sx={{ color: T.muted }}>Namespace</InputLabel>
+                  <Select value={nsFilter} label="Namespace"
+                    onChange={(e: SelectChangeEvent) => setNsFilter(e.target.value)}
+                    sx={selectSx} MenuProps={menuProps}>
+                    <MenuItem value="all">All Namespaces</MenuItem>
+                    {uniqueNamespaces.map(ns => <MenuItem key={ns} value={ns}>{ns}</MenuItem>)}
+                  </Select>
+                </FormControl>
+              </Grid>
+              <Grid item xs={6} md={3.5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel sx={{ color: T.muted }}>Risk</InputLabel>
+                  <Select value={riskFilter} label="Risk"
+                    onChange={(e: SelectChangeEvent) => setRiskFilter(e.target.value)}
+                    sx={selectSx} MenuProps={menuProps}>
+                    <MenuItem value="all">All Risks</MenuItem>
+                    <MenuItem value="Low">Low</MenuItem>
+                    <MenuItem value="Medium">Medium</MenuItem>
+                    <MenuItem value="High">High</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
           </Paper>
 
           {/* Table */}
@@ -218,7 +265,7 @@ const StaleSecrets: React.FC = () => {
                 {filtered.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={7} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
-                      No results match your search
+                      No results match your filters
                     </TableCell>
                   </TableRow>
                 ) : filtered.map((s, idx) => (

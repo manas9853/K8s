@@ -226,7 +226,11 @@ const ZombieResources: React.FC = () => {
               onChange={e => setSearch(e.target.value)}
               InputProps={{
                 startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
-                sx: { color: T.body, bgcolor: T.bg, '& fieldset': { borderColor: T.border } },
+                sx: { color: T.body, bgcolor: T.bg,
+                  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+                },
               }}
               InputLabelProps={{ sx: { color: T.muted } }}
             />
@@ -237,7 +241,12 @@ const ZombieResources: React.FC = () => {
               <Select
                 value={typeFilter} label="Type"
                 onChange={(e: SelectChangeEvent) => setTypeFilter(e.target.value)}
-                sx={{ color: T.body, bgcolor: T.bg, '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border }, '& .MuiSvgIcon-root': { color: T.muted } }}
+                sx={{ color: T.body, bgcolor: T.bg,
+                  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+                  '& .MuiSvgIcon-root':                            { color: T.muted },
+                }}
               >
                 <MenuItem value="all">All Types</MenuItem>
                 {types.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
@@ -250,7 +259,12 @@ const ZombieResources: React.FC = () => {
               <Select
                 value={riskFilter} label="Risk"
                 onChange={(e: SelectChangeEvent) => setRiskFilter(e.target.value)}
-                sx={{ color: T.body, bgcolor: T.bg, '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border }, '& .MuiSvgIcon-root': { color: T.muted } }}
+                sx={{ color: T.body, bgcolor: T.bg,
+                  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+                  '& .MuiSvgIcon-root':                            { color: T.muted },
+                }}
               >
                 <MenuItem value="all">All Risks</MenuItem>
                 <MenuItem value="Low">Low</MenuItem>

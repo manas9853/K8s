@@ -1,174 +1,462 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Container, Typography, Paper, Box, Grid, Card, CardContent,
+  Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, Button, Dialog,
-  DialogTitle, DialogContent, DialogActions, Checkbox, TextField,
-  InputAdornment
+  TableContainer, TableHead, TableRow, Chip, TextField,
+  InputAdornment, Paper, Select, MenuItem, FormControl, InputLabel,
 } from '@mui/material';
-import { Refresh, Delete, Warning, Search, Storage } from '@mui/icons-material';
-import ClusterGuard from '../components/ClusterGuard';
-import NoDataState from '../components/NoDataState';
+import {
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  Storage as StorageIcon,
+} from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 
-interface UnattachedPVC {
-  name: string;
-  namespace: string;
-  cluster: string;
-  storage_class: string;
-  capacity: string;
-  created: string;
-  last_attached: string;
-  age_days: number;
-  monthly_cost: number;
-  reason: string;
-  status: string;
+// ─── Strict dark theme — no blues, purples, teals, or gradients ───────────────
+const T = {
+  bg:      '#0f1724',
+  card:    '#1e2433',
+  hover:   '#252e42',
+  border:  '#2a3245',
+  text:    '#e8eaf0',
+  muted:   '#8b95a9',
+  body:    '#c8cdd8',
+  green:   '#4ade80',
+  red:     '#f87171',
+  yellow:  '#f59e0b',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface PVC {
+  resource_name:  string;
+  namespace:      string;
+  cluster:        string;
+  last_used:      string;
+  days_unused:    number;
+  monthly_cost:   number;
+  reason:         string;
+  risk_level:     string;
+  can_delete:     boolean;
+  estimated_savings: number;
+  capacity:       string;
+  storage_class:  string;
+  pvc_phase:      string;
 }
 
-const UnattachedPVCsInner: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [pvcs, setPVCs] = useState<UnattachedPVC[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedPVCs, setSelectedPVCs] = useState<Set<string>>(new Set());
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+interface Summary {
+  total_resources:        number;
+  safe_to_delete:         number;
+  requires_review:        number;
+  high_risk:              number;
+  total_monthly_savings:  number;
+  total_yearly_savings:   number;
+}
 
-  useEffect(() => { fetchData(); }, [clusterParam]);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtDate = (s: string) => {
+  if (!s || s === 'Unknown') return '—';
+  try { return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+  catch { return s; }
+};
+const fmtCost = (n: number) => n > 0 ? `$${n.toFixed(2)}/mo` : '—';
+
+// MUI input/select override — kills all focus/hover colour bleed
+const inputSx = {
+  color: T.text, fontSize: 13, bgcolor: T.bg, borderRadius: 1,
+  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+  '& .MuiSvgIcon-root':                            { color: T.muted },
+};
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+const StatCard: React.FC<{ label: string; value: string | number; sub?: string; accent?: string }> =
+  ({ label, value, sub, accent }) => (
+  <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+      <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent ?? T.text, lineHeight: 1 }}>
+        {value}
+      </Typography>
+      {sub && <Typography sx={{ fontSize: 11, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+    </CardContent>
+  </Card>
+);
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
+const UnattachedPVCs: React.FC = () => {
+  const { clusterParam } = useActiveCluster();
+  const [items,        setItems]       = useState<PVC[]>([]);
+  const [summary,      setSummary]     = useState<Summary | null>(null);
+  const [loading,      setLoading]     = useState(true);
+  const [error,        setError]       = useState<string | null>(null);
+  const [search,       setSearch]      = useState('');
+  const [nsFilter,     setNsFilter]    = useState('all');
+  const [scFilter,     setScFilter]    = useState('all');
+  const [ageFilter,    setAgeFilter]   = useState('all');
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/v1/cleanup/unattached-pvcs${clusterParam}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const items: UnattachedPVC[] = (data.resources || []).map((r: any) => ({
-        name: r.resource_name,
-        namespace: r.namespace,
-        cluster: r.cluster,
-        storage_class: r.storage_class ?? 'standard',
-        capacity: r.capacity ?? '0Gi',
-        created: r.last_used,
-        last_attached: r.last_used,
-        age_days: r.days_unused ?? 0,
-        monthly_cost: r.monthly_cost ?? 0,
-        reason: r.reason,
-        status: r.pvc_status ?? 'Available',
-      }));
-      setPVCs(items);
       setError(null);
+      const res = await fetch(`${API_BASE_URL}/v1/cleanup/unattached-pvcs${clusterParam}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSummary(data.summary ?? null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setItems((data.resources ?? []).map((r: any) => ({
+        resource_name:     r.resource_name     ?? '',
+        namespace:         r.namespace         ?? '',
+        cluster:           r.cluster           ?? '',
+        last_used:         r.last_used         ?? '',
+        days_unused:       r.days_unused        ?? 0,
+        monthly_cost:      r.monthly_cost       ?? 0,
+        reason:            r.reason             ?? '',
+        risk_level:        r.risk_level         ?? 'High',
+        can_delete:        r.can_delete         ?? false,
+        estimated_savings: r.estimated_savings  ?? 0,
+        capacity:          r.capacity           ?? '—',
+        storage_class:     r.storage_class      ?? '—',
+        pvc_phase:         r.pvc_phase          ?? 'Bound',
+      })));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
-  const formatDate = (dateString: string) => {
-    if (!dateString || dateString === 'Unknown') return 'Unknown';
-    try { return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
-    catch { return dateString; }
+  useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const uniqueNS = useMemo(() => Array.from(new Set(items.map(i => i.namespace))).sort(), [items]);
+  const uniqueSC = useMemo(() => Array.from(new Set(items.map(i => i.storage_class))).sort(), [items]);
+
+  const filtered = useMemo(() => items.filter(i => {
+    if (nsFilter  !== 'all' && i.namespace     !== nsFilter)  return false;
+    if (scFilter  !== 'all' && i.storage_class !== scFilter)  return false;
+    if (ageFilter !== 'all') {
+      const days = i.days_unused;
+      if (ageFilter === '90'  && days < 90)   return false;
+      if (ageFilter === '365' && days < 365)  return false;
+      if (ageFilter === '730' && days < 730)  return false;
+    }
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        i.resource_name.toLowerCase().includes(q) ||
+        i.namespace.toLowerCase().includes(q) ||
+        i.storage_class.toLowerCase().includes(q) ||
+        i.reason.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  }), [items, search, nsFilter, scFilter, ageFilter]);
+
+  const totalMonthlyCost = items.reduce((s, i) => s + i.monthly_cost, 0);
+  const filteredCost = filtered.reduce((s, i) => s + i.monthly_cost, 0);
+
+  // Shared Select sx — zero focus bleed, strictly dark
+  const selectSx = {
+    color: T.text, fontSize: 13, height: 38, bgcolor: T.card,
+    '& .MuiOutlinedInput-notchedOutline':             { borderColor: T.border },
+    '&:hover .MuiOutlinedInput-notchedOutline':       { borderColor: T.muted },
+    '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+    '& .MuiSvgIcon-root':                             { color: T.muted },
+  };
+  const menuProps = { PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}`, maxHeight: 280 } } };
+
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.2 };
+  const headSx = {
+    color: T.muted, borderBottom: `1px solid ${T.border}`,
+    fontSize: 11, textTransform: 'uppercase' as const,
+    letterSpacing: 0.8, fontWeight: 600, py: 1.5,
   };
 
-  const handleSelect = (name: string) => {
-    const s = new Set(selectedPVCs);
-    if (s.has(name)) s.delete(name); else s.add(name);
-    setSelectedPVCs(s);
-  };
-  const handleSelectAll = () => {
-    if (selectedPVCs.size === filteredPVCs.length) setSelectedPVCs(new Set());
-    else setSelectedPVCs(new Set(filteredPVCs.map(pvc => pvc.name)));
-  };
-
-  const filteredPVCs = pvcs.filter(pvc =>
-    pvc.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pvc.namespace.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pvc.storage_class.toLowerCase().includes(searchTerm.toLowerCase())
+  if (loading) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress sx={{ color: T.green }} />
+    </Box>
   );
 
-  const totalCost = filteredPVCs.reduce((sum, pvc) => sum + pvc.monthly_cost, 0);
-  const selectedCost = filteredPVCs.filter(pvc => selectedPVCs.has(pvc.name)).reduce((sum, pvc) => sum + pvc.monthly_cost, 0);
-
-  if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
-  if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-  if (pvcs.length === 0) return <NoDataState title="No unattached PVCs found" message="All persistent volume claims in your cluster are attached to active pods." />;
+  if (error) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+    </Box>
+  );
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+
+      {/* ── Header ── */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h4">Unattached PVCs</Typography>
-          <Typography variant="body2" color="textSecondary">Identify and remove persistent volume claims not attached to any pods</Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Unattached PVCs</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            Persistent volume claims not mounted by any running pod
+          </Typography>
         </Box>
-        <IconButton onClick={fetchData} color="primary"><Refresh /></IconButton>
+        <IconButton
+          onClick={fetchData}
+          sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}
+        >
+          <RefreshIcon fontSize="small" />
+        </IconButton>
       </Box>
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Unattached PVCs</Typography><Typography variant="h4">{pvcs.length}</Typography><Typography variant="body2" color="error">Not in use</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Monthly Cost</Typography><Typography variant="h4" color="error">{formatCurrency(totalCost)}</Typography><Typography variant="body2" color="textSecondary">From unattached PVCs</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Selected</Typography><Typography variant="h4">{selectedPVCs.size}</Typography><Typography variant="body2" color="primary">Ready for cleanup</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}><CardContent><Typography gutterBottom>Potential Savings</Typography><Typography variant="h4">{formatCurrency(selectedCost)}</Typography><Typography variant="body2">From cleanup</Typography></CardContent></Card></Grid>
+      {/* ── Stats ── */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Unattached PVCs" value={summary?.total_resources ?? items.length} sub="Not mounted by any pod" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Monthly Cost" value={`$${totalMonthlyCost.toFixed(2)}`} accent={T.red} sub="Wasted storage cost" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard
+            label="Yearly Cost"
+            value={`$${(totalMonthlyCost * 12).toFixed(2)}`}
+            accent={T.yellow}
+            sub="Annualised"
+          />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Namespaces" value={uniqueNS.length} sub="Affected" />
+        </Grid>
       </Grid>
 
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-          <TextField size="small" placeholder="Search PVCs..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }} sx={{ minWidth: 300 }} />
-          <Button variant="contained" color="error" startIcon={<Delete />} disabled={selectedPVCs.size === 0} onClick={() => setDeleteDialogOpen(true)}>Delete ({selectedPVCs.size})</Button>
-        </Box>
-      </Paper>
+      {/* ── No data ── */}
+      {items.length === 0 && (
+        <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 6, textAlign: 'center' }}>
+          <StorageIcon sx={{ fontSize: 48, color: T.muted, mb: 2 }} />
+          <Typography sx={{ fontSize: 16, fontWeight: 600, color: T.text, mb: 1 }}>No unattached PVCs found</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted }}>
+            All persistent volume claims are mounted by running pods.
+          </Typography>
+        </Paper>
+      )}
 
-      <Paper>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell padding="checkbox"><Checkbox checked={selectedPVCs.size === filteredPVCs.length && filteredPVCs.length > 0} onChange={handleSelectAll} /></TableCell>
-                <TableCell>PVC Name</TableCell><TableCell>Namespace</TableCell><TableCell>Cluster</TableCell><TableCell>Storage Class</TableCell><TableCell>Capacity</TableCell><TableCell>Last Attached</TableCell><TableCell>Age (Days)</TableCell><TableCell>Reason</TableCell><TableCell>Status</TableCell><TableCell align="right">Monthly Cost</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredPVCs.map((pvc) => (
-                <TableRow key={`${pvc.namespace}/${pvc.name}`} hover>
-                  <TableCell padding="checkbox"><Checkbox checked={selectedPVCs.has(pvc.name)} onChange={() => handleSelect(pvc.name)} /></TableCell>
-                  <TableCell><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Storage fontSize="small" color="action" /><Typography variant="body2" fontWeight="medium">{pvc.name}</Typography></Box></TableCell>
-                  <TableCell><Chip label={pvc.namespace} size="small" /></TableCell>
-                  <TableCell>{pvc.cluster}</TableCell>
-                  <TableCell><Chip label={pvc.storage_class} size="small" color="primary" /></TableCell>
-                  <TableCell><strong>{pvc.capacity}</strong></TableCell>
-                  <TableCell>{formatDate(pvc.last_attached)}</TableCell>
-                  <TableCell><Chip label={`${pvc.age_days} days`} size="small" color={pvc.age_days > 300 ? 'error' : pvc.age_days > 180 ? 'warning' : 'default'} /></TableCell>
-                  <TableCell><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Warning fontSize="small" color="warning" /><Typography variant="body2">{pvc.reason}</Typography></Box></TableCell>
-                  <TableCell><Chip label={pvc.status} size="small" color="warning" /></TableCell>
-                  <TableCell align="right"><Typography variant="body2" color="error" fontWeight="medium">{formatCurrency(pvc.monthly_cost)}</Typography></TableCell>
+      {items.length > 0 && (
+        <>
+          {/* ── Filters ── */}
+          <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3 }}>
+            <Grid container spacing={2} alignItems="center">
+              {/* Search */}
+              <Grid item xs={12} md={4}>
+                <TextField
+                  fullWidth size="small"
+                  placeholder="Search by name, namespace, storage class…"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <SearchIcon sx={{ color: T.muted, fontSize: 18 }} />
+                      </InputAdornment>
+                    ),
+                    sx: inputSx,
+                  }}
+                />
+              </Grid>
+
+              {/* Namespace */}
+              <Grid item xs={12} sm={4} md={2.5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Namespace</InputLabel>
+                  <Select
+                    value={nsFilter} label="Namespace"
+                    onChange={e => setNsFilter(e.target.value)}
+                    sx={selectSx} MenuProps={menuProps}
+                  >
+                    <MenuItem value="all">All Namespaces</MenuItem>
+                    {uniqueNS.map(ns => (
+                      <MenuItem key={ns} value={ns}>{ns}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Storage Class */}
+              <Grid item xs={12} sm={4} md={3}>
+                <FormControl fullWidth size="small">
+                  <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Storage Class</InputLabel>
+                  <Select
+                    value={scFilter} label="Storage Class"
+                    onChange={e => setScFilter(e.target.value)}
+                    sx={selectSx} MenuProps={menuProps}
+                  >
+                    <MenuItem value="all">All Classes</MenuItem>
+                    {uniqueSC.map(sc => (
+                      <MenuItem key={sc} value={sc}>{sc}</MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+              </Grid>
+
+              {/* Age */}
+              <Grid item xs={12} sm={4} md={2.5}>
+                <FormControl fullWidth size="small">
+                  <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Min Age</InputLabel>
+                  <Select
+                    value={ageFilter} label="Min Age"
+                    onChange={e => setAgeFilter(e.target.value)}
+                    sx={selectSx} MenuProps={menuProps}
+                  >
+                    <MenuItem value="all">Any Age</MenuItem>
+                    <MenuItem value="90">90+ days</MenuItem>
+                    <MenuItem value="365">1+ year</MenuItem>
+                    <MenuItem value="730">2+ years</MenuItem>
+                  </Select>
+                </FormControl>
+              </Grid>
+            </Grid>
+
+            {/* Active filter summary */}
+            {(nsFilter !== 'all' || scFilter !== 'all' || ageFilter !== 'all' || search) && (
+              <Box sx={{ mt: 1.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Typography sx={{ fontSize: 11, color: T.muted }}>Active:</Typography>
+                {search && (
+                  <Chip label={`"${search}"`} size="small" onDelete={() => setSearch('')}
+                    sx={{ bgcolor: T.hover, color: T.body, fontSize: 11, height: 20,
+                      '& .MuiChip-deleteIcon': { color: T.muted, fontSize: 14 } }} />
+                )}
+                {nsFilter !== 'all' && (
+                  <Chip label={nsFilter} size="small" onDelete={() => setNsFilter('all')}
+                    sx={{ bgcolor: T.hover, color: T.body, fontSize: 11, height: 20,
+                      '& .MuiChip-deleteIcon': { color: T.muted, fontSize: 14 } }} />
+                )}
+                {scFilter !== 'all' && (
+                  <Chip label={scFilter} size="small" onDelete={() => setScFilter('all')}
+                    sx={{ bgcolor: T.hover, color: T.body, fontSize: 11, height: 20,
+                      '& .MuiChip-deleteIcon': { color: T.muted, fontSize: 14 } }} />
+                )}
+                {ageFilter !== 'all' && (
+                  <Chip label={`${ageFilter}+ days`} size="small" onDelete={() => setAgeFilter('all')}
+                    sx={{ bgcolor: T.hover, color: T.body, fontSize: 11, height: 20,
+                      '& .MuiChip-deleteIcon': { color: T.muted, fontSize: 14 } }} />
+                )}
+                <Typography sx={{ fontSize: 11, color: T.muted, ml: 'auto' }}>
+                  {filtered.length} result{filtered.length !== 1 ? 's' : ''} · ${filteredCost.toFixed(2)}/mo
+                </Typography>
+              </Box>
+            )}
+          </Paper>
+
+          {/* ── Table ── */}
+          <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#161f30' }}>
+                  <TableCell sx={headSx}>PVC Name</TableCell>
+                  <TableCell sx={headSx}>Namespace</TableCell>
+                  <TableCell sx={headSx}>Capacity</TableCell>
+                  <TableCell sx={headSx}>Storage Class</TableCell>
+                  <TableCell sx={headSx}>Phase</TableCell>
+                  <TableCell sx={headSx}>Reason</TableCell>
+                  <TableCell sx={{ ...headSx, textAlign: 'right' }}>Age</TableCell>
+                  <TableCell sx={headSx}>Created</TableCell>
+                  <TableCell sx={{ ...headSx, textAlign: 'right' }}>Cost/mo</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+              </TableHead>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                      No results match your search
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.map((pvc, idx) => (
+                  <TableRow
+                    key={`${pvc.namespace}/${pvc.resource_name}-${idx}`}
+                    hover
+                    sx={{ '&:hover': { bgcolor: T.hover } }}
+                  >
+                    {/* Name */}
+                    <TableCell sx={cellSx}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <StorageIcon sx={{ fontSize: 13, color: T.muted, flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text, fontFamily: 'monospace' }}>
+                          {pvc.resource_name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
 
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Warning color="error" />Confirm Deletion</Box></DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>Deleting PVCs will permanently remove the data. Ensure you have backups.</Alert>
-          <Typography>Delete {selectedPVCs.size} unattached PVC(s)?</Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>Estimated savings: {formatCurrency(selectedCost)}/month</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={() => { setDeleteDialogOpen(false); setSelectedPVCs(new Set()); }} color="error" variant="contained">Delete</Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+                    {/* Namespace */}
+                    <TableCell sx={cellSx}>
+                      <Chip
+                        label={pvc.namespace} size="small"
+                        sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }}
+                      />
+                    </TableCell>
+
+                    {/* Capacity */}
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text }}>
+                        {pvc.capacity}
+                      </Typography>
+                    </TableCell>
+
+                    {/* Storage class */}
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 11, color: T.muted, fontFamily: 'monospace' }}>
+                        {pvc.storage_class}
+                      </Typography>
+                    </TableCell>
+
+                    {/* Phase */}
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 11, color: T.muted }}>{pvc.pvc_phase}</Typography>
+                    </TableCell>
+
+                    {/* Reason */}
+                    <TableCell sx={{ ...cellSx, maxWidth: 260 }}>
+                      <Typography noWrap sx={{ fontSize: 12, color: T.muted }} title={pvc.reason}>
+                        {pvc.reason}
+                      </Typography>
+                    </TableCell>
+
+                    {/* Age */}
+                    <TableCell sx={{ ...cellSx, textAlign: 'right' }}>
+                      <Typography sx={{
+                        fontSize: 12, fontWeight: 600,
+                        color: pvc.days_unused > 365 ? T.red : pvc.days_unused > 90 ? T.yellow : T.body,
+                      }}>
+                        {pvc.days_unused}d
+                      </Typography>
+                    </TableCell>
+
+                    {/* Created */}
+                    <TableCell sx={{ ...cellSx, color: T.muted }}>
+                      {fmtDate(pvc.last_used)}
+                    </TableCell>
+
+                    {/* Cost */}
+                    <TableCell sx={{ ...cellSx, textAlign: 'right' }}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: pvc.monthly_cost > 0 ? T.red : T.muted }}>
+                        {fmtCost(pvc.monthly_cost)}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+
+          {/* Footer note */}
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography sx={{ fontSize: 12, color: T.muted }}>
+              All PVCs flagged High risk — manual review required before deletion to prevent data loss.
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: T.muted }}>
+              {filtered.length} of {items.length} PVCs shown
+            </Typography>
+          </Box>
+        </>
+      )}
+    </Box>
   );
 };
 
-const UnattachedPVCs: React.FC = () => (
-  <ClusterGuard><UnattachedPVCsInner /></ClusterGuard>
-);
-
 export default UnattachedPVCs;
-
-// Made with Bob

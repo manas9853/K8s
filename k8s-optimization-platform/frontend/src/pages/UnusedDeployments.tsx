@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, TextField,
-  InputAdornment, Paper, Collapse, Tooltip,
+  InputAdornment, Paper, Collapse, Tooltip, Select, MenuItem,
+  FormControl, InputLabel, SelectChangeEvent,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -75,6 +76,17 @@ interface Summary {
   total_monthly_savings: number;
   total_yearly_savings:  number;
 }
+
+// ─── Shared select sx (matches ZombieResources) ───────────────────────────────
+const selectSx = {
+  color: '#c8cdd8', bgcolor: '#0f1724',
+  '& .MuiOutlinedInput-notchedOutline':            { borderColor: '#2a3245' },
+  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: '#8b95a9' },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: '#2a3245' },
+  '& .MuiSvgIcon-root':                            { color: '#8b95a9' },
+};
+
+const menuProps = { PaperProps: { sx: { bgcolor: '#1e2433', color: '#e8eaf0', border: '1px solid #2a3245' } } };
 
 const fmtDate = (s: string) => {
   if (!s || s === 'Unknown') return '—';
@@ -294,6 +306,8 @@ const UnusedDeployments: React.FC = () => {
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState<string | null>(null);
   const [search, setSearch]           = useState('');
+  const [nsFilter,  setNsFilter]      = useState('all');
+  const [riskFilter,setRiskFilter]    = useState('all');
 
   const fetchData = async () => {
     try {
@@ -313,14 +327,22 @@ const UnusedDeployments: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line
 
-  const filtered = deployments.filter(d => {
-    const q = search.toLowerCase();
-    return (
-      d.name.toLowerCase().includes(q) ||
-      d.namespace.toLowerCase().includes(q) ||
-      d.images.some(img => img.toLowerCase().includes(q))
-    );
-  });
+  const uniqueNamespaces = useMemo(
+    () => Array.from(new Set(deployments.map(d => d.namespace))).sort(),
+    [deployments]
+  );
+
+  const filtered = useMemo(() =>
+    deployments.filter(d => {
+      const q = search.toLowerCase();
+      const matchSearch =
+        d.name.toLowerCase().includes(q) ||
+        d.namespace.toLowerCase().includes(q) ||
+        d.images.some(img => img.toLowerCase().includes(q));
+      const matchNs   = nsFilter   === 'all' || d.namespace  === nsFilter;
+      const matchRisk = riskFilter === 'all' || d.risk_level === riskFilter;
+      return matchSearch && matchNs && matchRisk;
+    }), [deployments, search, nsFilter, riskFilter]);
 
   if (loading) {
     return (
@@ -341,7 +363,7 @@ const UnusedDeployments: React.FC = () => {
             Unused Deployments
           </Typography>
           <Typography variant="body2" sx={{ color: T.muted, mt: 0.5 }}>
-            Deployments with zero ready replicas despite having a desired replica count — identified from live agent data
+            {filtered.length} of {deployments.length} deployments with zero ready replicas — identified from live agent data
           </Typography>
         </Box>
         <IconButton onClick={fetchData} sx={{ color: T.muted, '&:hover': { color: T.green } }}>
@@ -372,22 +394,54 @@ const UnusedDeployments: React.FC = () => {
         </Grid>
       )}
 
-      {/* Search */}
+      {/* Filters */}
       <Paper sx={{ p: 2, mb: 2, bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
-        <TextField
-          fullWidth size="small"
-          placeholder="Search by name, namespace or image…"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ color: T.muted, fontSize: 18 }} />
-              </InputAdornment>
-            ),
-            sx: { color: T.body, bgcolor: T.bg, '& fieldset': { borderColor: T.border } },
-          }}
-        />
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={5}>
+            <TextField
+              fullWidth size="small"
+              placeholder="Search by name, namespace or image…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon sx={{ color: T.muted, fontSize: 18 }} />
+                  </InputAdornment>
+                ),
+                sx: { color: T.body, bgcolor: T.bg,
+                  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+                },
+              }}
+            />
+          </Grid>
+          <Grid item xs={6} md={3.5}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: T.muted }}>Namespace</InputLabel>
+              <Select value={nsFilter} label="Namespace"
+                onChange={(e: SelectChangeEvent) => setNsFilter(e.target.value)}
+                sx={selectSx} MenuProps={menuProps}>
+                <MenuItem value="all">All Namespaces</MenuItem>
+                {uniqueNamespaces.map(ns => <MenuItem key={ns} value={ns}>{ns}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={6} md={3.5}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: T.muted }}>Risk</InputLabel>
+              <Select value={riskFilter} label="Risk"
+                onChange={(e: SelectChangeEvent) => setRiskFilter(e.target.value)}
+                sx={selectSx} MenuProps={menuProps}>
+                <MenuItem value="all">All Risks</MenuItem>
+                <MenuItem value="Low">Low</MenuItem>
+                <MenuItem value="Medium">Medium</MenuItem>
+                <MenuItem value="High">High</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
       </Paper>
 
       {/* Table / empty state */}

@@ -223,9 +223,8 @@ const Events: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      // trailing slash required — FastAPI redirects without it (307 → HTTP → blocked)
-      const sep = clusterParam ? clusterParam + '&' : '?';
-      const url = `${API_BASE_URL}/v1/observability/events/${clusterParam}`;
+      // NO trailing slash — FastAPI 307-redirects trailing slash to HTTP (blocked by browser)
+      const url = `${API_BASE_URL}/v1/observability/events${clusterParam}`;
       const response = await fetch(url);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 

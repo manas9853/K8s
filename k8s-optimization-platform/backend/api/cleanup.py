@@ -36,6 +36,15 @@ class CleanupResource(BaseModel):
     dependencies:       int
     can_delete:         bool
     estimated_savings:  float
+    # Optional extra fields (PVCs)
+    capacity:           Optional[str] = None
+    storage_class:      Optional[str] = None
+    pvc_phase:          Optional[str] = None
+    # Optional extra fields (Namespaces)
+    pod_count:          Optional[int] = None
+    deployment_count:   Optional[int] = None
+    service_count:      Optional[int] = None
+    pvc_count:          Optional[int] = None
 
 
 class CleanupSummary(BaseModel):
@@ -238,11 +247,14 @@ def _find_all_candidates(cluster_id: Optional[str] = None) -> List[CleanupResour
             last_used         = created or "Unknown",
             days_unused       = days,
             monthly_cost      = cost,
-            reason            = f"PVC not mounted by any running pod — phase={phase}, {days}d old",
+            reason            = f"Not mounted by any running pod, {days}d old",
             risk_level        = "High",
             dependencies      = 0,
             can_delete        = False,  # data loss risk — require manual review
             estimated_savings = cost,
+            capacity          = pvc.get("capacity") or pvc.get("size") or "Unknown",
+            storage_class     = pvc.get("storage_class") or "Unknown",
+            pvc_phase         = phase,
         ))
 
     # ── 5. Services with no endpoints (age > 14d, skip system namespaces) ─────
@@ -277,8 +289,21 @@ def _find_all_candidates(cluster_id: Optional[str] = None) -> List[CleanupResour
         ))
 
     # ── 6. Idle namespaces (no running pods) ──────────────────────────────────
-    all_ns = (metrics.get("namespaces") or {}).get("items", [])
+    all_ns      = (metrics.get("namespaces") or {}).get("items", [])
     running_ns: set = {p.get("namespace") for p in pods if p.get("status") == "Running"}
+
+    # Build per-namespace resource counts from other domains
+    wl         = metrics.get("workloads") or {}
+    all_deps   = (wl.get("deployments") or {}).get("items", [])
+    all_svcs   = (metrics.get("network") or {}).get("services", {}).get("items", [])
+    all_pvcs_s = (metrics.get("storage") or {}).get("pvcs", {}).get("items", [])
+
+    from collections import Counter as _Counter
+    _dep_ns  = _Counter(d.get("namespace") for d in all_deps)
+    _svc_ns  = _Counter(s.get("namespace") for s in all_svcs)
+    _pvc_ns  = _Counter(p.get("namespace") for p in all_pvcs_s)
+    _pod_ns  = _Counter(p.get("namespace") for p in pods)
+
     SKIP_IDLE = {"kube-system", "kube-public", "kube-node-lease", "default"}
     for ns_item in all_ns:
         ns_name = ns_item.get("name", "")
@@ -288,6 +313,18 @@ def _find_all_candidates(cluster_id: Optional[str] = None) -> List[CleanupResour
         days    = _age_days(created)
         if days <= 30:
             continue
+        n_pods = _pod_ns.get(ns_name, 0)
+        n_deps = _dep_ns.get(ns_name, 0)
+        n_svcs = _svc_ns.get(ns_name, 0)
+        n_pvcs = _pvc_ns.get(ns_name, 0)
+        total_res = n_deps + n_svcs + n_pvcs
+        reason_parts = [f"No running pods, {days}d old"]
+        if total_res > 0:
+            bits = []
+            if n_deps: bits.append(f"{n_deps} deployment{'s' if n_deps>1 else ''}")
+            if n_svcs: bits.append(f"{n_svcs} service{'s' if n_svcs>1 else ''}")
+            if n_pvcs: bits.append(f"{n_pvcs} PVC{'s' if n_pvcs>1 else ''}")
+            reason_parts.append(f"has {', '.join(bits)}")
         results.append(CleanupResource(
             resource_type     = "Namespace",
             resource_name     = ns_name,
@@ -296,11 +333,15 @@ def _find_all_candidates(cluster_id: Optional[str] = None) -> List[CleanupResour
             last_used         = created or "Unknown",
             days_unused       = days,
             monthly_cost      = 0.0,
-            reason            = f"Namespace has no running pods, {days}d old",
+            reason            = " — ".join(reason_parts),
             risk_level        = "Medium",
-            dependencies      = 0,
+            dependencies      = total_res,
             can_delete        = False,
             estimated_savings = 0.0,
+            pod_count         = n_pods,
+            deployment_count  = n_deps,
+            service_count     = n_svcs,
+            pvc_count         = n_pvcs,
         ))
 
     logger.info("Cleanup scan found %d candidates for cluster %s", len(results), cluster_name)
