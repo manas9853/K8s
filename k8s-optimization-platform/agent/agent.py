@@ -322,6 +322,8 @@ class ClusterAgent:
             "hpa":               _safe(self._hpa,        {}),
             "pdb":               _safe(self._pdb,        {}),
             "service_accounts":  _safe(self._service_accounts, []),
+            "configmaps":        _safe(self._configmaps, {}),
+            "secrets_domain":    _safe(self._secrets,    {}),
         }
 
         # Populate top-level "resources" summary from already-collected data
@@ -855,20 +857,24 @@ class ClusterAgent:
                 "created_at":          created_at,
             }
 
-        # Orphaned ReplicaSets (desired > 0, no Deployment parent owns them as live)
-        orphaned_rs = [
-            {
-                "name":      rs.metadata.name,
-                "namespace": rs.metadata.namespace,
-                "replicas":  rs.spec.replicas or 0,
-            }
-            for rs in rsets
-            if (rs.spec.replicas or 0) == 0
-            and any(
-                ref.kind == "Deployment"
-                for ref in (rs.metadata.owner_references or [])
+        # Orphaned ReplicaSets: 0 replicas and owned by a Deployment
+        orphaned_rs = []
+        for rs in rsets:
+            if (rs.spec.replicas or 0) != 0:
+                continue
+            owner_refs = rs.metadata.owner_references or []
+            dep_owner = next(
+                (ref.name for ref in owner_refs if ref.kind == "Deployment"), None
             )
-        ]
+            if dep_owner is None:
+                continue
+            orphaned_rs.append({
+                "name":       rs.metadata.name,
+                "namespace":  rs.metadata.namespace,
+                "replicas":   0,
+                "owner_name": dep_owner,
+                "created":    _ts(rs.metadata.creation_timestamp),
+            })
 
         return {
             "deployments": {
@@ -1695,6 +1701,187 @@ class ClusterAgent:
             for sa in items
         ]
 
+    # ── domain: secrets ──────────────────────────────────────────────────────
+
+    def _secrets(self) -> Dict[str, Any]:
+        """
+        Collect all Secrets cluster-wide (metadata only — never ship values)
+        and determine which are actively referenced by pods or service accounts.
+        """
+        secrets = self.core.list_secret_for_all_namespaces().items
+        pods    = self.core.list_pod_for_all_namespaces().items
+        sas     = self.core.list_service_account_for_all_namespaces().items
+
+        # Build referenced set: "namespace/name"
+        referenced: set = set()
+
+        # Service account token secrets: every SA implicitly references its tokens
+        for sa in sas:
+            ns = sa.metadata.namespace
+            for ref in (sa.secrets or []):
+                if ref.name:
+                    referenced.add(f"{ns}/{ref.name}")
+            # imagePullSecrets on SA
+            for ips in (sa.image_pull_secrets or []):
+                if ips.name:
+                    referenced.add(f"{ns}/{ips.name}")
+
+        for pod in pods:
+            ns   = pod.metadata.namespace
+            spec = pod.spec
+            # volumes
+            for vol in (spec.volumes or []):
+                if vol.secret:
+                    referenced.add(f"{ns}/{vol.secret.secret_name}")
+                if vol.projected:
+                    for src in (vol.projected.sources or []):
+                        if src.secret:
+                            referenced.add(f"{ns}/{src.secret.name}")
+            # envFrom
+            for c in (spec.containers or []) + (spec.init_containers or []):
+                for ef in (c.env_from or []):
+                    if ef.secret_ref:
+                        referenced.add(f"{ns}/{ef.secret_ref.name}")
+                for ev in (c.env or []):
+                    if ev.value_from and ev.value_from.secret_key_ref:
+                        referenced.add(f"{ns}/{ev.value_from.secret_key_ref.name}")
+            # imagePullSecrets on pod
+            for ips in (spec.image_pull_secrets or []):
+                if ips.name:
+                    referenced.add(f"{ns}/{ips.name}")
+
+        # Types to always skip (auto-managed by k8s / service accounts)
+        SKIP_TYPES = {
+            "kubernetes.io/service-account-token",
+            "kubernetes.io/dockercfg",
+            "bootstrap.kubernetes.io/token",
+        }
+        SYSTEM_PREFIXES = (
+            "default-token-", "default-dockercfg-",
+            "builder-token-", "builder-dockercfg-",
+            "deployer-token-", "deployer-dockercfg-",
+            "sh.helm.release.",
+        )
+
+        items  = []
+        stale  = []
+        for s in secrets:
+            name  = s.metadata.name
+            ns    = s.metadata.namespace
+            key   = f"{ns}/{name}"
+            stype = s.type or "Opaque"
+            keys  = list(s.data.keys()) if s.data else []
+
+            is_referenced = key in referenced
+            is_system = (
+                stype in SKIP_TYPES
+                or any(name.startswith(p) for p in SYSTEM_PREFIXES)
+            )
+            created_ts = _ts(s.metadata.creation_timestamp)
+
+            rec = {
+                "name":          name,
+                "namespace":     ns,
+                "type":          stype,
+                "data_keys":     keys,
+                "key_count":     len(keys),
+                "labels":        s.metadata.labels or {},
+                "created":       created_ts or "",
+                "is_referenced": is_referenced,
+                "is_system":     is_system,
+            }
+            items.append(rec)
+            if not is_referenced and not is_system:
+                stale.append(rec)
+
+        return {
+            "total":       len(secrets),
+            "referenced":  sum(1 for i in items if i["is_referenced"]),
+            "stale":       len(stale),
+            "items":       items,
+            "stale_items": stale,
+        }
+
+    # ── domain: configmaps ───────────────────────────────────────────────────
+
+    def _configmaps(self) -> Dict[str, Any]:
+        """
+        Collect all ConfigMaps cluster-wide and determine which ones are
+        actively referenced by pods (via volumes, envFrom, or env valueFrom).
+        """
+        cms  = self.core.list_config_map_for_all_namespaces().items
+        pods = self.core.list_pod_for_all_namespaces().items
+
+        # Build set of referenced configmaps: "namespace/name"
+        referenced: set = set()
+        for pod in pods:
+            ns = pod.metadata.namespace
+            spec = pod.spec
+            # volumeMounts referencing a configmap
+            for vol in (spec.volumes or []):
+                if vol.config_map:
+                    referenced.add(f"{ns}/{vol.config_map.name}")
+            # envFrom
+            for c in (spec.containers or []) + (spec.init_containers or []):
+                for ef in (c.env_from or []):
+                    if ef.config_map_ref:
+                        referenced.add(f"{ns}/{ef.config_map_ref.name}")
+                for ev in (c.env or []):
+                    if ev.value_from and ev.value_from.config_map_key_ref:
+                        referenced.add(
+                            f"{ns}/{ev.value_from.config_map_key_ref.name}")
+
+        # System-managed configmaps we should never flag as stale
+        SYSTEM_PREFIXES = (
+            "kube-", "extension-apiserver-", "coredns", "cluster-info",
+            "kubernetes-", "ibm-", "calico-", "cert-manager", "istio-",
+            "prometheus-", "grafana-", "oauth-", "open-cluster-", "bootstrap-",
+        )
+
+        items = []
+        stale = []
+        for cm in cms:
+            name = cm.metadata.name
+            ns   = cm.metadata.namespace
+            key  = f"{ns}/{name}"
+
+            # Estimate size from data keys
+            data_keys  = list((cm.data  or {}).keys())
+            bdata_keys = list((cm.binary_data or {}).keys())
+            size_bytes  = sum(
+                len(v.encode("utf-8")) if isinstance(v, str) else len(v)
+                for v in (cm.data or {}).values()
+            )
+
+            is_referenced  = key in referenced
+            is_system      = any(name.startswith(p) for p in SYSTEM_PREFIXES)
+            created_ts     = _ts(cm.metadata.creation_timestamp)
+
+            rec = {
+                "name":          name,
+                "namespace":     ns,
+                "data_keys":     data_keys,
+                "binary_keys":   bdata_keys,
+                "key_count":     len(data_keys) + len(bdata_keys),
+                "size_bytes":    size_bytes,
+                "labels":        cm.metadata.labels or {},
+                "annotations":   len(cm.metadata.annotations or {}),
+                "created":       created_ts or "",
+                "is_referenced": is_referenced,
+                "is_system":     is_system,
+            }
+            items.append(rec)
+            if not is_referenced and not is_system:
+                stale.append(rec)
+
+        return {
+            "total":      len(cms),
+            "referenced": sum(1 for i in items if i["is_referenced"]),
+            "stale":      len(stale),
+            "items":      items,
+            "stale_items": stale,
+        }
+
     # ── HTTP transport ────────────────────────────────────────────────────────
 
     def _post(self, path: str, payload: Dict[str, Any],
@@ -1743,6 +1930,8 @@ class ClusterAgent:
             "hpa":          payload.get("hpa",        {}),
             "pdb":          payload.get("pdb",        {}),
             "service_accounts": payload.get("service_accounts", []),
+            "configmaps":       payload.get("configmaps",       {}),
+            "secrets_domain":   payload.get("secrets_domain",   {}),
             "collection_type": "comprehensive",
             "agent_version":   "2.0.0",
             "provider":        payload.get("provider", self._provider),

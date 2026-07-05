@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 _EXTENDED_DOMAINS = [
     "workloads", "storage", "network", "security",
     "compliance", "observability", "finops", "platform",
-    "teams", "hpa", "pdb", "service_accounts",
+    "teams", "hpa", "pdb", "service_accounts", "configmaps", "secrets_domain",
 ]
 _SCALAR_COLS = ["agent_version", "collection_type", "k8s_version", "provider", "region"]
 

@@ -1,170 +1,269 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Container, Typography, Paper, Box, Grid, Card, CardContent,
+  Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, Button, Dialog,
-  DialogTitle, DialogContent, DialogActions, Checkbox, TextField,
-  InputAdornment
+  TableContainer, TableHead, TableRow, Chip, TextField,
+  InputAdornment, Paper,
 } from '@mui/material';
-import { Refresh, Delete, Warning, Search, Archive } from '@mui/icons-material';
-import ClusterGuard from '../components/ClusterGuard';
-import NoDataState from '../components/NoDataState';
+import {
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  Storage as StorageIcon,
+} from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:      '#0f1724',
+  card:    '#1e2433',
+  hover:   '#252e42',
+  border:  '#2a3245',
+  text:    '#e8eaf0',
+  muted:   '#8b95a9',
+  body:    '#c8cdd8',
+  green:   '#4ade80',
+  red:     '#f87171',
+  yellow:  '#f59e0b',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface StaleConfigMap {
-  name: string;
-  namespace: string;
-  cluster: string;
-  created: string;
-  last_used: string;
-  age_days: number;
-  size_kb: number;
-  referenced_by: string[];
-  monthly_cost: number;
-  reason: string;
+  resource_name: string;
+  namespace:     string;
+  cluster:       string;
+  last_used:     string;
+  days_unused:   number;
+  reason:        string;
+  risk_level:    string;
+  can_delete:    boolean;
 }
 
-const StaleConfigMapsInner: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [configMaps, setConfigMaps] = useState<StaleConfigMap[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedConfigMaps, setSelectedConfigMaps] = useState<Set<string>>(new Set());
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+interface Summary {
+  total_resources:       number;
+  safe_to_delete:        number;
+  requires_review:       number;
+  high_risk:             number;
+  total_monthly_savings: number;
+  resources_by_type:     Record<string, number>;
+}
 
-  useEffect(() => { fetchData(); }, [clusterParam]);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtDate = (s: string) => {
+  if (!s || s === 'Unknown') return '—';
+  try { return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+  catch { return s; }
+};
+
+const riskColor = (r: string) =>
+  r === 'High' ? T.red : r === 'Medium' ? T.yellow : T.green;
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+const StatCard: React.FC<{ label: string; value: number | string; sub?: string; accent?: string }> =
+  ({ label, value, sub, accent }) => (
+  <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+      <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent ?? T.text, lineHeight: 1 }}>
+        {value}
+      </Typography>
+      {sub && <Typography sx={{ fontSize: 11, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+    </CardContent>
+  </Card>
+);
+
+// ─── Main component ───────────────────────────────────────────────────────────
+const StaleConfigMaps: React.FC = () => {
+  const { clusterParam } = useActiveCluster();
+  const [items,   setItems]   = useState<StaleConfigMap[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const [search,  setSearch]  = useState('');
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/v1/cleanup/stale-configmaps${clusterParam}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const items: StaleConfigMap[] = (data.resources || []).map((r: any) => ({
-        name: r.resource_name,
-        namespace: r.namespace,
-        cluster: r.cluster,
-        created: r.last_used,
-        last_used: r.last_used,
-        age_days: r.days_unused ?? 0,
-        size_kb: r.size_kb ?? 0,
-        referenced_by: [],
-        monthly_cost: r.monthly_cost ?? 0,
-        reason: r.reason,
-      }));
-      setConfigMaps(items);
       setError(null);
+      const url = `${API_BASE_URL}/v1/cleanup/stale-configmaps${clusterParam}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSummary(data.summary ?? null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setItems((data.resources ?? []).map((r: any) => ({
+        resource_name: r.resource_name ?? '',
+        namespace:     r.namespace     ?? '',
+        cluster:       r.cluster       ?? '',
+        last_used:     r.last_used     ?? '',
+        days_unused:   r.days_unused   ?? 0,
+        reason:        r.reason        ?? '',
+        risk_level:    r.risk_level    ?? 'Low',
+        can_delete:    r.can_delete    ?? true,
+      })));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
-  const formatDate = (dateString: string) => {
-    if (!dateString || dateString === 'Unknown') return 'Unknown';
-    try { return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
-    catch { return dateString; }
-  };
+  useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSelect = (name: string) => {
-    const s = new Set(selectedConfigMaps);
-    if (s.has(name)) s.delete(name); else s.add(name);
-    setSelectedConfigMaps(s);
-  };
-  const handleSelectAll = () => {
-    if (selectedConfigMaps.size === filteredConfigMaps.length) setSelectedConfigMaps(new Set());
-    else setSelectedConfigMaps(new Set(filteredConfigMaps.map(c => c.name)));
-  };
+  const filtered = useMemo(() =>
+    items.filter(i =>
+      i.resource_name.toLowerCase().includes(search.toLowerCase()) ||
+      i.namespace.toLowerCase().includes(search.toLowerCase()) ||
+      i.reason.toLowerCase().includes(search.toLowerCase())
+    ), [items, search]);
 
-  const filteredConfigMaps = configMaps.filter(cm =>
-    cm.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    cm.namespace.toLowerCase().includes(searchTerm.toLowerCase())
+  const uniqueNamespaces = useMemo(() => Array.from(new Set(items.map(i => i.namespace))).sort(), [items]);
+  const medHigh = items.filter(i => i.risk_level === 'Medium' || i.risk_level === 'High').length;
+
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
+
+  if (loading) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress sx={{ color: T.green }} />
+    </Box>
   );
 
-  const totalCost = filteredConfigMaps.reduce((sum, c) => sum + c.monthly_cost, 0);
-  const selectedCost = filteredConfigMaps.filter(c => selectedConfigMaps.has(c.name)).reduce((sum, c) => sum + c.monthly_cost, 0);
-
-  if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
-  if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-  if (configMaps.length === 0) return <NoDataState title="No stale ConfigMaps found" message="All ConfigMaps in your cluster are actively referenced by running workloads." />;
+  if (error) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+    </Box>
+  );
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h4">Stale ConfigMaps</Typography>
-          <Typography variant="body2" color="textSecondary">Identify and remove unused configuration maps</Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Stale ConfigMaps</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            ConfigMaps not referenced by any pod — safe to remove
+          </Typography>
         </Box>
-        <IconButton onClick={fetchData} color="primary"><Refresh /></IconButton>
+        <IconButton onClick={fetchData} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+          <RefreshIcon fontSize="small" />
+        </IconButton>
       </Box>
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Stale ConfigMaps</Typography><Typography variant="h4">{configMaps.length}</Typography><Typography variant="body2" color="error">Not referenced</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Total Size</Typography><Typography variant="h4">{configMaps.reduce((sum, c) => sum + c.size_kb, 0)} KB</Typography><Typography variant="body2" color="textSecondary">Wasted storage</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Monthly Cost</Typography><Typography variant="h4" color="error">{formatCurrency(totalCost)}</Typography><Typography variant="body2" color="textSecondary">From stale configs</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card sx={{ background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', color: 'white' }}><CardContent><Typography gutterBottom>Potential Savings</Typography><Typography variant="h4">{formatCurrency(selectedCost)}</Typography><Typography variant="body2">From cleanup</Typography></CardContent></Card></Grid>
+      {/* Stats */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Stale ConfigMaps" value={summary?.total_resources ?? items.length} sub="Not referenced by any pod" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Safe to Delete" value={summary?.safe_to_delete ?? items.filter(i => i.can_delete).length} accent={T.green} sub="Low risk" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Needs Review" value={medHigh} accent={T.yellow} sub="Medium / High risk" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Namespaces" value={uniqueNamespaces.length} sub="Affected" />
+        </Grid>
       </Grid>
 
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-          <TextField size="small" placeholder="Search ConfigMaps..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }} sx={{ minWidth: 300 }} />
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button variant="outlined" startIcon={<Archive />}>Archive Selected</Button>
-            <Button variant="contained" color="error" startIcon={<Delete />} disabled={selectedConfigMaps.size === 0} onClick={() => setDeleteDialogOpen(true)}>Delete ({selectedConfigMaps.size})</Button>
-          </Box>
-        </Box>
-      </Paper>
+      {/* No data state */}
+      {items.length === 0 && (
+        <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 6, textAlign: 'center' }}>
+          <StorageIcon sx={{ fontSize: 48, color: T.muted, mb: 2 }} />
+          <Typography sx={{ fontSize: 16, fontWeight: 600, color: T.text, mb: 1 }}>No stale ConfigMaps found</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted }}>
+            All ConfigMaps are actively referenced by running workloads, or the agent is still collecting data.
+          </Typography>
+        </Paper>
+      )}
 
-      <Paper>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell padding="checkbox"><Checkbox checked={selectedConfigMaps.size === filteredConfigMaps.length && filteredConfigMaps.length > 0} onChange={handleSelectAll} /></TableCell>
-                <TableCell>Name</TableCell><TableCell>Namespace</TableCell><TableCell>Cluster</TableCell><TableCell>Last Used</TableCell><TableCell>Age (Days)</TableCell><TableCell>Reason</TableCell><TableCell align="right">Monthly Cost</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredConfigMaps.map((cm) => (
-                <TableRow key={`${cm.namespace}/${cm.name}`} hover>
-                  <TableCell padding="checkbox"><Checkbox checked={selectedConfigMaps.has(cm.name)} onChange={() => handleSelect(cm.name)} /></TableCell>
-                  <TableCell><Typography variant="body2" fontWeight="medium">{cm.name}</Typography></TableCell>
-                  <TableCell><Chip label={cm.namespace} size="small" /></TableCell>
-                  <TableCell>{cm.cluster}</TableCell>
-                  <TableCell>{formatDate(cm.last_used)}</TableCell>
-                  <TableCell><Chip label={`${cm.age_days} days`} size="small" color={cm.age_days > 300 ? 'error' : cm.age_days > 180 ? 'warning' : 'default'} /></TableCell>
-                  <TableCell><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Warning fontSize="small" color="warning" /><Typography variant="body2">{cm.reason}</Typography></Box></TableCell>
-                  <TableCell align="right"><Typography variant="body2" color="error" fontWeight="medium">{formatCurrency(cm.monthly_cost)}</Typography></TableCell>
+      {items.length > 0 && (
+        <>
+          {/* Search */}
+          <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3 }}>
+            <TextField
+              fullWidth size="small"
+              placeholder="Search by name, namespace, reason…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+                sx: { color: T.text, fontSize: 13, bgcolor: T.bg, borderRadius: 1,
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+                },
+              }}
+            />
+          </Paper>
+
+          {/* Table */}
+          <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#161f30' }}>
+                  <TableCell sx={headSx}>Name</TableCell>
+                  <TableCell sx={headSx}>Namespace</TableCell>
+                  <TableCell sx={headSx}>Reason</TableCell>
+                  <TableCell sx={{ ...headSx, textAlign: 'right' }}>Age</TableCell>
+                  <TableCell sx={headSx}>Created</TableCell>
+                  <TableCell sx={headSx}>Risk</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+              </TableHead>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                      No results match your search
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.map((cm, idx) => (
+                  <TableRow key={`${cm.namespace}/${cm.resource_name}-${idx}`} hover
+                    sx={{ '&:hover': { bgcolor: T.hover } }}>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text, fontFamily: 'monospace' }}>
+                        {cm.resource_name}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={cellSx}>
+                      <Chip label={cm.namespace} size="small"
+                        sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
+                    </TableCell>
+                    <TableCell sx={{ ...cellSx, maxWidth: 340 }}>
+                      <Typography noWrap sx={{ fontSize: 12, color: T.muted }} title={cm.reason}>
+                        {cm.reason}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ ...cellSx, textAlign: 'right' }}>
+                      <Typography sx={{
+                        fontSize: 12, fontWeight: 600,
+                        color: cm.days_unused > 180 ? T.yellow : T.body,
+                      }}>
+                        {cm.days_unused}d
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ ...cellSx, color: T.muted }}>
+                      {fmtDate(cm.last_used)}
+                    </TableCell>
+                    <TableCell sx={cellSx}>
+                      <Chip label={cm.risk_level} size="small"
+                        sx={{ bgcolor: `${riskColor(cm.risk_level)}18`, color: riskColor(cm.risk_level),
+                          border: `1px solid ${riskColor(cm.risk_level)}44`, fontSize: 11, height: 20 }} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Warning color="error" />Confirm Deletion</Box></DialogTitle>
-        <DialogContent>
-          <Typography>Delete {selectedConfigMaps.size} stale ConfigMap(s)?</Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>Estimated savings: {formatCurrency(selectedCost)}/month</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={() => { setDeleteDialogOpen(false); setSelectedConfigMaps(new Set()); }} color="error" variant="contained">Delete</Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+          <Typography sx={{ fontSize: 12, color: T.muted, mt: 2, textAlign: 'right' }}>
+            {filtered.length} of {items.length} ConfigMaps shown
+          </Typography>
+        </>
+      )}
+    </Box>
   );
 };
 
-const StaleConfigMaps: React.FC = () => (
-  <ClusterGuard><StaleConfigMapsInner /></ClusterGuard>
-);
-
 export default StaleConfigMaps;
-
-// Made with Bob

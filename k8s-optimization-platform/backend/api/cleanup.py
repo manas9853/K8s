@@ -1,640 +1,646 @@
 """
-Cleanup API - Feature 6: Delete Resources Dashboard
-Updated with real Kubernetes data integration
+Cleanup API — Zombie / stale resource detection
+Reads entirely from db_manager (agent_metrics in PostgreSQL).
+k8s_client is NOT used — it cannot connect from EC2.
 """
 from fastapi import APIRouter, Query, HTTPException
 from pydantic import BaseModel
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import logging
 
-# Import Kubernetes client
-from services.k8s_client import k8s_client
+from database.db import db_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Check if Kubernetes is available
-K8S_AVAILABLE = k8s_client is not None and k8s_client.is_connected()
+# Cost constants (AWS-style estimates)
+CPU_COST_PER_CORE_HOUR   = 0.04
+MEM_COST_PER_GB_HOUR     = 0.005
+STORAGE_COST_PER_GB_MO   = 0.10
+HOURS_PER_MONTH          = 730
 
-# Cost constants
-CPU_COST_PER_CORE_HOUR = 0.04
-MEMORY_COST_PER_GB_HOUR = 0.005
-HOURS_PER_MONTH = 730
 
+# ─── Models ──────────────────────────────────────────────────────────────────
 
 class CleanupResource(BaseModel):
-    resource_type: str
-    resource_name: str
-    namespace: str
-    cluster: str
-    last_used: str
-    days_unused: int
-    monthly_cost: float
-    reason: str
-    risk_level: str  # Low, Medium, High
-    dependencies: int
-    can_delete: bool
-    estimated_savings: float
+    resource_type:      str
+    resource_name:      str
+    namespace:          str
+    cluster:            str
+    last_used:          str
+    days_unused:        int
+    monthly_cost:       float
+    reason:             str
+    risk_level:         str   # Low | Medium | High
+    dependencies:       int
+    can_delete:         bool
+    estimated_savings:  float
 
 
 class CleanupSummary(BaseModel):
-    total_resources: int
-    safe_to_delete: int
-    requires_review: int
-    high_risk: int
-    total_monthly_savings: float
-    total_yearly_savings: float
-    resources_by_type: dict
-    resources_by_cluster: dict
+    total_resources:        int
+    safe_to_delete:         int
+    requires_review:        int
+    high_risk:              int
+    total_monthly_savings:  float
+    total_yearly_savings:   float
+    resources_by_type:      dict
+    resources_by_cluster:   dict
 
 
 class CleanupResponse(BaseModel):
-    summary: CleanupSummary
+    summary:   CleanupSummary
     resources: List[CleanupResource]
 
 
-def parse_cpu(cpu_str: str) -> float:
-    """Parse CPU to cores"""
-    if not cpu_str or cpu_str == '0':
-        return 0.0
+class DeleteResourceRequest(BaseModel):
+    resource_type: str
+    resource_name: str
+    namespace:     str
+    dry_run:       bool = False
+
+
+class DeleteResourceResult(BaseModel):
+    success:       bool
+    resource_type: str
+    resource_name: str
+    namespace:     str
+    message:       str
+
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+def _age_days(ts_str: Optional[str]) -> int:
+    """Return whole days since ts_str (ISO-8601 / Z-suffix). 0 on error."""
+    if not ts_str:
+        return 0
     try:
-        if cpu_str.endswith('m'):
-            return float(cpu_str[:-1]) / 1000
-        elif cpu_str.endswith('n'):
-            return float(cpu_str[:-1]) / 1000000000
-        elif cpu_str.endswith('u'):
-            return float(cpu_str[:-1]) / 1000000
-        else:
-            return float(cpu_str)
-    except (ValueError, AttributeError):
-        return 0.0
+        ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+        return max(0, (datetime.now(timezone.utc) - ts).days)
+    except Exception:
+        return 0
 
 
-def parse_memory(mem_str: str) -> float:
-    """Parse memory to GB"""
-    if not mem_str or mem_str == '0':
-        return 0.0
-    try:
-        if mem_str.endswith('Ki'):
-            return float(mem_str[:-2]) / (1024 * 1024)
-        elif mem_str.endswith('Mi'):
-            return float(mem_str[:-2]) / 1024
-        elif mem_str.endswith('Gi'):
-            return float(mem_str[:-2])
-        elif mem_str.endswith('K'):
-            return float(mem_str[:-1]) / (1000 * 1000)
-        elif mem_str.endswith('M'):
-            return float(mem_str[:-1]) / 1000
-        elif mem_str.endswith('G'):
-            return float(mem_str[:-1])
-        else:
-            return float(mem_str) / (1024 * 1024 * 1024)
-    except (ValueError, AttributeError):
-        return 0.0
-
-
-def calculate_pod_cost(pod: dict) -> float:
-    """Calculate monthly cost for a pod"""
-    total_cpu = 0.0
-    total_memory = 0.0
-    
-    for container in pod.get('containers', []):
-        cpu_request = parse_cpu(container.get('cpu_request', '0'))
-        memory_request = parse_memory(container.get('memory_request', '0'))
-        total_cpu += cpu_request
-        total_memory += memory_request
-    
-    monthly_cost = (
-        total_cpu * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
-        total_memory * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
+def _pod_monthly_cost(pod: dict) -> float:
+    cpu  = pod.get("cpu_request", 0.0) or 0.0
+    mem  = (pod.get("memory_request_mb", 0.0) or 0.0) / 1024  # → GB
+    return round(
+        cpu * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH
+        + mem * MEM_COST_PER_GB_HOUR  * HOURS_PER_MONTH,
+        2,
     )
-    
-    return monthly_cost
 
 
-def find_cleanup_candidates() -> List[CleanupResource]:
-    """Find resources that can be cleaned up from real cluster"""
-    cleanup_resources = []
-    
-    if not K8S_AVAILABLE:
-        logger.warning("Kubernetes not available")
-        return cleanup_resources
-    
+def _storage_monthly_cost(size_bytes: float) -> float:
+    gb = size_bytes / (1024 ** 3)
+    return round(gb * STORAGE_COST_PER_GB_MO, 2)
+
+
+def _get_metrics(cluster_id: Optional[str] = None) -> tuple:
+    """Return (metrics_dict, cluster_name). metrics is {} on error."""
     try:
-        cluster_id = k8s_client.get_cluster_name()
-        current_time = datetime.now(timezone.utc)
-        
-        # Initialize Kubernetes API clients using helper methods
-        core_v1 = k8s_client.get_core_api()
-        apps_v1 = k8s_client.get_apps_api()
-        batch_v1 = k8s_client.get_batch_api()
-        
-        # Get all pods
-        all_pods = k8s_client.list_pods()
-        logger.info(f"Analyzing {len(all_pods)} pods for cleanup candidates")
-        
-        # Track active resources
-        active_configmaps = set()
-        active_secrets = set()
-        pod_owners = {}
-        
-        # 1. Find zombie pods (no owner reference)
-        for pod in all_pods:
-            pod_name = pod.get('name', '')
-            namespace = pod.get('namespace', 'default')
-            owner_kind = pod.get('owner_kind', '')
-            status = pod.get('status', 'Unknown')
-            
-            # Track owner references
-            if owner_kind:
-                key = f"{namespace}/{owner_kind}"
-                pod_owners[key] = pod_owners.get(key, 0) + 1
-            
-            # Track referenced ConfigMaps and Secrets
-            for container in pod.get('containers', []):
-                # Would need to parse env vars and volumes for references
-                pass
-            
-            # Zombie pod: no owner and not Running
-            if not owner_kind and status != 'Running':
-                creation_time = pod.get('creation_timestamp')
-                days_old = 0
-                if creation_time:
-                    try:
-                        created = datetime.fromisoformat(
-                            creation_time.replace('Z', '+00:00')
-                        )
-                        days_old = (current_time - created).days
-                    except:
-                        pass
-                
-                # Only flag if older than 7 days
-                if days_old > 7:
-                    monthly_cost = calculate_pod_cost(pod)
-                    
-                    cleanup_resources.append(CleanupResource(
-                        resource_type="Pod",
-                        resource_name=pod_name,
-                        namespace=namespace,
-                        cluster=cluster_id,
-                        last_used=creation_time or "Unknown",
-                        days_unused=days_old,
-                        monthly_cost=monthly_cost,
-                        reason=f"Zombie pod: {status}, no owner, {days_old} days old",
-                        risk_level="Low" if status in ['Succeeded', 'Failed'] else "Medium",
-                        dependencies=0,
-                        can_delete=status in ['Succeeded', 'Failed', 'Unknown'],
-                        estimated_savings=monthly_cost
-                    ))
-        
-        # 2. Find old ReplicaSets (using Kubernetes API)
-        try:
-            # Get all ReplicaSets
-            all_replicasets = apps_v1.list_replica_set_for_all_namespaces()
-            
-            for rs in all_replicasets.items:
-                # Old ReplicaSet: 0 replicas and older than 30 days
-                if rs.spec.replicas == 0:
-                    creation_time = rs.metadata.creation_timestamp
-                    days_old = (current_time - creation_time).days
-                    
-                    if days_old > 30:
-                        cleanup_resources.append(CleanupResource(
-                            resource_type="ReplicaSet",
-                            resource_name=rs.metadata.name,
-                            namespace=rs.metadata.namespace,
-                            cluster=cluster_id,
-                            last_used=creation_time.isoformat(),
-                            days_unused=days_old,
-                            monthly_cost=0.0,
-                            reason=f"Old ReplicaSet with 0 replicas, {days_old} days old",
-                            risk_level="Low",
-                            dependencies=0,
-                            can_delete=True,
-                            estimated_savings=0.0
-                        ))
-        except Exception as e:
-            logger.error(f"Error fetching ReplicaSets: {e}")
-        
-        # 3. Find failed/completed Jobs
-        try:
-            all_jobs = batch_v1.list_job_for_all_namespaces()
-            
-            for job in all_jobs.items:
-                # Check if job is completed or failed
-                if job.status.succeeded or job.status.failed:
-                    completion_time = (
-                        job.status.completion_time or
-                        job.metadata.creation_timestamp
-                    )
-                    days_old = (current_time - completion_time).days
-                    
-                    if days_old > 7:
-                        status_str = "Succeeded" if job.status.succeeded else "Failed"
-                        cleanup_resources.append(CleanupResource(
-                            resource_type="Job",
-                            resource_name=job.metadata.name,
-                            namespace=job.metadata.namespace,
-                            cluster=cluster_id,
-                            last_used=completion_time.isoformat(),
-                            days_unused=days_old,
-                            monthly_cost=0.0,
-                            reason=f"{status_str} job, {days_old} days old",
-                            risk_level="Low",
-                            dependencies=0,
-                            can_delete=True,
-                            estimated_savings=0.0
-                        ))
-        except Exception as e:
-            logger.error(f"Error fetching Jobs: {e}")
-        
-        # 4. Find orphaned PVCs
-        try:
-            all_pvcs = core_v1.list_persistent_volume_claim_for_all_namespaces()
-            
-            # Get all pod volume claims
-            used_pvcs = set()
-            for pod in all_pods:
-                # Would need to parse pod.spec.volumes
-                pass
-            
-            for pvc in all_pvcs.items:
-                pvc_name = pvc.metadata.name
-                namespace = pvc.metadata.namespace
-                key = f"{namespace}/{pvc_name}"
-                
-                # Check if PVC is not used by any pod
-                if key not in used_pvcs and pvc.status.phase == "Bound":
-                    creation_time = pvc.metadata.creation_timestamp
-                    days_old = (current_time - creation_time).days
-                    
-                    if days_old > 30:
-                        # Estimate storage cost
-                        storage_size = pvc.spec.resources.requests.get('storage', '0')
-                        # Parse storage size and calculate cost
-                        # Simplified: assume $0.10/GB/month
-                        monthly_cost = 10.0  # Placeholder
-                        
-                        cleanup_resources.append(CleanupResource(
-                            resource_type="PersistentVolumeClaim",
-                            resource_name=pvc_name,
-                            namespace=namespace,
-                            cluster=cluster_id,
-                            last_used=creation_time.isoformat(),
-                            days_unused=days_old,
-                            monthly_cost=monthly_cost,
-                            reason=f"PVC not attached to any pod, {days_old} days old",
-                            risk_level="High",
-                            dependencies=0,
-                            can_delete=False,
-                            estimated_savings=monthly_cost
-                        ))
-        except Exception as e:
-            logger.error(f"Error fetching PVCs: {e}")
-        
-        # 5. Find unused Services
-        try:
-            all_services = core_v1.list_service_for_all_namespaces()
-            
-            for svc in all_services.items:
-                # Skip system services
-                if svc.metadata.namespace in ['kube-system', 'kube-public']:
-                    continue
-                
-                # Check if service has endpoints
-                try:
-                    endpoints = core_v1.read_namespaced_endpoints(
-                        svc.metadata.name,
-                        svc.metadata.namespace
-                    )
-                    
-                    has_endpoints = False
-                    if endpoints.subsets:
-                        for subset in endpoints.subsets:
-                            if subset.addresses:
-                                has_endpoints = True
-                                break
-                    
-                    if not has_endpoints:
-                        creation_time = svc.metadata.creation_timestamp
-                        days_old = (current_time - creation_time).days
-                        
-                        if days_old > 14:
-                            # Estimate cost for LoadBalancer services
-                            monthly_cost = 0.0
-                            if svc.spec.type == "LoadBalancer":
-                                monthly_cost = 20.0  # ~$20/month for LB
-                            
-                            cleanup_resources.append(CleanupResource(
-                                resource_type="Service",
-                                resource_name=svc.metadata.name,
-                                namespace=svc.metadata.namespace,
-                                cluster=cluster_id,
-                                last_used=creation_time.isoformat(),
-                                days_unused=days_old,
-                                monthly_cost=monthly_cost,
-                                reason=f"Service with no endpoints, {days_old} days old",
-                                risk_level="Medium",
-                                dependencies=0,
-                                can_delete=False,
-                                estimated_savings=monthly_cost
-                            ))
-                except:
-                    pass
-        except Exception as e:
-            logger.error(f"Error fetching Services: {e}")
-        
-        logger.info(f"Found {len(cleanup_resources)} cleanup candidates")
-        
-    except Exception as e:
-        logger.error(f"Error finding cleanup candidates: {e}")
-    
-    return cleanup_resources
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return {}, ""
+        name = cluster_id or clusters[0]["cluster_name"]
+        m = db_manager.get_latest_metrics(name) or {}
+        return m, name
+    except Exception as exc:
+        logger.error("db_manager error: %s", exc)
+        return {}, ""
 
+
+# ─── Core scanner ────────────────────────────────────────────────────────────
+
+def _find_all_candidates(cluster_id: Optional[str] = None) -> List[CleanupResource]:
+    """
+    Derive cleanup candidates from agent_metrics JSONB domains.
+    Sources: pods, workloads (replicasets, jobs), storage, network.
+    """
+    metrics, cluster_name = _get_metrics(cluster_id)
+    if not metrics:
+        return []
+
+    results: List[CleanupResource] = []
+
+    # ── 1. Zombie pods (no owner, not Running, age > 7d) ─────────────────────
+    pods = (metrics.get("pods") or {}).get("items", [])
+    for pod in pods:
+        owner_kind = pod.get("owner_kind", "") or ""
+        status     = pod.get("status", "Unknown") or "Unknown"
+        created    = pod.get("created") or pod.get("start_time", "")
+        days       = _age_days(created)
+
+        if owner_kind or status == "Running" or days <= 7:
+            continue
+
+        cost = _pod_monthly_cost(pod)
+        can_del = status in ("Succeeded", "Failed", "Unknown")
+        results.append(CleanupResource(
+            resource_type     = "Pod",
+            resource_name     = pod.get("name", ""),
+            namespace         = pod.get("namespace", ""),
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = cost,
+            reason            = f"Orphaned pod — status={status}, no owner, {days}d old",
+            risk_level        = "Low" if status in ("Succeeded", "Failed") else "Medium",
+            dependencies      = 0,
+            can_delete        = can_del,
+            estimated_savings = cost,
+        ))
+
+    # ── 2. Completed / failed jobs older than 7d ─────────────────────────────
+    wl   = metrics.get("workloads") or {}
+    jobs = (wl.get("jobs") or {}).get("items", [])
+    for job in jobs:
+        succeeded = job.get("succeeded", 0) or 0
+        failed    = job.get("failed",    0) or 0
+        active    = job.get("active",    0) or 0
+        if active > 0 or (succeeded == 0 and failed == 0):
+            continue
+        created = job.get("created_at") or job.get("completion_time") or ""
+        days    = _age_days(created)
+        if days <= 7:
+            continue
+        status_str = "Succeeded" if succeeded > 0 else "Failed"
+        results.append(CleanupResource(
+            resource_type     = "Job",
+            resource_name     = job.get("name", ""),
+            namespace         = job.get("namespace", ""),
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = 0.0,
+            reason            = f"{status_str} job, {days}d old",
+            risk_level        = "Low",
+            dependencies      = 0,
+            can_delete        = True,
+            estimated_savings = 0.0,
+        ))
+
+    # ── 3. Old ReplicaSets (0 replicas, owned by Deployment) ─────────────────
+    # Agent pre-filters these into workloads.replicasets.orphaned
+    orphaned_rs = (wl.get("replicasets") or {}).get("orphaned", [])
+    for rs in orphaned_rs:
+        created    = rs.get("created") or rs.get("created_at", "")
+        days       = _age_days(created)
+        owner_name = rs.get("owner_name", "")
+        reason     = (
+            f"Superseded by deployment/{owner_name}, 0 replicas, {days}d old"
+            if owner_name else
+            f"Old ReplicaSet — 0 replicas, {days}d old"
+        )
+        results.append(CleanupResource(
+            resource_type     = "ReplicaSet",
+            resource_name     = rs.get("name", ""),
+            namespace         = rs.get("namespace", ""),
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = 0.0,
+            reason            = reason,
+            risk_level        = "Low",
+            dependencies      = 0,
+            can_delete        = True,
+            estimated_savings = 0.0,
+        ))
+
+    # ── 4. Unattached PVCs ────────────────────────────────────────────────────
+    # Agent stores phase != Bound PVCs in storage.orphaned_pvcs
+    storage       = metrics.get("storage") or {}
+    orphaned_pvcs = storage.get("orphaned_pvcs", [])
+
+    # Also scan all PVCs for those not mounted by any running pod
+    active_pvcs: set = set()
+    for pod in pods:
+        if pod.get("status") == "Running":
+            for pvc_name in (pod.get("pvc_mounts") or []):
+                active_pvcs.add(f"{pod.get('namespace','')}/{pvc_name}")
+
+    all_pvcs = (storage.get("pvcs") or {}).get("items", [])
+    for pvc in all_pvcs:
+        key     = f"{pvc.get('namespace','')}/{pvc.get('name','')}"
+        phase   = pvc.get("status", "Pending") or "Pending"
+        created = pvc.get("created", "")
+        days    = _age_days(created)
+        if key in active_pvcs or days <= 30:
+            continue
+        size_bytes = pvc.get("size_bytes", 0) or pvc.get("capacity_bytes", 0) or 0
+        cost = _storage_monthly_cost(size_bytes)
+        results.append(CleanupResource(
+            resource_type     = "PersistentVolumeClaim",
+            resource_name     = pvc.get("name", ""),
+            namespace         = pvc.get("namespace", ""),
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = cost,
+            reason            = f"PVC not mounted by any running pod — phase={phase}, {days}d old",
+            risk_level        = "High",
+            dependencies      = 0,
+            can_delete        = False,  # data loss risk — require manual review
+            estimated_savings = cost,
+        ))
+
+    # ── 5. Services with no endpoints (age > 14d, skip system namespaces) ─────
+    net      = metrics.get("network") or {}
+    services = (net.get("services") or {}).get("items", [])
+    SKIP_NS  = {"kube-system", "kube-public", "kube-node-lease"}
+    for svc in services:
+        ns = svc.get("namespace", "")
+        if ns in SKIP_NS:
+            continue
+        if (svc.get("endpoints_count") or 0) > 0:
+            continue
+        svc_type = svc.get("type", "ClusterIP")
+        created  = svc.get("created_at") or svc.get("created", "")
+        days     = _age_days(created)
+        if days <= 14:
+            continue
+        lb_cost = 18.0 if svc_type == "LoadBalancer" else 0.0
+        results.append(CleanupResource(
+            resource_type     = "Service",
+            resource_name     = svc.get("name", ""),
+            namespace         = ns,
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = lb_cost,
+            reason            = f"{svc_type} service with no endpoints, {days}d old",
+            risk_level        = "Medium",
+            dependencies      = 0,
+            can_delete        = False,
+            estimated_savings = lb_cost,
+        ))
+
+    # ── 6. Idle namespaces (no running pods) ──────────────────────────────────
+    all_ns = (metrics.get("namespaces") or {}).get("items", [])
+    running_ns: set = {p.get("namespace") for p in pods if p.get("status") == "Running"}
+    SKIP_IDLE = {"kube-system", "kube-public", "kube-node-lease", "default"}
+    for ns_item in all_ns:
+        ns_name = ns_item.get("name", "")
+        if ns_name in SKIP_IDLE or ns_name in running_ns:
+            continue
+        created = ns_item.get("created", "")
+        days    = _age_days(created)
+        if days <= 30:
+            continue
+        results.append(CleanupResource(
+            resource_type     = "Namespace",
+            resource_name     = ns_name,
+            namespace         = ns_name,
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = 0.0,
+            reason            = f"Namespace has no running pods, {days}d old",
+            risk_level        = "Medium",
+            dependencies      = 0,
+            can_delete        = False,
+            estimated_savings = 0.0,
+        ))
+
+    logger.info("Cleanup scan found %d candidates for cluster %s", len(results), cluster_name)
+    return results
+
+
+def _build_response(resources: List[CleanupResource], cluster_id: Optional[str] = None) -> dict:
+    cluster_name = resources[0].cluster if resources else ""
+    safe     = sum(1 for r in resources if r.can_delete and r.risk_level == "Low")
+    review   = sum(1 for r in resources if not r.can_delete or r.risk_level == "Medium")
+    high     = sum(1 for r in resources if r.risk_level == "High")
+    savings  = sum(r.estimated_savings for r in resources)
+    by_type  = {}
+    for r in resources:
+        by_type[r.resource_type] = by_type.get(r.resource_type, 0) + 1
+    by_cluster = {cluster_name: len(resources)} if cluster_name else {}
+    return {
+        "summary": {
+            "total_resources":       len(resources),
+            "safe_to_delete":        safe,
+            "requires_review":       review,
+            "high_risk":             high,
+            "total_monthly_savings": round(savings, 2),
+            "total_yearly_savings":  round(savings * 12, 2),
+            "resources_by_type":     by_type,
+            "resources_by_cluster":  by_cluster,
+        },
+        "resources": [r.dict() for r in resources],
+    }
+
+
+# ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=CleanupResponse)
 async def get_cleanup_resources(
-    cluster: Optional[str] = Query(None),
-    namespace: Optional[str] = Query(None),
+    cluster:       Optional[str] = Query(None),
+    namespace:     Optional[str] = Query(None),
     resource_type: Optional[str] = Query(None),
-    risk_level: Optional[str] = Query(None)
+    risk_level:    Optional[str] = Query(None),
+    cluster_id:    Optional[str] = Query(None),
 ):
-    """Get list of resources that can be cleaned up from real cluster"""
-    
-    if not K8S_AVAILABLE:
-        raise HTTPException(
-            status_code=503,
-            detail="Kubernetes not configured"
-        )
-    
+    """All cleanup candidates from agent_metrics data."""
+    cid = cluster_id or cluster
     try:
-        # Get cleanup candidates from real cluster
-        all_resources = find_cleanup_candidates()
-        
-        # Apply filters
-        filtered_resources = all_resources
-        
-        if cluster:
-            filtered_resources = [
-                r for r in filtered_resources if r.cluster == cluster
-            ]
-        
+        resources = _find_all_candidates(cid)
         if namespace:
-            filtered_resources = [
-                r for r in filtered_resources if r.namespace == namespace
-            ]
-        
+            resources = [r for r in resources if r.namespace == namespace]
         if resource_type:
-            filtered_resources = [
-                r for r in filtered_resources if r.resource_type == resource_type
-            ]
-        
+            resources = [r for r in resources if r.resource_type == resource_type]
         if risk_level:
-            filtered_resources = [
-                r for r in filtered_resources if r.risk_level == risk_level
-            ]
-        
-        # Calculate summary
-        safe_to_delete = len([
-            r for r in filtered_resources
-            if r.can_delete and r.risk_level == "Low"
-        ])
-        requires_review = len([
-            r for r in filtered_resources
-            if not r.can_delete or r.risk_level == "Medium"
-        ])
-        high_risk = len([
-            r for r in filtered_resources if r.risk_level == "High"
-        ])
-        total_monthly_savings = sum(
-            r.estimated_savings for r in filtered_resources
-        )
-        
-        # Resources by type
-        resources_by_type = {}
-        for r in filtered_resources:
-            resources_by_type[r.resource_type] = (
-                resources_by_type.get(r.resource_type, 0) + 1
-            )
-        
-        # Resources by cluster
-        resources_by_cluster = {}
-        for r in filtered_resources:
-            resources_by_cluster[r.cluster] = (
-                resources_by_cluster.get(r.cluster, 0) + 1
-            )
-        
-        summary = CleanupSummary(
-            total_resources=len(filtered_resources),
-            safe_to_delete=safe_to_delete,
-            requires_review=requires_review,
-            high_risk=high_risk,
-            total_monthly_savings=total_monthly_savings,
-            total_yearly_savings=total_monthly_savings * 12,
-            resources_by_type=resources_by_type,
-            resources_by_cluster=resources_by_cluster
-        )
-        
-        return CleanupResponse(summary=summary, resources=filtered_resources)
-        
-    except Exception as e:
-        logger.error(f"Error getting cleanup resources: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+            resources = [r for r in resources if r.risk_level == risk_level]
+        return _build_response(resources, cid)
+    except Exception as exc:
+        logger.error("Error in get_cleanup_resources: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/summary", response_model=CleanupSummary)
-async def get_cleanup_summary():
-    """Get cleanup summary statistics"""
-    response = await get_cleanup_resources()
-    return response.summary
-
-
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Per-type cleanup endpoints used by the individual cleanup pages.
-# Each endpoint reuses the shared find_cleanup_candidates() scanner but
-# filters by resource type AND falls back to an empty list (not a 503) so
-# the frontend can show "no issues found" instead of an error.
-# ──────────────────────────────────────────────────────────────────────────────
-
-def _cleanup_by_type(type_name: str, cluster_id: Optional[str] = None) -> dict:
-    """Return CleanupResponse dict filtered to a single resource type."""
-    if not K8S_AVAILABLE:
-        return {"summary": {"total_resources": 0, "safe_to_delete": 0,
-                            "requires_review": 0, "high_risk": 0,
-                            "total_monthly_savings": 0, "total_yearly_savings": 0,
-                            "resources_by_type": {}, "resources_by_cluster": {}},
-                "resources": []}
-    try:
-        all_resources = find_cleanup_candidates()
-        filtered = [r for r in all_resources if r.resource_type == type_name]
-        if cluster_id:
-            filtered = [r for r in filtered if r.cluster == cluster_id]
-        total_savings = sum(r.estimated_savings for r in filtered)
-        return {
-            "summary": {
-                "total_resources": len(filtered),
-                "safe_to_delete": sum(1 for r in filtered if r.can_delete),
-                "requires_review": sum(1 for r in filtered if not r.can_delete),
-                "high_risk": sum(1 for r in filtered if r.risk_level == "High"),
-                "total_monthly_savings": total_savings,
-                "total_yearly_savings": total_savings * 12,
-                "resources_by_type": {type_name: len(filtered)} if filtered else {},
-                "resources_by_cluster": {},
-            },
-            "resources": [r.dict() for r in filtered],
-        }
-    except Exception as e:
-        logger.error(f"Error getting cleanup resources for type {type_name}: {e}")
-        return {"summary": {"total_resources": 0, "safe_to_delete": 0,
-                            "requires_review": 0, "high_risk": 0,
-                            "total_monthly_savings": 0, "total_yearly_savings": 0,
-                            "resources_by_type": {}, "resources_by_cluster": {}},
-                "resources": []}
+async def get_cleanup_summary(cluster_id: Optional[str] = Query(None)):
+    resp = await get_cleanup_resources(cluster_id=cluster_id)
+    return resp["summary"]
 
 
 @router.get("/zombie-resources")
 async def get_zombie_resources(cluster_id: Optional[str] = Query(None)):
-    """Zombie resources: pods, services and other resources with no owners/endpoints."""
-    result = _cleanup_by_type("Pod", cluster_id)
-    # Also include Service type
-    if K8S_AVAILABLE:
-        try:
-            all_resources = find_cleanup_candidates()
-            svc = [r for r in all_resources if r.resource_type == "Service"]
-            if cluster_id:
-                svc = [r for r in svc if r.cluster == cluster_id]
-            result["resources"].extend([r.dict() for r in svc])
-            result["summary"]["total_resources"] = len(result["resources"])
-        except Exception:
-            pass
-    return result
+    """Pods and Services with no owners / no endpoints."""
+    resources = _find_all_candidates(cluster_id)
+    filtered  = [r for r in resources if r.resource_type in ("Pod", "Service")]
+    return _build_response(filtered, cluster_id)
 
 
 @router.get("/unused-deployments")
 async def get_unused_deployments(cluster_id: Optional[str] = Query(None)):
-    """Deployments that have been idle with zero usage."""
-    return _cleanup_by_type("Deployment", cluster_id)
+    """
+    Deployments that have desired > 0 replicas but 0 ready for > 7 days.
+    Returns a richer shape that includes full deployment detail so the
+    frontend can show replica counts, images, containers, conditions, etc.
+    """
+    metrics, cluster_name = _get_metrics(cluster_id)
+    wl   = metrics.get("workloads") or {}
+    deps = (wl.get("deployments") or {}).get("items", [])
+
+    items = []
+    for d in deps:
+        replicas_desired   = d.get("replicas", 0) or 0
+        replicas_ready     = d.get("ready_replicas", 0) or 0
+        replicas_available = d.get("available_replicas", 0) or 0
+        replicas_updated   = d.get("updated_replicas", 0) or 0
+        unavailable        = d.get("unavailable_replicas", 0) or 0
+
+        # Only flag: desired > 0 AND none ready
+        if replicas_desired == 0 or replicas_ready > 0:
+            continue
+
+        created = d.get("created") or d.get("created_at", "")
+        days    = _age_days(created)
+        if days <= 7:
+            continue
+
+        # Cost estimate: sum container CPU requests
+        containers  = d.get("containers", [])
+        total_cpu   = sum(c.get("cpu_request", 0) or 0 for c in containers)
+        total_mem   = sum(c.get("memory_request_mb", 0) or 0 for c in containers)  # MB
+        monthly_cost = round(
+            total_cpu * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH
+            + (total_mem / 1024) * MEM_COST_PER_GB_HOUR * HOURS_PER_MONTH,
+            2,
+        )
+
+        images = list({c.get("image", "") for c in containers if c.get("image")})
+
+        items.append({
+            # identity
+            "name":               d.get("name", ""),
+            "namespace":          d.get("namespace", ""),
+            "cluster":            cluster_name,
+            # replica state
+            "replicas_desired":   replicas_desired,
+            "replicas_ready":     replicas_ready,
+            "replicas_available": replicas_available,
+            "replicas_updated":   replicas_updated,
+            "replicas_unavailable": unavailable,
+            # time
+            "created_at":         created or "Unknown",
+            "idle_days":          days,
+            # strategy / labels
+            "strategy":           d.get("strategy", "RollingUpdate"),
+            "labels":             d.get("labels", {}),
+            "paused":             bool(d.get("paused", False)),
+            # containers
+            "containers":         containers,
+            "images":             images,
+            # conditions
+            "conditions":         d.get("conditions", []),
+            # cost
+            "monthly_cost":       monthly_cost,
+            "estimated_savings":  monthly_cost,
+            # classification
+            "reason":             f"desired={replicas_desired} replicas, 0 ready for {days}d",
+            "risk_level":         "Medium",
+            "can_delete":         False,
+        })
+
+    total_savings = sum(i["monthly_cost"] for i in items)
+    return {
+        "summary": {
+            "total_deployments":     len(items),
+            "total_idle_replicas":   sum(i["replicas_desired"] for i in items),
+            "total_monthly_savings": round(total_savings, 2),
+            "total_yearly_savings":  round(total_savings * 12, 2),
+        },
+        "deployments": items,
+    }
 
 
 @router.get("/stale-configmaps")
 async def get_stale_configmaps(cluster_id: Optional[str] = Query(None)):
-    """ConfigMaps not referenced by any running pod."""
-    return _cleanup_by_type("ConfigMap", cluster_id)
+    """
+    Return ConfigMaps that are not referenced by any running pod
+    (not via volume, envFrom, or env.valueFrom.configMapKeyRef).
+    Skips system-managed ConfigMaps.
+    """
+    metrics, cluster_name = _get_metrics(cluster_id)
+    if not metrics:
+        return _build_response([], cluster_id)
+
+    cm_domain = metrics.get("configmaps") or {}
+    stale_items = cm_domain.get("stale_items") or []
+
+    # If the new domain isn't present yet (agent not updated), fall back to
+    # scanning all configmaps from items and computing staleness ourselves.
+    if not stale_items and cm_domain.get("items"):
+        SYSTEM_PREFIXES = (
+            "kube-", "extension-apiserver-", "coredns", "cluster-info",
+            "kubernetes-", "ibm-", "calico-", "cert-manager", "istio-",
+            "prometheus-", "grafana-", "oauth-", "open-cluster-", "bootstrap-",
+        )
+        for item in cm_domain.get("items", []):
+            if not item.get("is_referenced") and not item.get("is_system"):
+                if not any(item.get("name", "").startswith(p) for p in SYSTEM_PREFIXES):
+                    stale_items.append(item)
+
+    resources: List[CleanupResource] = []
+    for cm in stale_items:
+        name    = cm.get("name", "")
+        ns      = cm.get("namespace", "")
+        created = cm.get("created") or ""
+        days    = _age_days(created)
+        keys    = cm.get("key_count", 0) or len(cm.get("data_keys", [])) + len(cm.get("binary_keys", []))
+        size_b  = cm.get("size_bytes", 0) or 0
+        size_kb = round(size_b / 1024, 1)
+
+        # Low risk: configmaps have no direct cost but waste etcd space / cause confusion
+        risk = "Low"
+        if days > 180:
+            risk = "Medium"
+        if days > 365 and keys == 0:
+            risk = "Low"   # empty + old = definitely safe
+
+        reason_parts = [f"Not referenced by any pod"]
+        if days > 0:
+            reason_parts.append(f"{days}d old")
+        if keys > 0:
+            reason_parts.append(f"{keys} key(s), {size_kb} KB")
+        else:
+            reason_parts.append("empty")
+
+        resources.append(CleanupResource(
+            resource_type     = "ConfigMap",
+            resource_name     = name,
+            namespace         = ns,
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = 0.0,
+            reason            = ", ".join(reason_parts),
+            risk_level        = risk,
+            dependencies      = 0,
+            can_delete        = True,
+            estimated_savings = 0.0,
+        ))
+
+    # Sort: oldest first, then by namespace
+    resources.sort(key=lambda r: (-r.days_unused, r.namespace, r.resource_name))
+    return _build_response(resources, cluster_id)
 
 
 @router.get("/stale-secrets")
 async def get_stale_secrets(cluster_id: Optional[str] = Query(None)):
-    """Secrets not referenced by any running pod."""
-    return _cleanup_by_type("Secret", cluster_id)
+    """
+    Return Secrets not referenced by any pod, service account or imagePullSecret.
+    Auto-managed types (service-account-token, dockercfg, helm) are excluded.
+    """
+    metrics, cluster_name = _get_metrics(cluster_id)
+    if not metrics:
+        return _build_response([], cluster_id)
+
+    sd = metrics.get("secrets_domain") or {}
+    stale_items = sd.get("stale_items") or []
+
+    resources: List[CleanupResource] = []
+    for s in stale_items:
+        name    = s.get("name", "")
+        ns      = s.get("namespace", "")
+        created = s.get("created") or ""
+        days    = _age_days(created)
+        stype   = s.get("type", "Opaque")
+        keys    = s.get("key_count", 0) or len(s.get("data_keys", []))
+
+        # Secrets carry higher risk than configmaps — may contain credentials
+        if days > 365:
+            risk = "High"
+        elif days > 90:
+            risk = "Medium"
+        else:
+            risk = "Low"
+
+        reason_parts = ["Not referenced by any pod or service account"]
+        if days > 0:
+            reason_parts.append(f"{days}d old")
+        if keys > 0:
+            reason_parts.append(f"{keys} key(s)")
+        else:
+            reason_parts.append("empty")
+
+        resources.append(CleanupResource(
+            resource_type     = "Secret",
+            resource_name     = name,
+            namespace         = ns,
+            cluster           = cluster_name,
+            last_used         = created or "Unknown",
+            days_unused       = days,
+            monthly_cost      = 0.0,
+            reason            = ", ".join(reason_parts),
+            risk_level        = risk,
+            dependencies      = 0,
+            can_delete        = risk != "High",
+            estimated_savings = 0.0,
+        ))
+
+    resources.sort(key=lambda r: (-r.days_unused, r.namespace, r.resource_name))
+    return _build_response(resources, cluster_id)
 
 
 @router.get("/old-replicasets")
 async def get_old_replicasets(cluster_id: Optional[str] = Query(None)):
-    """ReplicaSets with zero replicas that are no longer needed."""
-    return _cleanup_by_type("ReplicaSet", cluster_id)
+    resources = _find_all_candidates(cluster_id)
+    return _build_response(
+        [r for r in resources if r.resource_type == "ReplicaSet"], cluster_id
+    )
 
 
 @router.get("/unattached-pvcs")
 async def get_unattached_pvcs(cluster_id: Optional[str] = Query(None)):
-    """PersistentVolumeClaims not attached to any running pod."""
-    return _cleanup_by_type("PersistentVolumeClaim", cluster_id)
+    resources = _find_all_candidates(cluster_id)
+    return _build_response(
+        [r for r in resources if r.resource_type == "PersistentVolumeClaim"], cluster_id
+    )
 
 
 @router.get("/idle-namespaces")
 async def get_idle_namespaces(cluster_id: Optional[str] = Query(None)):
-    """Namespaces with no active workloads."""
-    return _cleanup_by_type("Namespace", cluster_id)
-
-
-# ---------------------------------------------------------------------------
-# Delete endpoint — removes a resource from the real cluster
-# ---------------------------------------------------------------------------
-
-class DeleteResourceRequest(BaseModel):
-    resource_type: str    # Pod | ReplicaSet | Job | Service | ConfigMap | Secret | PersistentVolumeClaim
-    resource_name: str
-    namespace: str
-    dry_run: bool = False
-
-
-class DeleteResourceResult(BaseModel):
-    success: bool
-    resource_type: str
-    resource_name: str
-    namespace: str
-    message: str
+    resources = _find_all_candidates(cluster_id)
+    return _build_response(
+        [r for r in resources if r.resource_type == "Namespace"], cluster_id
+    )
 
 
 @router.delete("/delete", response_model=DeleteResourceResult)
 async def delete_resource(req: DeleteResourceRequest):
     """
-    Delete a single cleanup candidate from the real Kubernetes cluster.
-    Supports: Pod, ReplicaSet, Job, Service, ConfigMap, Secret, PersistentVolumeClaim.
+    Enqueue a delete command for the in-cluster agent to execute.
+    The agent polls /api/agents/commands/pending and runs the deletion.
     """
-    if not K8S_AVAILABLE:
-        raise HTTPException(status_code=503, detail="Kubernetes API not reachable")
-
-    dry_run_param = ["All"] if req.dry_run else []
-    ns  = req.namespace
-    nm  = req.resource_name
+    from api.workloads import _enqueue
+    cmd_map = {
+        "pod":                    "delete_pod",
+        "replicaset":             "delete_replicaset",
+        "job":                    "delete_job",
+        "service":                "delete_service",
+        "persistentvolumeclaim":  "delete_pvc",
+        "pvc":                    "delete_pvc",
+    }
     rtype = req.resource_type.lower().replace(" ", "")
+    cmd   = cmd_map.get(rtype)
+    if not cmd:
+        raise HTTPException(status_code=400, detail=f"Unsupported resource type: {req.resource_type}")
 
-    try:
-        core_v1  = k8s_client.get_core_api()
-        apps_v1  = k8s_client.get_apps_api()
-        batch_v1 = k8s_client.get_batch_api()
-
-        if rtype == "pod":
-            core_v1.delete_namespaced_pod(
-                name=nm, namespace=ns, dry_run=dry_run_param or None
-            )
-        elif rtype == "replicaset":
-            apps_v1.delete_namespaced_replica_set(
-                name=nm, namespace=ns, dry_run=dry_run_param or None
-            )
-        elif rtype == "job":
-            batch_v1.delete_namespaced_job(
-                name=nm, namespace=ns, dry_run=dry_run_param or None
-            )
-        elif rtype == "service":
-            core_v1.delete_namespaced_service(
-                name=nm, namespace=ns, dry_run=dry_run_param or None
-            )
-        elif rtype == "configmap":
-            core_v1.delete_namespaced_config_map(
-                name=nm, namespace=ns, dry_run=dry_run_param or None
-            )
-        elif rtype == "secret":
-            core_v1.delete_namespaced_secret(
-                name=nm, namespace=ns, dry_run=dry_run_param or None
-            )
-        elif rtype in ("persistentvolumeclaim", "pvc"):
-            core_v1.delete_namespaced_persistent_volume_claim(
-                name=nm, namespace=ns, dry_run=dry_run_param or None
-            )
-        else:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Unsupported resource type: {req.resource_type}"
-            )
-
-        action = "DRY-RUN deleted" if req.dry_run else "Deleted"
-        logger.info(f"{action} {req.resource_type} {ns}/{nm}")
+    if req.dry_run:
         return DeleteResourceResult(
-            success=True,
-            resource_type=req.resource_type,
-            resource_name=nm,
-            namespace=ns,
-            message=f"{action} {req.resource_type} '{nm}' from namespace '{ns}'",
+            success=True, resource_type=req.resource_type,
+            resource_name=req.resource_name, namespace=req.namespace,
+            message=f"[DRY-RUN] Would delete {req.resource_type} '{req.resource_name}'",
         )
 
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.error(f"Error deleting {req.resource_type} {ns}/{nm}: {exc}")
-        raise HTTPException(status_code=500, detail=str(exc))
+    result = _enqueue(None, cmd, {"namespace": req.namespace, "name": req.resource_name})
+    return DeleteResourceResult(
+        success=True, resource_type=req.resource_type,
+        resource_name=req.resource_name, namespace=req.namespace,
+        message=f"Delete command enqueued (id={result.get('command_id')}). Agent will execute shortly.",
+    )
 
-
-# Made with Bob - Now with REAL Kubernetes cleanup & delete!
+# Made with Bob

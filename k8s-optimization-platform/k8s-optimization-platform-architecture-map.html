@@ -1,0 +1,233 @@
+
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>K8s Optimization Platform — Architecture</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI",system-ui,sans-serif;font-size:14px;line-height:1.6;background:#ffffff;color:#1f2328;padding:24px}
+.wrap{max-width:760px;margin:0 auto}
+h1{font-size:1.4rem;font-weight:700;margin-bottom:4px;color:#1f2328}
+h2{font-size:1rem;font-weight:700;margin:28px 0 10px;color:#1f2328;border-bottom:1px solid #e5e7eb;padding-bottom:6px}
+h3{font-size:.85rem;font-weight:700;margin:14px 0 6px;color:#57606a;text-transform:uppercase;letter-spacing:.05em}
+p{color:#57606a;font-size:.85rem;margin-bottom:12px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:.78rem;color:#57606a}
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+/* Topology diagram */
+.topo{background:#f7f8fa;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin-bottom:20px}
+.tier{display:flex;gap:12px;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap}
+.tier:last-child{margin-bottom:0}
+.tier-label{font-size:.72rem;font-weight:700;color:#57606a;text-transform:uppercase;letter-spacing:.06em;width:80px;padding-top:8px;flex-shrink:0}
+.boxes{display:flex;gap:8px;flex-wrap:wrap;flex:1}
+.box{border-radius:6px;padding:8px 12px;font-size:.78rem;font-weight:600;border:1px solid}
+.box-cluster{background:#f0fdf4;border-color:#4ade80;color:#166534}
+.box-ec2{background:#fef9c3;border-color:#ca8a04;color:#92400e}
+.box-firebase{background:#eff6ff;border-color:#3b82d4;color:#1e40af}
+.box-db{background:#f5f3ff;border-color:#8b5cf6;color:#4c1d95}
+.box-cdn{background:#fdf2f8;border-color:#c084fc;color:#6b21a8}
+.box-agent{background:#fff7ed;border-color:#f97316;color:#9a3412}
+.arrow{color:#8b95a9;font-size:.78rem;display:flex;align-items:center;padding-top:8px}
+/* Tables */
+table{width:100%;border-collapse:collapse;font-size:.8rem;margin-bottom:8px}
+th{background:#f7f8fa;font-weight:600;text-align:left;padding:7px 10px;border:1px solid #e5e7eb;color:#57606a;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em}
+td{padding:6px 10px;border:1px solid #e5e7eb;vertical-align:top}
+tr:nth-child(even) td{background:#fafafa}
+.badge{display:inline-block;padding:1px 7px;border-radius:999px;font-size:.72rem;font-weight:600;white-space:nowrap}
+.green{background:#dcfce7;color:#166534}
+.red{background:#fee2e2;color:#991b1b}
+.yellow{background:#fef9c3;color:#92400e}
+.blue{background:#dbeafe;color:#1e40af}
+.gray{background:#f3f4f6;color:#374151}
+.purple{background:#ede9fe;color:#4c1d95}
+code{background:#f3f4f6;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:.78rem;color:#1f2328}
+.section-card{background:#f7f8fa;border:1px solid #e5e7eb;border-radius:6px;padding:14px;margin-bottom:14px}
+.flow-row{display:flex;gap:0;align-items:center;font-size:.8rem;flex-wrap:wrap;margin:6px 0}
+.flow-box{background:#fff;border:1px solid #e5e7eb;border-radius:4px;padding:4px 10px;font-weight:600;color:#1f2328}
+.flow-arrow{padding:0 6px;color:#8b95a9;font-weight:400}
+.status-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #e5e7eb;font-size:.8rem}
+.status-row:last-child{border-bottom:none}
+footer{text-align:center;font-size:.72rem;color:#8b95a9;margin-top:32px;padding-top:12px;border-top:1px solid #e5e7eb}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>K8s Optimization Platform</h1>
+<p>Full architecture map — deployment topology, data flow, agent domains, API routing, and page-to-endpoint mapping.</p>
+
+
+<h2>Deployment Topology</h2>
+<div class="topo">
+
+  
+  <div class="tier">
+    <div class="tier-label">CLUSTER<br />(IBM IKS)</div>
+    <div class="boxes">
+      <div class="box box-cluster">agent Pod<br /><span style="font-weight:400;font-size:.72rem">k8s-optimization-agent ns<br />manas2821/k8s-optimization-agent:latest</span></div>
+      <div class="box box-cluster">ConfigMap<br /><span style="font-weight:400;font-size:.72rem">k8s-agent-code<br />mounts agent.py at /app/</span></div>
+      <div class="box box-cluster">All Cluster Resources<br /><span style="font-weight:400;font-size:.72rem">Pods, Nodes, Events, Workloads,<br />Storage, Network, HPA, PDB…</span></div>
+    </div>
+    <div class="arrow">— HTTPS/60s POST →</div>
+  </div>
+
+  
+  <div class="tier">
+    <div class="tier-label">EC2<br />(AWS)</div>
+    <div class="boxes">
+      <div class="box box-ec2">k8s-opt-backend<br /><span style="font-weight:400;font-size:.72rem">FastAPI :8000 (internal)<br />manas2821/k8s-platform-backend</span></div>
+      <div class="box box-ec2">k8s-opt-frontend<br /><span style="font-weight:400;font-size:.72rem">Nginx :80 (public)<br />Reverse proxy → /api/* → backend</span></div>
+      <div class="box box-ec2">k8s-opt-worker<br /><span style="font-weight:400;font-size:.72rem">Celery worker<br />(background tasks)</span></div>
+      <div class="box box-db">PostgreSQL<br /><span style="font-weight:400;font-size:.72rem">agent_metrics table<br />JSONB per domain</span></div>
+      <div class="box box-ec2">Prometheus :9090<br /><span style="font-weight:400;font-size:.72rem">internal only</span></div>
+      <div class="box box-ec2">Grafana :3000<br /><span style="font-weight:400;font-size:.72rem">/grafana/* via nginx</span></div>
+    </div>
+  </div>
+
+  
+  <div class="tier">
+    <div class="tier-label">CLOUDFLARE</div>
+    <div class="boxes">
+      <div class="box box-cdn">api.bookmyturff.com<br /><span style="font-weight:400;font-size:.72rem">TLS termination + proxying<br />→ EC2:80 → nginx → backend</span></div>
+    </div>
+  </div>
+
+  
+  <div class="tier">
+    <div class="tier-label">FIREBASE</div>
+    <div class="boxes">
+      <div class="box box-firebase">k8s-6d5ba.web.app<br /><span style="font-weight:400;font-size:.72rem">React SPA (static hosting)<br />Firebase Hosting CDN</span></div>
+    </div>
+    <div class="arrow">← browser fetches /api/v1/* →</div>
+  </div>
+
+</div>
+
+
+<h2>Data Flow</h2>
+<div class="section-card">
+  <div class="flow-row"><div class="flow-box">kubectl API</div><div class="flow-arrow">→</div><div class="flow-box">agent.py collect()</div><div class="flow-arrow">→ POST /api/agents/metrics →</div><div class="flow-box">agent_receiver.py</div><div class="flow-arrow">→</div><div class="flow-box">PostgreSQL agent_metrics</div></div>
+  <div class="flow-row" style="margin-top:8px"><div class="flow-box">Browser</div><div class="flow-arrow">→ HTTPS →</div><div class="flow-box">Firebase CDN</div><div class="flow-arrow">→ /api/v1/* →</div><div class="flow-box">Cloudflare</div><div class="flow-arrow">→</div><div class="flow-box">nginx:80</div><div class="flow-arrow">→</div><div class="flow-box">FastAPI:8000</div><div class="flow-arrow">→</div><div class="flow-box">db_manager</div><div class="flow-arrow">→</div><div class="flow-box">PostgreSQL</div></div>
+  <p style="margin-top:10px;margin-bottom:0"><strong>Key rule:</strong> The agent is the <em>only</em> collector. The backend never calls the Kubernetes API directly (<code>k8s_client</code> from EC2 is dead). Every backend endpoint that works reads from <code>db_manager.get_latest_metrics(cluster_name)</code>.</p>
+</div>
+
+
+<h2>Agent Collection Domains (agent.py)</h2>
+<p>One full collection every 60 s. All domains are sent as top-level keys in the metrics payload.</p>
+<table>
+  <tr><th>Domain key</th><th>Method</th><th>Key data collected</th><th>Backend reads from</th></tr>
+  <tr><td><code>pods</code></td><td><code>_pods()</code></td><td>All pods: cpu/mem requests+limits+usage, owner_kind, restarts, OOM events, PVC mounts, container security</td><td><code>metrics["pods"]["items"]</code></td></tr>
+  <tr><td><code>nodes</code></td><td><code>_nodes()</code></td><td>Node capacity, allocatable, conditions, instance type, taints</td><td><code>metrics["nodes"]["items"]</code></td></tr>
+  <tr><td><code>namespaces</code></td><td><code>_namespaces()</code></td><td>All namespace names, status, labels</td><td><code>metrics["namespaces"]["items"]</code></td></tr>
+  <tr><td><code>workloads</code></td><td><code>_workloads()</code></td><td>Deployments, StatefulSets, DaemonSets, ReplicaSets (with orphaned list), Jobs, CronJobs — full specs + status</td><td><code>metrics["workloads"]["deployments"]["items"]</code> etc.</td></tr>
+  <tr><td><code>storage</code></td><td><code>_storage()</code></td><td>PVCs (with kubelet usage), PVs, StorageClasses, orphaned PVCs</td><td><code>metrics["storage"]["pvcs"]["items"]</code></td></tr>
+  <tr><td><code>network</code></td><td><code>_network()</code></td><td>Services, Ingresses, NetworkPolicies</td><td><code>metrics["network"]["services"]["items"]</code> etc.</td></tr>
+  <tr><td><code>observability</code></td><td><code>_observability()</code></td><td>All cluster events (all_events, warning_events, recent_events), age, source, count</td><td><code>metrics["observability"]["all_events"]</code></td></tr>
+  <tr><td><code>finops</code></td><td><code>_finops()</code></td><td>Per-namespace + per-team resource requests, node specs for cost calc</td><td><code>metrics["finops"]</code></td></tr>
+  <tr><td><code>security</code></td><td><code>_security()</code></td><td>Privileged containers, root containers, service accounts, RBAC</td><td><code>metrics["security"]</code></td></tr>
+  <tr><td><code>hpa</code></td><td><code>_hpa()</code></td><td>All HPAs: target, min/max replicas, current CPU %</td><td><code>metrics["hpa"]["items"]</code></td></tr>
+  <tr><td><code>pdb</code></td><td><code>_pdb()</code></td><td>PodDisruptionBudgets: min_available, disruptions_allowed</td><td><code>metrics["pdb"]["items"]</code></td></tr>
+  <tr><td><code>platform</code></td><td><code>_platform()</code></td><td>GitOps tools detected, addon tools, namespace list</td><td><code>metrics["platform"]</code></td></tr>
+  <tr><td><code>teams</code></td><td><code>_teams()</code></td><td>Team labels on pods/namespaces, pod counts per team</td><td><code>metrics["teams"]</code></td></tr>
+  <tr><td><code>service_accounts</code></td><td><code>_service_accounts()</code></td><td>All SAs: name, ns, secret count, automount flag</td><td><code>metrics["service_accounts"]</code></td></tr>
+</table>
+
+
+<h2>Backend API Routing (main.py)</h2>
+<p>All routes registered at <code>/api/v1/&lt;prefix&gt;</code> (primary) and <code>/api/&lt;prefix&gt;</code> (legacy).</p>
+<table>
+  <tr><th>Prefix</th><th>File</th><th>Data source</th><th>Status</th></tr>
+  <tr><td><code>/v1/workloads</code></td><td>workloads.py</td><td>db_manager → <code>workloads</code> domain</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/pods</code></td><td>pods.py</td><td>db_manager → <code>pods</code> domain</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/observability</code></td><td>observability.py</td><td>db_manager → <code>observability</code> domain</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/network</code></td><td>network.py</td><td>db_manager → <code>network</code> domain</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/storage</code></td><td>storage.py</td><td>db_manager → <code>storage</code> domain</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/cost-savings</code></td><td>cost_savings.py</td><td>db_manager → <code>pods</code> domain</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/recommendations</code></td><td>recommendations.py</td><td>db_manager → <code>pods</code> domain</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/clusters</code></td><td>clusters.py</td><td>db_manager cluster registry</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/cleanup</code></td><td>cleanup.py</td><td>❌ uses dead k8s_client</td><td><span class="badge red">Broken</span></td></tr>
+  <tr><td><code>/v1/finops</code></td><td>finops.py</td><td>db_manager → <code>finops</code> domain</td><td><span class="badge yellow">Partial</span></td></tr>
+  <tr><td><code>/v1/scoring</code></td><td>scoring.py</td><td>db_manager → multiple domains</td><td><span class="badge yellow">Partial</span></td></tr>
+  <tr><td><code>/v1/dashboard</code></td><td>dashboard.py</td><td>db_manager → multiple domains</td><td><span class="badge yellow">Partial</span></td></tr>
+  <tr><td><code>/v1/executive</code></td><td>executive.py</td><td>db_manager</td><td><span class="badge yellow">Partial</span></td></tr>
+  <tr><td><code>/v1/security</code></td><td>security.py</td><td>db_manager → <code>security</code>/<code>pods</code></td><td><span class="badge yellow">Partial</span></td></tr>
+  <tr><td><code>/v1/incidents</code></td><td>incidents.py</td><td>db_manager + events</td><td><span class="badge yellow">Partial</span></td></tr>
+  <tr><td><code>/api/agents/metrics</code></td><td>agent_receiver.py</td><td>Writes to PostgreSQL</td><td><span class="badge green">Live</span></td></tr>
+  <tr><td><code>/v1/ai-copilot</code></td><td>ai_copilot.py</td><td>OpenAI + db_manager</td><td><span class="badge gray">AI-gated</span></td></tr>
+  <tr><td>Others (guardrails, carbon, benchmarking…)</td><td>various</td><td>Partially db_manager, partially dummy</td><td><span class="badge gray">Mock/partial</span></td></tr>
+</table>
+
+
+<h2>Database Schema (PostgreSQL)</h2>
+<div class="section-card">
+  <h3>agent_metrics table</h3>
+  <table style="margin-bottom:8px">
+    <tr><th>Column</th><th>Type</th><th>Description</th></tr>
+    <tr><td><code>id</code></td><td>SERIAL</td><td>Primary key</td></tr>
+    <tr><td><code>cluster_name</code></td><td>VARCHAR</td><td>Cluster identifier (e.g. "xforce-devops/c2dvjirw01r66qf58vu0")</td></tr>
+    <tr><td><code>timestamp</code></td><td>TIMESTAMPTZ</td><td>Collection time</td></tr>
+    <tr><td><code>pods</code></td><td>JSONB</td><td><code>{ total, running, items: [...], oom_events, high_restarts }</code></td></tr>
+    <tr><td><code>nodes</code></td><td>JSONB</td><td><code>{ count, items: [...], cpu_capacity_cores, ... }</code></td></tr>
+    <tr><td><code>workloads</code></td><td>JSONB</td><td><code>{ deployments, statefulsets, daemonsets, replicasets, jobs, cronjobs }</code></td></tr>
+    <tr><td><code>network</code></td><td>JSONB</td><td><code>{ services, ingresses, network_policies }</code></td></tr>
+    <tr><td><code>storage</code></td><td>JSONB</td><td><code>{ pvcs, pvs, storage_classes, orphaned_pvcs }</code></td></tr>
+    <tr><td><code>observability</code></td><td>JSONB</td><td><code>{ all_events, warning_events, recent_events, total }</code></td></tr>
+    <tr><td><code>finops</code></td><td>JSONB</td><td><code>{ namespace_resources, team_resources, node_specs }</code></td></tr>
+    <tr><td><code>security</code></td><td>JSONB</td><td>Security findings from pods/containers</td></tr>
+    <tr><td><code>hpa / pdb</code></td><td>JSONB</td><td>HPA and PDB snapshots</td></tr>
+    <tr><td><code>platform / teams</code></td><td>JSONB</td><td>GitOps tools, team mappings</td></tr>
+  </table>
+  <p style="margin-bottom:0">Latest row per cluster used: <code>db_manager.get_latest_metrics(cluster_name)</code>. History kept for trends.</p>
+</div>
+
+
+<h2>Frontend Page → API Endpoint Mapping</h2>
+<table>
+  <tr><th>Page (URL)</th><th>API endpoint called</th><th>Real data?</th></tr>
+  <tr><td>/events</td><td><code>GET /api/v1/observability/events</code></td><td><span class="badge green">185 events</span></td></tr>
+  <tr><td>/logs</td><td><code>GET /api/v1/observability/pod-logs</code></td><td><span class="badge green">Live kubectl logs</span></td></tr>
+  <tr><td>/deployments</td><td><code>GET /api/v1/workloads/deployments</code></td><td><span class="badge green">Live</span></td></tr>
+  <tr><td>/statefulsets</td><td><code>GET /api/v1/workloads/statefulsets</code></td><td><span class="badge green">Live</span></td></tr>
+  <tr><td>/daemonsets</td><td><code>GET /api/v1/workloads/daemonsets</code></td><td><span class="badge green">15 DS</span></td></tr>
+  <tr><td>/jobs</td><td><code>GET /api/v1/workloads/jobs</code></td><td><span class="badge green">48 jobs</span></td></tr>
+  <tr><td>/cronjobs</td><td><code>GET /api/v1/workloads/cronjobs</code></td><td><span class="badge green">4 crons</span></td></tr>
+  <tr><td>/ingress</td><td><code>GET /api/v1/network/ingress</code></td><td><span class="badge green">11 ingresses</span></td></tr>
+  <tr><td>/network-policies</td><td><code>GET /api/v1/network/network-policies</code></td><td><span class="badge green">7 policies</span></td></tr>
+  <tr><td>/recommendations</td><td><code>GET /api/v1/recommendations/</code></td><td><span class="badge green">93 items</span></td></tr>
+  <tr><td>/cost-savings</td><td><code>GET /api/v1/cost-savings/overview</code></td><td><span class="badge green">$88/mo savings</span></td></tr>
+  <tr><td>/zombie-resources</td><td><code>GET /api/v1/cleanup/zombie-resources</code></td><td><span class="badge red">Broken — k8s_client dead</span></td></tr>
+  <tr><td>/unused-deployments</td><td><code>GET /api/v1/cleanup/unused-deployments</code></td><td><span class="badge red">Broken</span></td></tr>
+  <tr><td>/old-replicasets</td><td><code>GET /api/v1/cleanup/old-replicasets</code></td><td><span class="badge red">Broken</span></td></tr>
+  <tr><td>/unattached-pvcs</td><td><code>GET /api/v1/cleanup/unattached-pvcs</code></td><td><span class="badge red">Broken</span></td></tr>
+  <tr><td>/idle-namespaces</td><td><code>GET /api/v1/cleanup/idle-namespaces</code></td><td><span class="badge red">Broken</span></td></tr>
+  <tr><td>/cpu-rightsizing</td><td><code>GET /api/v1/recommendations/cpu-rightsizing/</code></td><td><span class="badge green">Live</span></td></tr>
+  <tr><td>/memory-rightsizing</td><td><code>GET /api/v1/recommendations/memory-rightsizing/</code></td><td><span class="badge green">Live</span></td></tr>
+  <tr><td>/traces</td><td><code>GET /api/v1/observability/traces</code></td><td><span class="badge green">Live (derived)</span></td></tr>
+  <tr><td>/pods</td><td><code>GET /api/v1/pods/</code></td><td><span class="badge green">Live</span></td></tr>
+  <tr><td>/services</td><td><code>GET /api/v1/network/services</code></td><td><span class="badge green">Live</span></td></tr>
+  <tr><td>/pvcs, /pvs, /storage-*</td><td><code>GET /api/v1/storage/*</code></td><td><span class="badge green">Live</span></td></tr>
+  <tr><td>/cluster-nodes</td><td><code>GET /api/v1/clusters/nodes</code></td><td><span class="badge green">Live</span></td></tr>
+</table>
+
+
+<h2>Fix Strategy: Zombie Resources</h2>
+<div class="section-card">
+  <h3>Root Cause</h3>
+  <p style="margin-bottom:8px"><code>cleanup.py</code> calls <code>find_cleanup_candidates()</code> which uses <code>k8s_client</code> (a direct kubeconfig connection from EC2). This connection is permanently dead — the cluster is only reachable from <em>inside</em> the cluster. The agent handles all cluster reads.</p>
+  <h3>Fix</h3>
+  <p style="margin-bottom:8px">Rewrite the zombie-resources endpoint (and all <code>/v1/cleanup/*</code> sub-routes) to derive candidates from data already in PostgreSQL via <code>db_manager</code>:</p>
+  <table>
+    <tr><th>Zombie type</th><th>Agent data source</th><th>Detection rule</th></tr>
+    <tr><td>Zombie Pods</td><td><code>pods.items</code></td><td>No <code>owner_kind</code> AND phase != Running AND age &gt; 7d</td></tr>
+    <tr><td>Completed/Failed Jobs</td><td><code>workloads.jobs.items</code></td><td>succeeded &gt; 0 OR failed &gt; 0 AND age &gt; 7d</td></tr>
+    <tr><td>Old ReplicaSets</td><td><code>workloads.replicasets.orphaned</code></td><td>Already pre-filtered by agent (replicas=0, owned by Deployment)</td></tr>
+    <tr><td>Unattached PVCs</td><td><code>storage.orphaned_pvcs</code></td><td>Pre-filtered by agent (phase != Bound)</td></tr>
+    <tr><td>Services no endpoints</td><td><code>network.services.items</code></td><td>endpoints_count == 0 AND age &gt; 14d AND not kube-system</td></tr>
+    <tr><td>Idle Namespaces</td><td><code>pods.items</code> + <code>workloads</code></td><td>Namespace has no running pods</td></tr>
+  </table>
+</div>
+
+<footer>Made with IBM Bob</footer>
+</div>
+</body>
+</html>

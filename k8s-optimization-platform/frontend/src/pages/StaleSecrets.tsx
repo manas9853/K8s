@@ -1,170 +1,280 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Container, Typography, Paper, Box, Grid, Card, CardContent,
+  Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Chip, Button, Dialog,
-  DialogTitle, DialogContent, DialogActions, Checkbox, TextField,
-  InputAdornment
+  TableContainer, TableHead, TableRow, Chip, TextField,
+  InputAdornment, Paper,
 } from '@mui/material';
-import { Refresh, Delete, Warning, Search, Lock } from '@mui/icons-material';
-import ClusterGuard from '../components/ClusterGuard';
-import NoDataState from '../components/NoDataState';
+import {
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  Lock as LockIcon,
+} from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:      '#0f1724',
+  card:    '#1e2433',
+  hover:   '#252e42',
+  border:  '#2a3245',
+  text:    '#e8eaf0',
+  muted:   '#8b95a9',
+  body:    '#c8cdd8',
+  green:   '#4ade80',
+  red:     '#f87171',
+  yellow:  '#f59e0b',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface StaleSecret {
-  name: string;
-  namespace: string;
-  cluster: string;
-  type: string;
-  created: string;
-  last_used: string;
-  age_days: number;
-  referenced_by: string[];
-  monthly_cost: number;
-  reason: string;
+  resource_name: string;
+  namespace:     string;
+  cluster:       string;
+  last_used:     string;
+  days_unused:   number;
+  reason:        string;
+  risk_level:    string;
+  can_delete:    boolean;
+  secret_type?:  string;
 }
 
-const StaleSecretsInner: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [secrets, setSecrets] = useState<StaleSecret[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSecrets, setSelectedSecrets] = useState<Set<string>>(new Set());
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+interface Summary {
+  total_resources:  number;
+  safe_to_delete:   number;
+  requires_review:  number;
+  high_risk:        number;
+}
 
-  useEffect(() => { fetchData(); }, [clusterParam]);
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtDate = (s: string) => {
+  if (!s || s === 'Unknown') return '—';
+  try { return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
+  catch { return s; }
+};
+
+const riskColor = (r: string) =>
+  r === 'High' ? T.red : r === 'Medium' ? T.yellow : T.green;
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+const StatCard: React.FC<{ label: string; value: number | string; sub?: string; accent?: string }> =
+  ({ label, value, sub, accent }) => (
+  <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+      <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent ?? T.text, lineHeight: 1 }}>
+        {value}
+      </Typography>
+      {sub && <Typography sx={{ fontSize: 11, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+    </CardContent>
+  </Card>
+);
+
+// ─── Main component ───────────────────────────────────────────────────────────
+const StaleSecrets: React.FC = () => {
+  const { clusterParam } = useActiveCluster();
+  const [items,   setItems]   = useState<StaleSecret[]>([]);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const [search,  setSearch]  = useState('');
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/v1/cleanup/stale-secrets${clusterParam}`);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      const items: StaleSecret[] = (data.resources || []).map((r: any) => ({
-        name: r.resource_name,
-        namespace: r.namespace,
-        cluster: r.cluster,
-        type: r.secret_type ?? 'Opaque',
-        created: r.last_used,
-        last_used: r.last_used,
-        age_days: r.days_unused ?? 0,
-        referenced_by: [],
-        monthly_cost: r.monthly_cost ?? 0,
-        reason: r.reason,
-      }));
-      setSecrets(items);
       setError(null);
+      const url = `${API_BASE_URL}/v1/cleanup/stale-secrets${clusterParam}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setSummary(data.summary ?? null);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      setItems((data.resources ?? []).map((r: any) => ({
+        resource_name: r.resource_name ?? '',
+        namespace:     r.namespace     ?? '',
+        cluster:       r.cluster       ?? '',
+        last_used:     r.last_used     ?? '',
+        days_unused:   r.days_unused   ?? 0,
+        reason:        r.reason        ?? '',
+        risk_level:    r.risk_level    ?? 'Low',
+        can_delete:    r.can_delete    ?? true,
+        secret_type:   r.secret_type   ?? 'Opaque',
+      })));
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : 'Failed to fetch data');
     } finally {
       setLoading(false);
     }
   };
 
-  const formatCurrency = (amount: number) => `$${amount.toFixed(2)}`;
-  const formatDate = (dateString: string) => {
-    if (!dateString || dateString === 'Unknown') return 'Unknown';
-    try { return new Date(dateString).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }); }
-    catch { return dateString; }
-  };
+  useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleSelect = (name: string) => {
-    const s = new Set(selectedSecrets);
-    if (s.has(name)) s.delete(name); else s.add(name);
-    setSelectedSecrets(s);
-  };
-  const handleSelectAll = () => {
-    if (selectedSecrets.size === filteredSecrets.length) setSelectedSecrets(new Set());
-    else setSelectedSecrets(new Set(filteredSecrets.map(s => s.name)));
-  };
+  const filtered = useMemo(() =>
+    items.filter(i =>
+      i.resource_name.toLowerCase().includes(search.toLowerCase()) ||
+      i.namespace.toLowerCase().includes(search.toLowerCase()) ||
+      i.reason.toLowerCase().includes(search.toLowerCase())
+    ), [items, search]);
 
-  const filteredSecrets = secrets.filter(s =>
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.namespace.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    s.type.toLowerCase().includes(searchTerm.toLowerCase())
+  const uniqueNamespaces = useMemo(() => Array.from(new Set(items.map(i => i.namespace))).sort(), [items]);
+  const highRisk  = items.filter(i => i.risk_level === 'High').length;
+  const medRisk   = items.filter(i => i.risk_level === 'Medium').length;
+  const safeCount = items.filter(i => i.can_delete).length;
+
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
+
+  if (loading) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress sx={{ color: T.green }} />
+    </Box>
   );
 
-  const totalCost = filteredSecrets.reduce((sum, s) => sum + s.monthly_cost, 0);
-  const selectedCost = filteredSecrets.filter(s => selectedSecrets.has(s.name)).reduce((sum, s) => sum + s.monthly_cost, 0);
-
-  if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
-  if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-  if (secrets.length === 0) return <NoDataState title="No stale secrets found" message="All secrets in your cluster are actively in use. No orphaned credentials detected." />;
+  if (error) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+    </Box>
+  );
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h4">Stale Secrets</Typography>
-          <Typography variant="body2" color="textSecondary">Identify and remove unused secrets and credentials</Typography>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Stale Secrets</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            Secrets not referenced by any pod or service account
+          </Typography>
         </Box>
-        <IconButton onClick={fetchData} color="primary"><Refresh /></IconButton>
+        <IconButton onClick={fetchData} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+          <RefreshIcon fontSize="small" />
+        </IconButton>
       </Box>
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Stale Secrets</Typography><Typography variant="h4">{secrets.length}</Typography><Typography variant="body2" color="error">Not referenced</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Security Risk</Typography><Typography variant="h4" color="warning.main">Medium</Typography><Typography variant="body2" color="textSecondary">Unused credentials</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card><CardContent><Typography color="textSecondary" gutterBottom>Monthly Cost</Typography><Typography variant="h4" color="error">{formatCurrency(totalCost)}</Typography><Typography variant="body2" color="textSecondary">From stale secrets</Typography></CardContent></Card></Grid>
-        <Grid item xs={12} md={3}><Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}><CardContent><Typography gutterBottom>Potential Savings</Typography><Typography variant="h4">{formatCurrency(selectedCost)}</Typography><Typography variant="body2">From cleanup</Typography></CardContent></Card></Grid>
+      {/* Stats */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Stale Secrets" value={summary?.total_resources ?? items.length} sub="Unreferenced" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Safe to Delete" value={safeCount} accent={T.green} sub="Low / Medium risk" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="High Risk" value={highRisk} accent={T.red} sub=">1 year old" />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Namespaces" value={uniqueNamespaces.length} sub="Affected" />
+        </Grid>
       </Grid>
 
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
-          <TextField size="small" placeholder="Search secrets..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} InputProps={{ startAdornment: <InputAdornment position="start"><Search /></InputAdornment> }} sx={{ minWidth: 300 }} />
-          <Button variant="contained" color="error" startIcon={<Delete />} disabled={selectedSecrets.size === 0} onClick={() => setDeleteDialogOpen(true)}>Delete ({selectedSecrets.size})</Button>
-        </Box>
-      </Paper>
+      {/* No data state */}
+      {items.length === 0 && (
+        <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 6, textAlign: 'center' }}>
+          <LockIcon sx={{ fontSize: 48, color: T.muted, mb: 2 }} />
+          <Typography sx={{ fontSize: 16, fontWeight: 600, color: T.text, mb: 1 }}>No stale secrets found</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted }}>
+            All secrets are actively referenced, or the agent is still collecting data.
+          </Typography>
+        </Paper>
+      )}
 
-      <Paper>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell padding="checkbox"><Checkbox checked={selectedSecrets.size === filteredSecrets.length && filteredSecrets.length > 0} onChange={handleSelectAll} /></TableCell>
-                <TableCell>Name</TableCell><TableCell>Type</TableCell><TableCell>Namespace</TableCell><TableCell>Cluster</TableCell><TableCell>Last Used</TableCell><TableCell>Age (Days)</TableCell><TableCell>Reason</TableCell><TableCell align="right">Monthly Cost</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredSecrets.map((secret) => (
-                <TableRow key={`${secret.namespace}/${secret.name}`} hover>
-                  <TableCell padding="checkbox"><Checkbox checked={selectedSecrets.has(secret.name)} onChange={() => handleSelect(secret.name)} /></TableCell>
-                  <TableCell><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Lock fontSize="small" color="action" /><Typography variant="body2" fontWeight="medium">{secret.name}</Typography></Box></TableCell>
-                  <TableCell><Chip label={secret.type} size="small" color="primary" /></TableCell>
-                  <TableCell><Chip label={secret.namespace} size="small" /></TableCell>
-                  <TableCell>{secret.cluster}</TableCell>
-                  <TableCell>{formatDate(secret.last_used)}</TableCell>
-                  <TableCell><Chip label={`${secret.age_days} days`} size="small" color={secret.age_days > 300 ? 'error' : secret.age_days > 180 ? 'warning' : 'default'} /></TableCell>
-                  <TableCell><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Warning fontSize="small" color="warning" /><Typography variant="body2">{secret.reason}</Typography></Box></TableCell>
-                  <TableCell align="right"><Typography variant="body2" color="error" fontWeight="medium">{formatCurrency(secret.monthly_cost)}</Typography></TableCell>
+      {items.length > 0 && (
+        <>
+          {/* Search */}
+          <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3 }}>
+            <TextField
+              fullWidth size="small"
+              placeholder="Search by name, namespace, reason…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+                sx: { color: T.text, fontSize: 13, bgcolor: T.bg, borderRadius: 1,
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+                },
+              }}
+            />
+          </Paper>
+
+          {/* Table */}
+          <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow sx={{ bgcolor: '#161f30' }}>
+                  <TableCell sx={headSx}>Name</TableCell>
+                  <TableCell sx={headSx}>Namespace</TableCell>
+                  <TableCell sx={headSx}>Type</TableCell>
+                  <TableCell sx={headSx}>Reason</TableCell>
+                  <TableCell sx={{ ...headSx, textAlign: 'right' }}>Age</TableCell>
+                  <TableCell sx={headSx}>Created</TableCell>
+                  <TableCell sx={headSx}>Risk</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+              </TableHead>
+              <TableBody>
+                {filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                      No results match your search
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.map((s, idx) => (
+                  <TableRow key={`${s.namespace}/${s.resource_name}-${idx}`} hover
+                    sx={{ '&:hover': { bgcolor: T.hover } }}>
+                    <TableCell sx={cellSx}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <LockIcon sx={{ fontSize: 13, color: T.muted }} />
+                        <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text, fontFamily: 'monospace' }}>
+                          {s.resource_name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell sx={cellSx}>
+                      <Chip label={s.namespace} size="small"
+                        sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
+                    </TableCell>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 11, color: T.muted, fontFamily: 'monospace' }}>
+                        {s.secret_type || 'Opaque'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ ...cellSx, maxWidth: 300 }}>
+                      <Typography noWrap sx={{ fontSize: 12, color: T.muted }} title={s.reason}>
+                        {s.reason}
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ ...cellSx, textAlign: 'right' }}>
+                      <Typography sx={{
+                        fontSize: 12, fontWeight: 600,
+                        color: s.days_unused > 365 ? T.red : s.days_unused > 90 ? T.yellow : T.body,
+                      }}>
+                        {s.days_unused}d
+                      </Typography>
+                    </TableCell>
+                    <TableCell sx={{ ...cellSx, color: T.muted }}>
+                      {fmtDate(s.last_used)}
+                    </TableCell>
+                    <TableCell sx={cellSx}>
+                      <Chip label={s.risk_level} size="small"
+                        sx={{ bgcolor: `${riskColor(s.risk_level)}18`, color: riskColor(s.risk_level),
+                          border: `1px solid ${riskColor(s.risk_level)}44`, fontSize: 11, height: 20 }} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
 
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
-        <DialogTitle><Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}><Warning color="error" />Confirm Deletion</Box></DialogTitle>
-        <DialogContent>
-          <Alert severity="warning" sx={{ mb: 2 }}>Deleting secrets is irreversible. Ensure no applications depend on these credentials.</Alert>
-          <Typography>Delete {selectedSecrets.size} stale secret(s)?</Typography>
-          <Typography variant="body2" color="textSecondary" sx={{ mt: 2 }}>Estimated savings: {formatCurrency(selectedCost)}/month</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={() => { setDeleteDialogOpen(false); setSelectedSecrets(new Set()); }} color="error" variant="contained">Delete</Button>
-        </DialogActions>
-      </Dialog>
-    </Container>
+          <Typography sx={{ fontSize: 12, color: T.muted, mt: 2, textAlign: 'right' }}>
+            {filtered.length} of {items.length} secrets shown
+          </Typography>
+        </>
+      )}
+    </Box>
   );
 };
 
-const StaleSecrets: React.FC = () => (
-  <ClusterGuard><StaleSecretsInner /></ClusterGuard>
-);
-
 export default StaleSecrets;
-
-// Made with Bob

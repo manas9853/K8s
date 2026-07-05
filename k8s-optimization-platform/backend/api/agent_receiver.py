@@ -56,6 +56,8 @@ class ClusterMetrics(BaseModel):
     hpa: Optional[Dict[str, Any]] = None
     pdb: Optional[Dict[str, Any]] = None
     service_accounts: Optional[List[Any]] = None
+    configmaps: Optional[Dict[str, Any]] = None
+    secrets_domain: Optional[Dict[str, Any]] = None
 
 
 class HeartbeatRequest(BaseModel):
@@ -149,6 +151,8 @@ async def receive_metrics(
             "hpa":             metrics.hpa,
             "pdb":             metrics.pdb,
             "service_accounts": metrics.service_accounts,
+            "configmaps":      metrics.configmaps,
+            "secrets_domain":  metrics.secrets_domain,
             # Scalar metadata
             "agent_version":   metrics.agent_version,
             "collection_type": metrics.collection_type,

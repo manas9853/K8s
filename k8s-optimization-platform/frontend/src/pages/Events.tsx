@@ -1,622 +1,462 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Box,
-  Typography,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  CircularProgress,
-  Alert,
-  TextField,
-  InputAdornment,
-  IconButton,
-  Tooltip,
-  Card,
-  CardContent,
-  Grid,
-  Button,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-  Tab,
-  Tabs,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel
+  Box, Typography, Grid, Card, CardContent,
+  CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Chip, TextField,
+  InputAdornment, Paper, Select, MenuItem, FormControl, InputLabel,
+  Dialog, DialogTitle, DialogContent, DialogActions, Button,
+  Tabs, Tab, List, ListItem, ListItemText, Divider,
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import RefreshIcon from '@mui/icons-material/Refresh';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import WarningIcon from '@mui/icons-material/Warning';
-import ErrorIcon from '@mui/icons-material/Error';
-import InfoIcon from '@mui/icons-material/Info';
-import EventIcon from '@mui/icons-material/Event';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CategoryIcon from '@mui/icons-material/Category';
+import {
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  CheckCircle as CheckIcon,
+  Warning as WarningIcon,
+  Error as ErrorIcon,
+  Event as EventIcon,
+  AccessTime as ClockIcon,
+  Close as CloseIcon,
+} from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:      '#0f1724',
+  card:    '#1e2433',
+  hover:   '#252e42',
+  border:  '#2a3245',
+  text:    '#e8eaf0',
+  muted:   '#8b95a9',
+  body:    '#c8cdd8',
+  green:   '#4ade80',
+  red:     '#f87171',
+  yellow:  '#f59e0b',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 interface KubernetesEvent {
-  name: string;
-  namespace: string;
-  type: string;
-  reason: string;
-  message: string;
-  source_component: string;
-  source_host: string;
-  first_timestamp: string;
-  last_timestamp: string;
-  count: number;
+  name:                 string;
+  namespace:            string;
+  type:                 string;
+  reason:               string;
+  message:              string;
+  source_component:     string;
+  source_host:          string;
+  first_timestamp:      string;
+  last_timestamp:       string;
+  count:                number;
   involved_object_kind: string;
   involved_object_name: string;
-  age: string;
+  age:                  string;
 }
 
-interface Investigation {
-  type: 'error' | 'warning' | 'info';
-  title: string;
-  description: string;
-  action?: string;
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const fmtTs = (s: string) => {
+  if (!s) return '—';
+  try { return new Date(s).toLocaleString(); } catch { return s; }
+};
 
+const reasonColor = (reason: string): string => {
+  const r = reason.toLowerCase();
+  if (['failed', 'failedscheduling', 'failedmount', 'backoff', 'unhealthy', 'oom', 'imagepullbackoff', 'errimagepull'].some(k => r.includes(k)))
+    return T.red;
+  if (['killing', 'preempting', 'evictionthresholdmet'].some(k => r.includes(k)))
+    return T.yellow;
+  if (['started', 'created', 'scheduled', 'pulled', 'successfulcreate', 'successfuldelete'].some(k => r.includes(k)))
+    return T.green;
+  return T.muted;
+};
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+const StatCard: React.FC<{ label: string; value: number | string; accent?: string }> = ({ label, value, accent }) => (
+  <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+      <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>
+        {label}
+      </Typography>
+      <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent ?? T.text, lineHeight: 1 }}>
+        {value}
+      </Typography>
+    </CardContent>
+  </Card>
+);
+
+// ─── Detail dialog ────────────────────────────────────────────────────────────
+const DetailDialog: React.FC<{ event: KubernetesEvent | null; onClose: () => void }> = ({ event, onClose }) => {
+  const [tab, setTab] = useState(0);
+  if (!event) return null;
+
+  const investigations: Array<{ level: 'error' | 'warning' | 'info'; title: string; body: string; action?: string }> = [];
+  if (event.count > 100000)
+    investigations.push({ level: 'error', title: 'Extremely High Repeat Count', body: `Fired ${event.count.toLocaleString()} times — persistent loop.`, action: 'Investigate root cause immediately.' });
+  else if (event.count > 10000)
+    investigations.push({ level: 'error', title: 'Very High Repeat Count', body: `Fired ${event.count.toLocaleString()} times.`, action: 'Investigate root cause.' });
+  else if (event.count > 100)
+    investigations.push({ level: 'warning', title: 'Elevated Repeat Count', body: `Fired ${event.count.toLocaleString()} times.`, action: 'Monitor trend.' });
+  if (event.type === 'Warning')
+    investigations.push({ level: 'warning', title: 'Warning Event', body: event.message, action: 'Review and take corrective action.' });
+  if (event.reason.toLowerCase().includes('backoff') || event.reason.toLowerCase().includes('imagepull'))
+    investigations.push({ level: 'error', title: 'Image / BackOff Issue', body: 'Container cannot start due to image pull failure or crash loop.', action: 'Check image registry credentials and pod logs.' });
+  if (event.reason.toLowerCase().includes('unhealthy'))
+    investigations.push({ level: 'warning', title: 'Health Probe Failure', body: 'Liveness or readiness probe is failing.', action: 'Review probe config and application health endpoint.' });
+  if (event.reason.toLowerCase().includes('oom'))
+    investigations.push({ level: 'error', title: 'Out of Memory', body: 'Container killed by OOM killer.', action: 'Increase memory limit or optimise application.' });
+  if (event.reason.toLowerCase().includes('failed'))
+    investigations.push({ level: 'error', title: 'Operation Failed', body: event.message, action: 'Immediate investigation required.' });
+  if (investigations.length === 0)
+    investigations.push({ level: 'info', title: 'No Issues Detected', body: 'This event appears healthy.' });
+
+  const dlgSx = {
+    '& .MuiDialog-paper': { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 2, maxWidth: 720 },
+  };
+  const tabSx = { color: T.muted, '&.Mui-selected': { color: T.text }, textTransform: 'none', minHeight: 40 };
+  const rowSx = { borderBottom: `1px solid ${T.border}`, py: 1.5, display: 'flex', gap: 2 };
+  const labelSx = { fontSize: 12, color: T.muted, minWidth: 140, flexShrink: 0 };
+  const valueSx = { fontSize: 13, color: T.body, wordBreak: 'break-all' as const };
+
+  return (
+    <Dialog open onClose={onClose} maxWidth="md" fullWidth sx={dlgSx}>
+      <DialogTitle sx={{ borderBottom: `1px solid ${T.border}`, pb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <EventIcon sx={{ color: event.type === 'Warning' ? T.yellow : T.green, fontSize: 20 }} />
+        <Typography sx={{ fontWeight: 600, color: T.text, flexGrow: 1 }}>{event.reason}</Typography>
+        <Chip
+          label={event.type}
+          size="small"
+          sx={{ bgcolor: event.type === 'Warning' ? '#451a03' : '#052e16', color: event.type === 'Warning' ? T.yellow : T.green, fontWeight: 600, fontSize: 11 }}
+        />
+        <IconButton onClick={onClose} size="small" sx={{ color: T.muted }}><CloseIcon fontSize="small" /></IconButton>
+      </DialogTitle>
+
+      <DialogContent sx={{ p: 0 }}>
+        <Tabs
+          value={tab} onChange={(_, v) => setTab(v)}
+          sx={{ borderBottom: `1px solid ${T.border}`, px: 2, '& .MuiTabs-indicator': { bgcolor: T.green } }}
+        >
+          <Tab label="Overview" sx={tabSx} />
+          <Tab label={`Investigations (${investigations.filter(i => i.level !== 'info').length})`} sx={tabSx} />
+          <Tab label="Timeline" sx={tabSx} />
+        </Tabs>
+
+        <Box sx={{ p: 3 }}>
+          {tab === 0 && (
+            <Box>
+              <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 2 }}>Event Details</Typography>
+              {[
+                ['Namespace',   event.namespace],
+                ['Kind/Object', `${event.involved_object_kind ? event.involved_object_kind + '/' : ''}${event.involved_object_name}`],
+                ['Reason',      event.reason],
+                ['Count',       event.count.toLocaleString()],
+                ['Age',         event.age],
+                ['Source',      [event.source_component, event.source_host].filter(Boolean).join(' @ ')],
+                ['Message',     event.message],
+              ].map(([lbl, val]) => (
+                <Box key={lbl as string} sx={rowSx}>
+                  <Typography sx={labelSx}>{lbl}</Typography>
+                  <Typography sx={valueSx}>{val || '—'}</Typography>
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {tab === 1 && (
+            <Box>
+              <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 2 }}>Investigations</Typography>
+              {investigations.map((inv, i) => (
+                <Box key={i} sx={{ mb: 2, p: 2, borderRadius: 1, border: `1px solid ${T.border}`,
+                  bgcolor: inv.level === 'error' ? '#1a0a0a' : inv.level === 'warning' ? '#1a1200' : '#0a1a0a' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                    {inv.level === 'error'   && <ErrorIcon sx={{ fontSize: 16, color: T.red }} />}
+                    {inv.level === 'warning' && <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />}
+                    {inv.level === 'info'    && <CheckIcon sx={{ fontSize: 16, color: T.green }} />}
+                    <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{inv.title}</Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: 12, color: T.body }}>{inv.body}</Typography>
+                  {inv.action && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>→ {inv.action}</Typography>}
+                </Box>
+              ))}
+            </Box>
+          )}
+
+          {tab === 2 && (
+            <Box>
+              <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 2 }}>Timeline</Typography>
+              {[
+                ['First Occurrence', fmtTs(event.first_timestamp)],
+                ['Last Occurrence',  fmtTs(event.last_timestamp)],
+                ['Total Count',      event.count.toLocaleString() + ' times'],
+                ['Age (last seen)',  event.age],
+              ].map(([lbl, val]) => (
+                <Box key={lbl as string} sx={rowSx}>
+                  <ClockIcon sx={{ fontSize: 16, color: T.muted, mt: 0.2, flexShrink: 0 }} />
+                  <Box>
+                    <Typography sx={{ fontSize: 12, color: T.muted }}>{lbl}</Typography>
+                    <Typography sx={{ fontSize: 14, color: T.text }}>{val}</Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+      </DialogContent>
+
+      <DialogActions sx={{ borderTop: `1px solid ${T.border}`, px: 3, py: 1.5 }}>
+        <Button onClick={onClose} sx={{ color: T.muted, textTransform: 'none' }}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
 const Events: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [events, setEvents] = useState<KubernetesEvent[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [namespaceFilter, setNamespaceFilter] = useState<string>('all');
-  const [selectedEvent, setSelectedEvent] = useState<KubernetesEvent | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
+  const [events,          setEvents]          = useState<KubernetesEvent[]>([]);
+  const [loading,         setLoading]         = useState(true);
+  const [error,           setError]           = useState<string | null>(null);
+  const [search,          setSearch]          = useState('');
+  const [typeFilter,      setTypeFilter]      = useState('all');
+  const [nsFilter,        setNsFilter]        = useState('all');
+  const [reasonFilter,    setReasonFilter]    = useState('all');
+  const [selectedEvent,   setSelectedEvent]   = useState<KubernetesEvent | null>(null);
 
   const fetchEvents = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch(`${API_BASE_URL}/v1/observability/events${clusterParam}`);
+      // trailing slash required — FastAPI redirects without it (307 → HTTP → blocked)
+      const sep = clusterParam ? clusterParam + '&' : '?';
+      const url = `${API_BASE_URL}/v1/observability/events/${clusterParam}`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const raw = await response.json();
-
-      // Normalise: the backend may return the old shape (involved_object: {kind, name})
-      // or the new flat shape (involved_object_kind, involved_object_name).
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const normalised: KubernetesEvent[] = raw.map((e: any) => ({
-        name:                  e.name ?? '',
-        namespace:             e.namespace ?? '',
-        type:                  e.type ?? 'Normal',
-        reason:                e.reason ?? '',
-        message:               e.message ?? '',
-        involved_object_kind:  e.involved_object_kind  ?? e.involved_object?.kind  ?? '',
-        involved_object_name:  e.involved_object_name  ?? e.involved_object?.name  ?? '',
-        source_component:      e.source_component ?? '',
-        source_host:           e.source_host      ?? '',
-        first_timestamp:       e.first_timestamp  ?? '',
-        last_timestamp:        e.last_timestamp   ?? '',
-        count:                 e.count ?? 1,
-        age:                   e.age   ?? '',
+      const raw: any[] = await response.json();
+      const normalised: KubernetesEvent[] = raw.map(e => ({
+        name:                 e.name                 ?? '',
+        namespace:            e.namespace            ?? '',
+        type:                 e.type                 ?? 'Normal',
+        reason:               e.reason               ?? '',
+        message:              e.message              ?? '',
+        involved_object_kind: e.involved_object_kind ?? e.involved_object?.kind  ?? '',
+        involved_object_name: e.involved_object_name ?? e.involved_object?.name  ?? '',
+        source_component:     e.source_component     ?? '',
+        source_host:          e.source_host          ?? '',
+        first_timestamp:      e.first_timestamp      ?? '',
+        last_timestamp:       e.last_timestamp       ?? '',
+        count:                e.count                ?? 1,
+        age:                  e.age                  ?? '',
       }));
-
       setEvents(normalised);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch events');
-      console.error('Error fetching events:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchEvents();
-  }, [clusterParam]);
+  useEffect(() => { fetchEvents(); }, [clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const getTypeColor = (type: string): 'success' | 'warning' | 'error' | 'info' => {
-    if (type === 'Normal') return 'success';
-    if (type === 'Warning') return 'warning';
-    return 'error';
-  };
+  const uniqueNamespaces = useMemo(() => Array.from(new Set(events.map(e => e.namespace))).sort(), [events]);
+  const uniqueReasons    = useMemo(() => Array.from(new Set(events.map(e => e.reason))).sort(), [events]);
 
-  const getTypeIcon = (type: string) => {
-    if (type === 'Normal') return <CheckCircleIcon color="success" />;
-    if (type === 'Warning') return <WarningIcon color="warning" />;
-    return <ErrorIcon color="error" />;
-  };
-
-  const getReasonColor = (reason: string): 'default' | 'primary' | 'secondary' | 'error' | 'warning' | 'info' | 'success' => {
-    const errorReasons = ['Failed', 'FailedScheduling', 'FailedMount', 'FailedAttachVolume', 'BackOff', 'Unhealthy'];
-    const warningReasons = ['Killing', 'Preempting', 'EvictionThresholdMet'];
-    const successReasons = ['Started', 'Created', 'Scheduled', 'Pulled', 'SuccessfulCreate'];
-    
-    if (errorReasons.some(r => reason.includes(r))) return 'error';
-    if (warningReasons.some(r => reason.includes(r))) return 'warning';
-    if (successReasons.some(r => reason.includes(r))) return 'success';
-    return 'default';
-  };
-
-  // Generate investigations for an event
-  const generateInvestigations = (evt: KubernetesEvent): Investigation[] => {
-    const investigations: Investigation[] = [];
-
-    // Check for repeated events
-    if (evt.count > 10) {
-      investigations.push({
-        type: 'error',
-        title: 'Repeated Event',
-        description: `Event has occurred ${evt.count} times`,
-        action: 'Investigate root cause to prevent recurring issues'
-      });
-    } else if (evt.count > 5) {
-      investigations.push({
-        type: 'warning',
-        title: 'Multiple Occurrences',
-        description: `Event has occurred ${evt.count} times`,
-        action: 'Monitor for pattern and potential issues'
-      });
+  const filtered = useMemo(() => events.filter(e => {
+    if (typeFilter !== 'all' && e.type !== typeFilter) return false;
+    if (nsFilter   !== 'all' && e.namespace !== nsFilter) return false;
+    if (reasonFilter !== 'all' && e.reason !== reasonFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return (
+        e.namespace.toLowerCase().includes(q) ||
+        e.reason.toLowerCase().includes(q) ||
+        e.message.toLowerCase().includes(q) ||
+        e.involved_object_name.toLowerCase().includes(q) ||
+        e.source_component.toLowerCase().includes(q)
+      );
     }
+    return true;
+  }), [events, typeFilter, nsFilter, reasonFilter, search]);
 
-    // Check event type
-    if (evt.type === 'Warning') {
-      investigations.push({
-        type: 'warning',
-        title: 'Warning Event',
-        description: evt.message,
-        action: 'Review event details and take corrective action'
-      });
-    }
+  const warnings  = events.filter(e => e.type === 'Warning').length;
+  const normals   = events.filter(e => e.type === 'Normal').length;
+  const highFreq  = events.filter(e => e.count > 1000).length;
+  const namespaceCount = uniqueNamespaces.length;
 
-    // Check specific reasons
-    if (evt.reason.includes('Failed')) {
-      investigations.push({
-        type: 'error',
-        title: 'Failure Detected',
-        description: `${evt.reason}: ${evt.message}`,
-        action: 'Immediate investigation required'
-      });
-    }
-
-    if (evt.reason.includes('BackOff')) {
-      investigations.push({
-        type: 'error',
-        title: 'Container BackOff',
-        description: 'Container is in CrashLoopBackOff state',
-        action: 'Check container logs and fix application errors'
-      });
-    }
-
-    if (evt.reason.includes('OOM')) {
-      investigations.push({
-        type: 'error',
-        title: 'Out of Memory',
-        description: 'Container was killed due to OOM',
-        action: 'Increase memory limits or optimize application'
-      });
-    }
-
-    if (evt.reason.includes('Unhealthy')) {
-      investigations.push({
-        type: 'warning',
-        title: 'Health Check Failed',
-        description: 'Liveness or readiness probe failed',
-        action: 'Review probe configuration and application health'
-      });
-    }
-
-    return investigations;
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
+  const selectSx = {
+    color: T.text, fontSize: 13, height: 38,
+    '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+    '& .MuiSvgIcon-root': { color: T.muted },
+    bgcolor: T.card,
   };
 
-  const uniqueNamespaces = Array.from(new Set(events.map(e => e.namespace))).sort();
-  const uniqueTypes = Array.from(new Set(events.map(e => e.type))).sort();
+  if (loading) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress sx={{ color: T.green }} />
+    </Box>
+  );
 
-  const filteredEvents = events.filter(evt => {
-    const matchesSearch = 
-      evt.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      evt.namespace.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      evt.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      evt.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      evt.involved_object_name.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesType = typeFilter === 'all' || evt.type === typeFilter;
-    const matchesNamespace = namespaceFilter === 'all' || evt.namespace === namespaceFilter;
-    
-    return matchesSearch && matchesType && matchesNamespace;
-  });
-
-  const handleRowClick = (event: KubernetesEvent) => {
-    setSelectedEvent(event);
-    setDetailsOpen(true);
-    setActiveTab(0);
-  };
-
-  const handleCloseDetails = () => {
-    setDetailsOpen(false);
-    setSelectedEvent(null);
-  };
-
-  const renderDetailsDialog = () => {
-    if (!selectedEvent) return null;
-
-    const investigations = generateInvestigations(selectedEvent);
-
-    return (
-      <Dialog
-        open={detailsOpen}
-        onClose={handleCloseDetails}
-        maxWidth="lg"
-        fullWidth
-      >
-        <DialogTitle>
-          <Box display="flex" alignItems="center" gap={1}>
-            <EventIcon />
-            <Typography variant="h6">{selectedEvent.reason}</Typography>
-            <Chip
-              label={selectedEvent.type}
-              color={getTypeColor(selectedEvent.type)}
-              size="small"
-            />
-          </Box>
-        </DialogTitle>
-        <DialogContent>
-          <Tabs value={activeTab} onChange={(_, newValue) => setActiveTab(newValue)}>
-            <Tab label="Overview" icon={<InfoIcon />} iconPosition="start" />
-            <Tab label="Investigations" icon={<WarningIcon />} iconPosition="start" />
-            <Tab label="Timeline" icon={<AccessTimeIcon />} iconPosition="start" />
-          </Tabs>
-
-          <Box sx={{ mt: 3 }}>
-            {activeTab === 0 && (
-              <Grid container spacing={3}>
-                <Grid item xs={12}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>Event Details</Typography>
-                      <List dense>
-                        <ListItem>
-                          <ListItemText primary="Namespace" secondary={selectedEvent.namespace} />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemText primary="Type" secondary={selectedEvent.type} />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemText primary="Reason" secondary={selectedEvent.reason} />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemText primary="Message" secondary={selectedEvent.message} />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemText primary="Count" secondary={selectedEvent.count} />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemText primary="Age" secondary={selectedEvent.age} />
-                        </ListItem>
-                      </List>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>Involved Object</Typography>
-                      <List dense>
-                        <ListItem>
-                          <ListItemText primary="Kind" secondary={selectedEvent.involved_object_kind} />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemText primary="Name" secondary={selectedEvent.involved_object_name} />
-                        </ListItem>
-                      </List>
-                    </CardContent>
-                  </Card>
-                </Grid>
-
-                <Grid item xs={12} md={6}>
-                  <Card>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>Source</Typography>
-                      <List dense>
-                        <ListItem>
-                          <ListItemText primary="Component" secondary={selectedEvent.source_component} />
-                        </ListItem>
-                        <ListItem>
-                          <ListItemText primary="Host" secondary={selectedEvent.source_host || 'N/A'} />
-                        </ListItem>
-                      </List>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              </Grid>
-            )}
-
-            {activeTab === 1 && (
-              <Box>
-                <Typography variant="h6" gutterBottom>Investigations</Typography>
-                {investigations.length === 0 ? (
-                  <Alert severity="success">No issues detected</Alert>
-                ) : (
-                  <List>
-                    {investigations.map((inv, idx) => (
-                      <React.Fragment key={idx}>
-                        <ListItem alignItems="flex-start">
-                          <ListItemIcon>
-                            {inv.type === 'error' && <ErrorIcon color="error" />}
-                            {inv.type === 'warning' && <WarningIcon color="warning" />}
-                            {inv.type === 'info' && <InfoIcon color="info" />}
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={inv.title}
-                            secondary={
-                              <>
-                                <Typography variant="body2">{inv.description}</Typography>
-                                {inv.action && (
-                                  <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
-                                    Action: {inv.action}
-                                  </Typography>
-                                )}
-                              </>
-                            }
-                          />
-                        </ListItem>
-                        {idx < investigations.length - 1 && <Divider />}
-                      </React.Fragment>
-                    ))}
-                  </List>
-                )}
-              </Box>
-            )}
-
-            {activeTab === 2 && (
-              <Box>
-                <Typography variant="h6" gutterBottom>Event Timeline</Typography>
-                <Card>
-                  <CardContent>
-                    <List dense>
-                      <ListItem>
-                        <ListItemIcon>
-                          <AccessTimeIcon />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary="First Occurrence"
-                          secondary={new Date(selectedEvent.first_timestamp).toLocaleString()}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemIcon>
-                          <AccessTimeIcon />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary="Last Occurrence"
-                          secondary={new Date(selectedEvent.last_timestamp).toLocaleString()}
-                        />
-                      </ListItem>
-                      <ListItem>
-                        <ListItemIcon>
-                          <CategoryIcon />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary="Total Occurrences"
-                          secondary={`${selectedEvent.count} times`}
-                        />
-                      </ListItem>
-                    </List>
-                  </CardContent>
-                </Card>
-              </Box>
-            )}
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDetails}>Close</Button>
-        </DialogActions>
-      </Dialog>
-    );
-  };
-
-  if (loading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box p={3}>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
-  }
+  if (error) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+    </Box>
+  );
 
   return (
-    <Box p={3}>
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h4">Kubernetes Events</Typography>
-        <IconButton onClick={fetchEvents} color="primary">
-          <RefreshIcon />
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+        <Box>
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Kubernetes Events</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            {filtered.length} of {events.length} events across {namespaceCount} namespaces
+          </Typography>
+        </Box>
+        <IconButton onClick={fetchEvents} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+          <RefreshIcon fontSize="small" />
         </IconButton>
       </Box>
 
-      <Grid container spacing={3} mb={3}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Total Events</Typography>
-              <Typography variant="h4">{events.length}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Normal</Typography>
-              <Typography variant="h4" color="success.main">
-                {events.filter(e => e.type === 'Normal').length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Warning</Typography>
-              <Typography variant="h4" color="warning.main">
-                {events.filter(e => e.type === 'Warning').length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="textSecondary" gutterBottom>Repeated ({'>'}10)</Typography>
-              <Typography variant="h4" color="error.main">
-                {events.filter(e => e.count > 10).length}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      {/* Stats */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={3}><StatCard label="Total Events"   value={events.length} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label="Normal"         value={normals}  accent={T.green} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label="Warnings"       value={warnings} accent={T.red} /></Grid>
+        <Grid item xs={6} sm={3}><StatCard label="High Frequency" value={highFreq} accent={T.yellow} /></Grid>
       </Grid>
 
-      <Paper sx={{ mb: 3, p: 2 }}>
-        <Grid container spacing={2}>
-          <Grid item xs={12} md={6}>
+      {/* Filters */}
+      <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={4}>
             <TextField
-              fullWidth
-              variant="outlined"
-              placeholder="Search events..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              fullWidth size="small"
+              placeholder="Search namespace, reason, message, object…"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
               InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
+                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+                sx: { color: T.text, fontSize: 13, bgcolor: T.bg, borderRadius: 1,
+                  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+                },
               }}
+              InputLabelProps={{ sx: { color: T.muted } }}
             />
           </Grid>
-          <Grid item xs={12} md={3}>
-            <FormControl fullWidth>
-              <InputLabel>Type</InputLabel>
-              <Select
-                value={typeFilter}
-                label="Type"
-                onChange={(e) => setTypeFilter(e.target.value)}
-              >
+          <Grid item xs={12} sm={4} md={2.5}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Type</InputLabel>
+              <Select value={typeFilter} label="Type" onChange={e => setTypeFilter(e.target.value)} sx={selectSx}
+                MenuProps={{ PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } }}>
                 <MenuItem value="all">All Types</MenuItem>
-                {uniqueTypes.map(type => (
-                  <MenuItem key={type} value={type}>{type}</MenuItem>
-                ))}
+                <MenuItem value="Normal">Normal</MenuItem>
+                <MenuItem value="Warning">Warning</MenuItem>
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
-            <FormControl fullWidth>
-              <InputLabel>Namespace</InputLabel>
-              <Select
-                value={namespaceFilter}
-                label="Namespace"
-                onChange={(e) => setNamespaceFilter(e.target.value)}
-              >
+          <Grid item xs={12} sm={4} md={2.5}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Namespace</InputLabel>
+              <Select value={nsFilter} label="Namespace" onChange={e => setNsFilter(e.target.value)} sx={selectSx}
+                MenuProps={{ PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } }}>
                 <MenuItem value="all">All Namespaces</MenuItem>
-                {uniqueNamespaces.map(ns => (
-                  <MenuItem key={ns} value={ns}>{ns}</MenuItem>
-                ))}
+                {uniqueNamespaces.map(ns => <MenuItem key={ns} value={ns}>{ns}</MenuItem>)}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={4} md={3}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Reason</InputLabel>
+              <Select value={reasonFilter} label="Reason" onChange={e => setReasonFilter(e.target.value)} sx={selectSx}
+                MenuProps={{ PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}`, maxHeight: 300 } } }}>
+                <MenuItem value="all">All Reasons</MenuItem>
+                {uniqueReasons.map(r => <MenuItem key={r} value={r}>{r}</MenuItem>)}
               </Select>
             </FormControl>
           </Grid>
         </Grid>
       </Paper>
 
-      <TableContainer component={Paper}>
+      {/* Table */}
+      <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
         <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>Type</TableCell>
-              <TableCell>Namespace</TableCell>
-              <TableCell>Reason</TableCell>
-              <TableCell>Object</TableCell>
-              <TableCell>Source</TableCell>
-              <TableCell>Message</TableCell>
-              <TableCell>Count</TableCell>
-              <TableCell>Age</TableCell>
+            <TableRow sx={{ bgcolor: '#161f30' }}>
+              <TableCell sx={headSx}>Type</TableCell>
+              <TableCell sx={headSx}>Namespace</TableCell>
+              <TableCell sx={headSx}>Reason</TableCell>
+              <TableCell sx={headSx}>Object</TableCell>
+              <TableCell sx={headSx}>Source</TableCell>
+              <TableCell sx={{ ...headSx, maxWidth: 340 }}>Message</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Count</TableCell>
+              <TableCell sx={headSx}>Age</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredEvents.map((event, idx) => (
+            {filtered.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                  No events match your filters
+                </TableCell>
+              </TableRow>
+            ) : filtered.map((ev, idx) => (
               <TableRow
-                key={`${event.namespace}-${event.name}-${idx}`}
+                key={`${ev.namespace}-${ev.name}-${idx}`}
                 hover
-                onClick={() => handleRowClick(event)}
-                sx={{ cursor: 'pointer' }}
+                onClick={() => setSelectedEvent(ev)}
+                sx={{ cursor: 'pointer', '&:hover': { bgcolor: T.hover } }}
               >
-                <TableCell>
-                  <Tooltip title={event.type}>
-                    {getTypeIcon(event.type)}
-                  </Tooltip>
+                <TableCell sx={cellSx}>
+                  {ev.type === 'Normal'
+                    ? <CheckIcon  sx={{ fontSize: 16, color: T.green }} />
+                    : <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />
+                  }
                 </TableCell>
-                <TableCell>
-                  <Chip label={event.namespace} size="small" />
+                <TableCell sx={cellSx}>
+                  <Chip label={ev.namespace} size="small"
+                    sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
                 </TableCell>
-                <TableCell>
-                  <Chip
-                    label={event.reason}
-                    color={getReasonColor(event.reason)}
-                    size="small"
-                  />
+                <TableCell sx={cellSx}>
+                  <Chip label={ev.reason} size="small"
+                    sx={{ bgcolor: T.bg, color: reasonColor(ev.reason), border: `1px solid ${reasonColor(ev.reason)}33`, fontSize: 11, height: 20 }} />
                 </TableCell>
-                <TableCell>
-                  <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                    {event.involved_object_kind && `${event.involved_object_kind}/`}{event.involved_object_name}
+                <TableCell sx={{ ...cellSx, maxWidth: 220 }}>
+                  <Typography noWrap sx={{ fontSize: 12, color: T.body }}>
+                    {ev.involved_object_kind && <span style={{ color: T.muted }}>{ev.involved_object_kind}/</span>}
+                    {ev.involved_object_name}
                   </Typography>
                 </TableCell>
-                <TableCell>
-                  <Typography variant="body2" noWrap sx={{ maxWidth: 160 }}>
-                    {event.source_component}{event.source_host ? `, ${event.source_host}` : ''}
+                <TableCell sx={{ ...cellSx, maxWidth: 160 }}>
+                  <Typography noWrap sx={{ fontSize: 12, color: T.muted }}>
+                    {ev.source_component}{ev.source_host ? ` @ ${ev.source_host}` : ''}
                   </Typography>
                 </TableCell>
-                <TableCell>
-                  <Typography variant="body2" noWrap sx={{ maxWidth: 300 }}>
-                    {event.message}
+                <TableCell sx={{ ...cellSx, maxWidth: 340 }}>
+                  <Typography noWrap sx={{ fontSize: 12, color: T.body }} title={ev.message}>
+                    {ev.message}
                   </Typography>
                 </TableCell>
-                <TableCell>
-                  <Chip
-                    label={event.count}
-                    size="small"
-                    color={event.count > 10 ? 'error' : event.count > 5 ? 'warning' : 'default'}
-                  />
+                <TableCell sx={{ ...cellSx, textAlign: 'right' }}>
+                  <Typography sx={{
+                    fontSize: 12, fontWeight: 600,
+                    color: ev.count > 100000 ? T.red : ev.count > 1000 ? T.yellow : T.body,
+                  }}>
+                    {ev.count.toLocaleString()}
+                  </Typography>
                 </TableCell>
-                <TableCell>{event.age}</TableCell>
+                <TableCell sx={{ ...cellSx, color: T.muted }}>{ev.age}</TableCell>
               </TableRow>
             ))}
           </TableBody>
         </Table>
       </TableContainer>
 
-      {renderDetailsDialog()}
+      {/* Detail dialog */}
+      <DetailDialog event={selectedEvent} onClose={() => setSelectedEvent(null)} />
     </Box>
   );
 };
 
 export default Events;
-
-// Made with Bob
