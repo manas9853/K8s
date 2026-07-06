@@ -12,6 +12,9 @@ import {
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 
+const SEV_COLOR: Record<string, string> = { critical: '#f87171', high: '#f59e0b', medium: '#60a5fa', low: '#4ade80' };
+const SEV_BG:    Record<string, string> = { critical: '#2d1515',  high: '#2d200a',  medium: '#0d1f3c',  low: '#0d2d1a' };
+
 const PrivilegedContainers: React.FC = () => {
   const { clusterParam } = useActiveCluster();
   const navigate = useNavigate();
@@ -35,16 +38,22 @@ const PrivilegedContainers: React.FC = () => {
   const containers: any[] = Array.isArray(data.privileged_containers) ? data.privileged_containers : [];
   const criticals = containers.filter((c: any) => (c.risk_level ?? '').toLowerCase() === 'critical');
 
-  // Security context matrix columns
   const MATRIX_CHECKS = ['privileged', 'allowPrivilegeEscalation', 'runAsRoot', 'readOnlyRootFilesystem', 'hostNetwork', 'hostPID'];
 
+  const STAT_ROWS = [
+    { label: 'Total Privileged', count: data.total_privileged ?? containers.length, color: '#f87171', bg: '#2d1515' },
+    { label: 'Critical Risk', count: data.critical_risk ?? criticals.length, color: '#f87171', bg: '#2d1515' },
+    { label: 'With Host Access', count: containers.filter((c: any) => c.host_network || c.host_pid).length, color: '#f59e0b', bg: '#2d200a' },
+    { label: 'Escape-Vulnerable', count: containers.filter((c: any) => c.privileged && c.externally_reachable).length, color: '#f87171', bg: '#2d1515' },
+  ];
+
   return (
-    <Box p={3}>
+    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <SecurityIcon sx={{ fontSize: 36, color: 'primary.main' }} />
+        <SecurityIcon sx={{ fontSize: 36, color: '#60a5fa' }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold">Privileged Containers</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Privileged Containers</Typography>
+          <Typography variant="caption" sx={{ color: '#8892a4' }}>
             Container privilege escalation risk · {containers.length} flagged · Last scan {data.last_scan ? new Date(data.last_scan).toLocaleString() : 'N/A'}
           </Typography>
         </Box>
@@ -52,14 +61,9 @@ const PrivilegedContainers: React.FC = () => {
 
       {/* STATS */}
       <Grid container spacing={2} mb={3}>
-        {[
-          { label: 'Total Privileged', count: data.total_privileged ?? containers.length, color: '#d32f2f', bg: '#fdecea' },
-          { label: 'Critical Risk', count: criticals.length, color: '#d32f2f', bg: '#fdecea' },
-          { label: 'With Host Access', count: containers.filter((c: any) => c.host_network || c.host_pid).length, color: '#f57c00', bg: '#fff3e0' },
-          { label: 'Escape-Vulnerable', count: containers.filter((c: any) => c.privileged && c.externally_reachable).length, color: '#d32f2f', bg: '#fdecea' },
-        ].map(({ label, count, color, bg }) => (
+        {STAT_ROWS.map(({ label, count, color, bg }) => (
           <Grid item xs={6} md={3} key={label}>
-            <Card sx={{ bgcolor: bg }}>
+            <Card sx={{ bgcolor: bg, border: `1px solid ${color}40` }}>
               <CardContent sx={{ pb: '8px !important' }}>
                 <Typography variant="caption" sx={{ color, fontWeight: 600 }}>{label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color }}>{count}</Typography>
@@ -69,11 +73,11 @@ const PrivilegedContainers: React.FC = () => {
         ))}
       </Grid>
 
-      {/* RISK EXPLAINER — Wiz style context */}
-      <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #ef9a9a', bgcolor: '#fff8f8' }}>
+      {/* RISK EXPLAINER */}
+      <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #f87171', bgcolor: '#2d1515' }}>
         <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-          <WarningIcon sx={{ color: '#d32f2f' }} />
-          <Typography variant="h6" fontWeight="bold" color="error.dark">Why Privileged Containers Are Critical</Typography>
+          <WarningIcon sx={{ color: '#f87171' }} />
+          <Typography variant="h6" fontWeight="bold" sx={{ color: '#f87171' }}>Why Privileged Containers Are Critical</Typography>
         </Box>
         <Grid container spacing={2}>
           {[
@@ -82,10 +86,10 @@ const PrivilegedContainers: React.FC = () => {
             { label: 'Cluster Takeover', desc: 'With node access + service account token, cluster-admin access is often achievable.', severity: 'critical' },
           ].map(r => (
             <Grid item xs={12} md={4} key={r.label}>
-              <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: '#fff', border: '1px solid #ffcdd2' }}>
-                <Chip label="CRITICAL" size="small" sx={{ bgcolor: '#d32f2f', color: '#fff', fontWeight: 'bold', fontSize: 10, mb: 1 }} />
-                <Typography variant="subtitle2" fontWeight="bold">{r.label}</Typography>
-                <Typography variant="caption" color="text.secondary">{r.desc}</Typography>
+              <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: '#1a1010', border: '1px solid #f8717140' }}>
+                <Chip label="CRITICAL" size="small" sx={{ bgcolor: '#f87171', color: '#fff', fontWeight: 'bold', fontSize: 10, mb: 1 }} />
+                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>{r.label}</Typography>
+                <Typography variant="caption" sx={{ color: '#8892a4' }}>{r.desc}</Typography>
               </Box>
             </Grid>
           ))}
@@ -93,36 +97,36 @@ const PrivilegedContainers: React.FC = () => {
       </Paper>
 
       {/* SECURITY CONTEXT MATRIX */}
-      <Paper sx={{ mb: 3 }}>
+      <Paper sx={{ mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold">Security Context Matrix</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Red = dangerous setting enabled · Green = secure · Grey = not set
+          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Security Context Matrix</Typography>
+          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            Red = dangerous · Green = secure · Grey = not set
           </Typography>
         </Box>
         <TableContainer>
           <Table size="small">
             <TableHead>
-              <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Container</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Namespace</TableCell>
-                <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Risk</TableCell>
+              <TableRow sx={{ bgcolor: '#131d2e' }}>
+                <TableCell sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>Container</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>Namespace</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>Risk</TableCell>
                 {MATRIX_CHECKS.map(col => (
-                  <TableCell key={col} sx={{ fontWeight: 700, fontSize: 10, maxWidth: 80 }}>{col}</TableCell>
+                  <TableCell key={col} sx={{ fontWeight: 700, fontSize: 10, maxWidth: 80, color: '#8892a4', borderColor: '#2a3245' }}>{col}</TableCell>
                 ))}
-                <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Action</TableCell>
+                <TableCell sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>Action</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {containers.slice(0, 30).map((c: any, i: number) => {
                 const risk = (c.risk_level ?? 'high').toLowerCase();
-                const riskColor = risk === 'critical' ? '#d32f2f' : risk === 'high' ? '#f57c00' : '#388e3c';
-                const riskBg   = risk === 'critical' ? '#fdecea' : risk === 'high' ? '#fff3e0' : '#e8f5e9';
+                const riskColor = SEV_COLOR[risk] ?? '#f87171';
+                const riskBg    = SEV_BG[risk] ?? '#2d1515';
                 return (
-                  <TableRow key={i} hover>
-                    <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{c.name ?? c.container_name}</TableCell>
-                    <TableCell sx={{ fontSize: 12 }}>{c.namespace}</TableCell>
-                    <TableCell>
+                  <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>{c.name ?? c.container_name}</TableCell>
+                    <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{c.namespace}</TableCell>
+                    <TableCell sx={{ borderColor: '#2a3245' }}>
                       <Chip label={risk.toUpperCase()} size="small"
                         sx={{ bgcolor: riskBg, color: riskColor, fontWeight: 'bold', fontSize: 10 }} />
                     </TableCell>
@@ -130,15 +134,16 @@ const PrivilegedContainers: React.FC = () => {
                       const val = c[col] ?? c[col.toLowerCase()];
                       const isDangerous = col === 'readOnlyRootFilesystem' ? val === false : !!val;
                       return (
-                        <TableCell key={col} sx={{ textAlign: 'center' }}>
+                        <TableCell key={col} sx={{ textAlign: 'center', borderColor: '#2a3245' }}>
                           <Box sx={{ width: 16, height: 16, borderRadius: '50%', mx: 'auto',
-                            bgcolor: val === undefined || val === null ? '#e0e0e0' : isDangerous ? '#ef9a9a' : '#a5d6a7' }} />
+                            bgcolor: val === undefined || val === null ? '#3a3a4a' : isDangerous ? '#f87171' : '#4ade80' }} />
                         </TableCell>
                       );
                     })}
-                    <TableCell>
-                      <Button size="small" variant="contained" color="error"
-                        onClick={() => navigate('/auto-remediation-security')} sx={{ fontSize: 11 }}>
+                    <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <Button size="small" variant="contained"
+                        onClick={() => navigate('/auto-remediation-security')}
+                        sx={{ fontSize: 11, bgcolor: '#f87171', '&:hover': { bgcolor: '#ef4444' } }}>
                         Fix
                       </Button>
                     </TableCell>
@@ -151,10 +156,12 @@ const PrivilegedContainers: React.FC = () => {
       </Paper>
 
       <Box display="flex" gap={1}>
-        <Button variant="contained" color="error" onClick={() => navigate('/auto-remediation-security')}>
+        <Button variant="contained" onClick={() => navigate('/auto-remediation-security')}
+          sx={{ bgcolor: '#f87171', '&:hover': { bgcolor: '#ef4444' } }}>
           Fix All Privileged Containers
         </Button>
-        <Button variant="outlined" onClick={() => navigate('/root-containers')}>
+        <Button variant="outlined" onClick={() => navigate('/root-containers')}
+          sx={{ borderColor: '#60a5fa', color: '#60a5fa' }}>
           View Root Containers
         </Button>
       </Box>

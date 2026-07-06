@@ -35,6 +35,10 @@ services:
       CARBON_PER_KWH: 0.35
       CPU_WATTS_PER_CORE: 10.0
       MEMORY_WATTS_PER_GB: 0.375
+      # Trivy scanner settings
+      TRIVY_MAX_CONCURRENT: "5"
+      TRIVY_TIMEOUT: "150"
+      TRIVY_CACHE_TTL: "21600"
       # Optimization Settings
       CPU_BUFFER_PERCENTAGE: 20.0
       MEMORY_BUFFER_PERCENTAGE: 20.0

@@ -79,7 +79,7 @@ const CredentialAudit: React.FC = () => {
               </Typography>
               <Box sx={{ mt: 1 }}>
                 <LinearProgress variant="determinate" value={data.audit_score}
-                  sx={{ height: 8, borderRadius: 4, bgcolor: '#e0e0e0', '& .MuiLinearProgress-bar': { bgcolor: scoreColor } }} />
+                  sx={{ height: 8, borderRadius: 4, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: scoreColor } }} />
               </Box>
             </CardContent>
           </Card>
@@ -91,7 +91,7 @@ const CredentialAudit: React.FC = () => {
           </CardContent></Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: data.high_risk > 0 ? '#ffebee' : undefined }}>
+          <Card sx={{ bgcolor: '#2d1515', border: '1px solid #f8717140' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>High Risk</Typography>
               <Typography variant="h3" sx={{ color: data.high_risk > 0 ? '#b71c1c' : 'inherit' }}>
@@ -101,7 +101,7 @@ const CredentialAudit: React.FC = () => {
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: data.medium_risk > 0 ? '#fff3e0' : undefined }}>
+          <Card sx={{ bgcolor: '#2d200a', border: '1px solid #f59e0b40' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Medium Risk</Typography>
               <Typography variant="h3" sx={{ color: data.medium_risk > 0 ? '#e65100' : 'inherit' }}>
@@ -124,7 +124,7 @@ const CredentialAudit: React.FC = () => {
           <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                <TableRow sx={{ bgcolor: '#131d2e' }}>
                   <TableCell>Name</TableCell>
                   <TableCell>Namespace</TableCell>
                   <TableCell>Type</TableCell>
@@ -144,7 +144,7 @@ const CredentialAudit: React.FC = () => {
                   </TableRow>
                 ) : data.credentials.slice(0, 100).map((c, i) => (
                   <TableRow key={i} hover sx={{
-                    bgcolor: c.risk_level === 'high' ? '#fff5f5' : c.risk_level === 'medium' ? '#fffde7' : undefined
+                    bgcolor: c.risk_level === 'high' ? '#2d1515' : c.risk_level === 'medium' ? '#2d200a' : undefined
                   }}>
                     <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.8rem' }}>{c.name}</TableCell>
                     <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{c.namespace}</TableCell>

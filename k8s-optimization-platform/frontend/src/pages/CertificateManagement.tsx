@@ -79,7 +79,7 @@ const CertificateManagement: React.FC = () => {
               </Typography>
               <Box sx={{ mt: 1 }}>
                 <LinearProgress variant="determinate" value={data.certificate_score}
-                  sx={{ height: 8, borderRadius: 4, bgcolor: '#e0e0e0', '& .MuiLinearProgress-bar': { bgcolor: scoreColor } }} />
+                  sx={{ height: 8, borderRadius: 4, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: scoreColor } }} />
               </Box>
             </CardContent>
           </Card>
@@ -91,7 +91,7 @@ const CertificateManagement: React.FC = () => {
           </CardContent></Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: data.expiring_soon > 0 ? '#fff3e0' : undefined }}>
+          <Card sx={{ bgcolor: '#2d200a', border: '1px solid #f59e0b40' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Expiring Soon (&lt;30d)</Typography>
               <Typography variant="h3" sx={{ color: data.expiring_soon > 0 ? '#e65100' : 'inherit' }}>
@@ -101,7 +101,7 @@ const CertificateManagement: React.FC = () => {
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: data.expired_certificates > 0 ? '#ffebee' : undefined }}>
+          <Card sx={{ bgcolor: '#2d1515', border: '1px solid #f8717140' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Expired</Typography>
               <Typography variant="h3" sx={{ color: data.expired_certificates > 0 ? '#b71c1c' : 'inherit' }}>
@@ -121,7 +121,7 @@ const CertificateManagement: React.FC = () => {
           <TableContainer component={Paper} variant="outlined">
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                <TableRow sx={{ bgcolor: '#131d2e' }}>
                   <TableCell>Name</TableCell>
                   <TableCell>Namespace</TableCell>
                   <TableCell>Type</TableCell>
@@ -143,7 +143,7 @@ const CertificateManagement: React.FC = () => {
                   </TableRow>
                 ) : data.certificates.map((c, i) => (
                   <TableRow key={i} hover sx={{
-                    bgcolor: c.status === 'expired' ? '#fff5f5' : c.status === 'expiring_soon' ? '#fffde7' : undefined
+                    bgcolor: c.status === 'expired' ? '#2d1515' : c.status === 'expiring_soon' ? '#2d200a' : undefined
                   }}>
                     <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.8rem' }}>{c.name}</TableCell>
                     <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{c.namespace}</TableCell>

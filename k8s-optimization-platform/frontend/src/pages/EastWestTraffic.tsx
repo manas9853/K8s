@@ -81,7 +81,7 @@ const EastWestTraffic: React.FC = () => {
                   variant="determinate"
                   value={data.east_west_score}
                   sx={{
-                    height: 8, borderRadius: 4, bgcolor: '#e0e0e0',
+                    height: 8, borderRadius: 4, bgcolor: '#2a3245',
                     '& .MuiLinearProgress-bar': { bgcolor: scoreColor },
                   }}
                 />
@@ -98,7 +98,7 @@ const EastWestTraffic: React.FC = () => {
         </Grid>
 
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: '#e8f5e9' }}>
+          <Card sx={{ bgcolor: '#0d2d1a', border: '1px solid #4ade8040' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Restricted Flows</Typography>
               <Typography variant="h3" sx={{ color: '#2e7d32' }}>{data.restricted_flows}</Typography>
@@ -107,7 +107,7 @@ const EastWestTraffic: React.FC = () => {
         </Grid>
 
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: data.unrestricted_flows > 0 ? '#ffebee' : undefined }}>
+          <Card sx={{ bgcolor: '#2d1515', border: '1px solid #f8717140' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Unrestricted Flows</Typography>
               <Typography variant="h3" sx={{ color: data.unrestricted_flows > 0 ? '#b71c1c' : 'inherit' }}>
@@ -124,7 +124,7 @@ const EastWestTraffic: React.FC = () => {
           <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                <TableRow sx={{ bgcolor: '#131d2e' }}>
                   <TableCell>Source Namespace</TableCell>
                   <TableCell align="center">→</TableCell>
                   <TableCell>Target Namespace</TableCell>

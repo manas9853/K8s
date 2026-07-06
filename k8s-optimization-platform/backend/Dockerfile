@@ -2,17 +2,25 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies + Trivy via official apt repo
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     postgresql-client \
     curl \
+    gnupg \
+    lsb-release \
+    && curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key \
+       | gpg --dearmor -o /usr/share/keyrings/trivy.gpg \
+    && echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" \
+       > /etc/apt/sources.list.d/trivy.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends trivy \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Trivy (best-effort — skip if download fails)
-RUN curl -sfL --retry 3 --retry-delay 5 \
-    "https://github.com/aquasecurity/trivy/releases/download/v0.62.1/trivy_0.62.1_Linux-64bit.tar.gz" \
-    | tar -xz -C /usr/local/bin trivy || echo "Trivy install skipped"
+# Pre-download Trivy vulnerability DB so the first scan is instant
+RUN DOCKER_CONFIG=/tmp/trivy-dcfg mkdir -p /tmp/trivy-dcfg \
+    && echo '{"auths":{}}' > /tmp/trivy-dcfg/config.json \
+    && trivy image --no-progress --download-db-only 2>/dev/null || true
 
 # Copy requirements first for better caching
 COPY requirements.prod.txt .

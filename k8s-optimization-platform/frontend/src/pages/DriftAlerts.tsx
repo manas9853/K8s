@@ -4,7 +4,7 @@ import { useActiveCluster } from '../hooks/useActiveCluster';
 import ClusterGuard from '../components/ClusterGuard';
 import {
   Box, Typography, Paper, Grid, Card, CardContent, Chip, CircularProgress,
-  Alert, Button, Stack, Tooltip, Table, TableBody, TableCell,
+  Alert, Button, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow
 } from '@mui/material';
 import {
@@ -12,6 +12,9 @@ import {
   ArrowForward as ArrowIcon, RestoreFromTrash as RestoreIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+
+const SEV_COLOR: Record<string, string> = { critical: '#f87171', high: '#f59e0b', medium: '#60a5fa', low: '#4ade80' };
+const SEV_BG:    Record<string, string> = { critical: '#2d1515',  high: '#2d200a',  medium: '#0d1f3c',  low: '#0d2d1a' };
 
 const DriftAlertsInner: React.FC = () => {
   const { clusterParam } = useActiveCluster();
@@ -30,28 +33,19 @@ const DriftAlertsInner: React.FC = () => {
     return () => clearInterval(i);
   }, [clusterParam]);
 
-  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress size={48} /></Box>;
+  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}><CircularProgress /></Box>;
   if (!data) return <Alert severity="error">Failed to load data</Alert>;
 
   const alerts: any[] = Array.isArray(data.alerts) ? data.alerts : [];
-  const criticals = alerts.filter((a: any) => (a.severity ?? a.drift_severity ?? '').toLowerCase() === 'critical');
-  const highs = alerts.filter((a: any) => (a.severity ?? a.drift_severity ?? '').toLowerCase() === 'high');
-
-  // Drift examples for visual diff
-  const DRIFT_EXAMPLES = [
-    { field: 'readOnlyRootFilesystem', expected: 'true', current: 'false', resource: 'payment-api', severity: 'critical' },
-    { field: 'runAsNonRoot', expected: 'true', current: 'false', resource: 'analytics-worker', severity: 'high' },
-    { field: 'allowPrivilegeEscalation', expected: 'false', current: 'true', resource: 'data-processor', severity: 'critical' },
-    { field: 'seccompProfile', expected: 'RuntimeDefault', current: 'Unconfined', resource: 'auth-service', severity: 'high' },
-  ];
+  const criticals = alerts.filter((a: any) => (a.severity ?? '').toLowerCase() === 'critical');
 
   return (
-    <Box p={3}>
+    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <CompareIcon sx={{ fontSize: 36, color: 'primary.main' }} />
+        <CompareIcon sx={{ fontSize: 36, color: '#60a5fa' }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold">Drift Alerts</Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Drift Alerts</Typography>
+          <Typography variant="caption" sx={{ color: '#8892a4' }}>
             Security configuration drift detection · Last scan {data.last_scan ? new Date(data.last_scan).toLocaleString() : 'N/A'}
           </Typography>
         </Box>
@@ -60,13 +54,13 @@ const DriftAlertsInner: React.FC = () => {
       {/* STATS */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Alerts', count: data.total_alerts ?? alerts.length, color: '#1976d2', bg: '#e3f2fd' },
-          { label: 'Critical Drift', count: data.critical_alerts ?? criticals.length, color: '#d32f2f', bg: '#fdecea' },
-          { label: 'High', count: highs.length, color: '#f57c00', bg: '#fff3e0' },
-          { label: 'Auto-Remediable', count: alerts.filter((a: any) => a.auto_remediable).length, color: '#388e3c', bg: '#e8f5e9' },
+          { label: 'Total Alerts',    count: data.total_alerts ?? alerts.length,             color: '#60a5fa', bg: '#0d1f3c' },
+          { label: 'Critical Drift',  count: data.critical_alerts ?? criticals.length,        color: '#f87171', bg: '#2d1515' },
+          { label: 'High',            count: data.high_alerts ?? 0,                           color: '#f59e0b', bg: '#2d200a' },
+          { label: 'Auto-Remediable', count: alerts.filter((a: any) => a.auto_remediation_triggered).length, color: '#4ade80', bg: '#0d2d1a' },
         ].map(({ label, count, color, bg }) => (
           <Grid item xs={6} md={3} key={label}>
-            <Card sx={{ bgcolor: bg }}>
+            <Card sx={{ bgcolor: bg, border: `1px solid ${color}40` }}>
               <CardContent sx={{ pb: '8px !important' }}>
                 <Typography variant="caption" sx={{ color, fontWeight: 600 }}>{label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color }}>{count}</Typography>
@@ -76,60 +70,50 @@ const DriftAlertsInner: React.FC = () => {
         ))}
       </Grid>
 
-      {/* VISUAL DRIFT DIFF */}
-      <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #ef9a9a', bgcolor: '#fff8f8' }}>
-        <Box display="flex" alignItems="center" gap={1} mb={2}>
-          <WarningIcon sx={{ color: '#d32f2f' }} />
-          <Typography variant="h6" fontWeight="bold" color="error.dark">Configuration Drift Detected</Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>Expected vs Actual security context</Typography>
-        </Box>
-        <Stack spacing={1.5}>
-          {DRIFT_EXAMPLES.map((d, i) => (
-            <Box key={i} sx={{ p: 2, borderRadius: 1.5, bgcolor: '#fff', border: '1px solid #ffcdd2' }}>
-              <Box display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={1}>
-                <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
-                  <Chip label={d.severity.toUpperCase()} size="small"
-                    sx={{ bgcolor: d.severity === 'critical' ? '#d32f2f' : '#f57c00', color: '#fff', fontWeight: 'bold', fontSize: 10 }} />
-                  <Typography variant="subtitle2" fontWeight="bold">{d.resource}</Typography>
-                  <Typography variant="body2" color="text.secondary">·</Typography>
-                  <Typography variant="body2" fontFamily="monospace" fontWeight="bold">{d.field}</Typography>
+      {/* CRITICAL ALERTS SPOTLIGHT */}
+      {criticals.length > 0 && (
+        <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #f87171', bgcolor: '#2d1515' }}>
+          <Box display="flex" alignItems="center" gap={1} mb={1.5}>
+            <WarningIcon sx={{ color: '#f87171' }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: '#f87171' }}>Critical Drift Detected</Typography>
+          </Box>
+          <Stack spacing={1.5}>
+            {criticals.slice(0, 4).map((a: any, i: number) => (
+              <Box key={i} sx={{ p: 2, borderRadius: 1.5, bgcolor: '#1a1010', border: '1px solid #f8717140',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1 }}>
+                <Box>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>{a.alert_type}</Typography>
+                  <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    {a.resource_name} · {a.namespace}
+                  </Typography>
                 </Box>
-                <Stack direction="row" spacing={1}>
-                  <Button size="small" variant="contained" color={d.severity === 'critical' ? 'error' : 'warning'}
-                    startIcon={<RestoreIcon />} onClick={() => navigate('/auto-remediation-security')} sx={{ fontSize: 11 }}>
-                    Restore
-                  </Button>
-                </Stack>
+                <Button size="small" variant="contained" startIcon={<RestoreIcon />}
+                  onClick={() => navigate('/auto-remediation-security')}
+                  sx={{ fontSize: 11, bgcolor: '#f87171', '&:hover': { bgcolor: '#ef4444' } }}>
+                  Restore
+                </Button>
               </Box>
-              <Box display="flex" alignItems="center" gap={2} mt={1.5} flexWrap="wrap">
-                <Box sx={{ px: 2, py: 0.75, borderRadius: 1, bgcolor: '#e8f5e9', border: '1px solid #a5d6a7' }}>
-                  <Typography variant="caption" color="text.secondary">Expected</Typography>
-                  <Typography variant="body2" fontFamily="monospace" fontWeight="bold" color="#388e3c">{d.expected}</Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary">→</Typography>
-                <Box sx={{ px: 2, py: 0.75, borderRadius: 1, bgcolor: '#fdecea', border: '1px solid #ef9a9a' }}>
-                  <Typography variant="caption" color="text.secondary">Current</Typography>
-                  <Typography variant="body2" fontFamily="monospace" fontWeight="bold" color="#d32f2f">{d.current}</Typography>
-                </Box>
-              </Box>
-            </Box>
-          ))}
-        </Stack>
-        <Box mt={2} display="flex" gap={1}>
-          <Button variant="contained" color="error" onClick={() => navigate('/auto-remediation-security')}>
-            Fix All Critical Drifts
-          </Button>
-          <Button variant="outlined" onClick={() => navigate('/baseline-comparison')}>
-            Compare Baseline
-          </Button>
-        </Box>
-      </Paper>
+            ))}
+          </Stack>
+          <Box mt={2} display="flex" gap={1}>
+            <Button variant="contained" onClick={() => navigate('/auto-remediation-security')}
+              sx={{ bgcolor: '#f87171', '&:hover': { bgcolor: '#ef4444' } }}>
+              Fix All Critical Drifts
+            </Button>
+            <Button variant="outlined" onClick={() => navigate('/baseline-comparison')}
+              sx={{ borderColor: '#60a5fa', color: '#60a5fa' }}>
+              Compare Baseline
+            </Button>
+          </Box>
+        </Paper>
+      )}
 
       {/* ALL ALERTS TABLE */}
-      <Paper>
+      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
         <Box p={2} display="flex" alignItems="center" justifyContent="space-between">
-          <Typography variant="h6" fontWeight="bold">All Drift Alerts ({alerts.length})</Typography>
-          <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/baseline-comparison')}>Baseline Comparison</Button>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>All Drift Alerts ({alerts.length})</Typography>
+          <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/baseline-comparison')}
+            sx={{ color: '#60a5fa' }}>Baseline Comparison</Button>
         </Box>
         {alerts.length === 0 ? (
           <Box p={3}><Alert severity="success" icon={<CheckIcon />}>No drift detected. Configuration matches baseline.</Alert></Box>
@@ -137,30 +121,27 @@ const DriftAlertsInner: React.FC = () => {
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: '#f5f5f5' }}>
-                  {['Resource', 'Drift Type', 'Severity', 'Status', 'Detected'].map(h => (
-                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12 }}>{h}</TableCell>
+                <TableRow sx={{ bgcolor: '#131d2e' }}>
+                  {['Resource', 'Alert Type', 'Severity', 'Namespace', 'Status'].map(h => (
+                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {alerts.slice(0, 50).map((item: any, i: number) => {
-                  const sev = (item.severity ?? item.drift_severity ?? 'info').toLowerCase();
-                  const sevColor = sev === 'critical' ? '#d32f2f' : sev === 'high' ? '#f57c00' : sev === 'medium' ? '#1976d2' : '#388e3c';
-                  const sevBg   = sev === 'critical' ? '#fdecea' : sev === 'high' ? '#fff3e0' : sev === 'medium' ? '#e3f2fd' : '#e8f5e9';
+                  const sev = (item.severity ?? 'low').toLowerCase();
                   return (
-                    <TableRow key={i} hover>
-                      <TableCell sx={{ fontWeight: 600, fontSize: 12 }}>{item.resource_name ?? item.id}</TableCell>
-                      <TableCell sx={{ fontSize: 12 }}>{item.drift_type ?? item.alert_type ?? item.action_type ?? '—'}</TableCell>
-                      <TableCell>
+                    <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
+                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>{item.resource_name ?? item.id}</TableCell>
+                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{item.alert_type ?? '—'}</TableCell>
+                      <TableCell sx={{ borderColor: '#2a3245' }}>
                         <Chip label={sev.toUpperCase()} size="small"
-                          sx={{ bgcolor: sevBg, color: sevColor, fontWeight: 'bold', fontSize: 10 }} />
+                          sx={{ bgcolor: SEV_BG[sev], color: SEV_COLOR[sev], fontWeight: 'bold', fontSize: 10 }} />
                       </TableCell>
-                      <TableCell>
-                        <Chip label={item.status ?? 'open'} size="small" variant="outlined" sx={{ fontSize: 10 }} />
-                      </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: '#555' }}>
-                        {item.detected_at ? new Date(item.detected_at).toLocaleString() : '—'}
+                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{item.namespace ?? '—'}</TableCell>
+                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                        <Chip label={item.status ?? 'new'} size="small" variant="outlined"
+                          sx={{ fontSize: 10, borderColor: '#60a5fa', color: '#60a5fa' }} />
                       </TableCell>
                     </TableRow>
                   );

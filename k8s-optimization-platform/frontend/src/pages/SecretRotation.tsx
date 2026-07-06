@@ -81,7 +81,7 @@ const SecretRotation: React.FC = () => {
               </Typography>
               <Box sx={{ mt: 1 }}>
                 <Bar variant="determinate" value={data.rotation_score}
-                  sx={{ height: 8, borderRadius: 4, bgcolor: '#e0e0e0', '& .MuiLinearProgress-bar': { bgcolor: scoreColor } }} />
+                  sx={{ height: 8, borderRadius: 4, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: scoreColor } }} />
               </Box>
             </CardContent>
           </Card>
@@ -94,7 +94,7 @@ const SecretRotation: React.FC = () => {
           </CardContent></Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: data.needs_rotation > 0 ? '#fff3e0' : undefined }}>
+          <Card sx={{ bgcolor: '#2d200a', border: '1px solid #f59e0b40' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Needs Rotation</Typography>
               <Typography variant="h3" sx={{ color: data.needs_rotation > 0 ? '#e65100' : 'inherit' }}>
@@ -104,7 +104,7 @@ const SecretRotation: React.FC = () => {
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: data.overdue_rotation > 0 ? '#ffebee' : undefined }}>
+          <Card sx={{ bgcolor: '#2d1515', border: '1px solid #f8717140' }}>
             <CardContent>
               <Typography color="text.secondary" gutterBottom>Overdue</Typography>
               <Typography variant="h3" sx={{ color: data.overdue_rotation > 0 ? '#b71c1c' : 'inherit' }}>
@@ -121,7 +121,7 @@ const SecretRotation: React.FC = () => {
           <TableContainer component={Paper} variant="outlined" sx={{ mt: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.100' }}>
+                <TableRow sx={{ bgcolor: '#131d2e' }}>
                   <TableCell>Secret Name</TableCell>
                   <TableCell>Namespace</TableCell>
                   <TableCell align="center">Age (days)</TableCell>
@@ -141,7 +141,7 @@ const SecretRotation: React.FC = () => {
                   </TableRow>
                 ) : data.secrets_status.slice(0, 100).map((s, i) => (
                   <TableRow key={i} hover sx={{
-                    bgcolor: s.status === 'overdue' ? '#fff5f5' : s.status === 'needs_rotation' ? '#fffde7' : undefined
+                    bgcolor: s.status === 'overdue' ? '#2d1515' : s.status === 'needs_rotation' ? '#2d200a' : undefined
                   }}>
                     <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.8rem' }}>{s.secret_name}</TableCell>
                     <TableCell sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{s.namespace}</TableCell>
