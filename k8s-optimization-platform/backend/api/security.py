@@ -1615,16 +1615,22 @@ async def get_runtime_security(cluster_id: Optional[str] = None):
                     })
 
         total_containers = sum(len(p.get("containers", [])) for p in pods)
-        threat_rate  = len(runtime_threats) / max(total_containers, 1)
-        runtime_score = max(0, round(100 - (threat_rate * 100), 1))
 
-        seen: dict = {}
+        # Score = % of containers with NO critical/high signal
+        # Count unique containers that have at least one critical or high threat
+        risky_containers: set = set()
         for t in runtime_threats:
-            key = (t["threat_type"], t["namespace"])
-            sev_rank = {"critical":0,"high":1,"medium":2,"low":3}
-            if key not in seen or sev_rank.get(t["severity"],3) < sev_rank.get(seen[key]["severity"],3):
-                seen[key] = t
-        deduped = sorted(seen.values(), key=lambda x: {"critical":0,"high":1,"medium":2,"low":3}.get(x["severity"],3))
+            if t["severity"] in ("critical", "high"):
+                risky_containers.add((t["pod_name"], t["container_name"]))
+        clean_containers = max(0, total_containers - len(risky_containers))
+        runtime_score = round((clean_containers / max(total_containers, 1)) * 100, 1)
+
+        # Sort all threats by severity for the table (most critical first)
+        sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        threats_sorted = sorted(
+            runtime_threats,
+            key=lambda x: (sev_rank.get(x["severity"], 3), x["namespace"], x["pod_name"])
+        )
 
         return {
             "runtime_score":        runtime_score,
@@ -1633,9 +1639,11 @@ async def get_runtime_security(cluster_id: Optional[str] = None):
             "high_threats":         threat_count["high"],
             "medium_threats":       threat_count["medium"],
             "low_threats":          threat_count["low"],
-            "runtime_threats":      deduped[:50],
+            "runtime_threats":      threats_sorted[:100],
             "suspicious_processes": suspicious_processes[:30],
             "containers_monitored": total_containers,
+            "risky_containers":     len(risky_containers),
+            "clean_containers":     clean_containers,
             "last_scan":            datetime.now().isoformat(),
         }
 

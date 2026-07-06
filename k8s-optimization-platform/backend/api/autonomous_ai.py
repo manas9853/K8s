@@ -7,7 +7,7 @@ Consolidates all AI-powered features:
 - Rollback Center (Deployment, Configuration, Namespace, Cluster rollback)
 - AI Recommendations (Cost, Performance, Reliability, Security, Compliance)
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
@@ -17,6 +17,79 @@ import random
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+async def _ai_security_context(cluster: Optional[str] = None) -> Dict[str, Any]:
+    """Fetch real pod signals for AI endpoints."""
+    try:
+        from database.db import db_manager
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return {}
+        cluster_name = cluster or clusters[0]["cluster_name"]
+        metrics = db_manager.get_latest_metrics(cluster_name)
+        if not metrics:
+            return {}
+        pods_domain = metrics.get("pods") or {}
+        if isinstance(pods_domain, str):
+            import json
+            pods_domain = json.loads(pods_domain)
+        pods = pods_domain.get("items", [])
+    except Exception as e:
+        logger.error(f"_ai_security_context: {e}")
+        pods = []
+
+    tc = 0
+    priv = root = pe = ro = host_net = host_pid = host_ipc = default_sa = no_lv = no_cpu = no_mem = 0
+    namespaces = set()
+
+    for pod in pods:
+        namespaces.add(pod.get("namespace", ""))
+        sa = pod.get("service_account", "default") or "default"
+        if sa == "default":
+            default_sa += 1
+        if pod.get("host_network"):
+            host_net += 1
+        if pod.get("host_pid"):
+            host_pid += 1
+        if pod.get("host_ipc"):
+            host_ipc += 1
+        for c in (pod.get("containers") or []):
+            tc += 1
+            if c.get("privileged"):
+                priv += 1
+            if c.get("run_as_root"):
+                root += 1
+            if c.get("allow_privilege_escalation"):
+                pe += 1
+            if c.get("read_only_root_fs"):
+                ro += 1
+            if not c.get("has_liveness"):
+                no_lv += 1
+            if not c.get("cpu_limit"):
+                no_cpu += 1
+            if not c.get("memory_limit_mb"):
+                no_mem += 1
+
+    return {
+        "cluster_name": cluster or "xforce-devops",
+        "total_pods": len(pods),
+        "total_containers": tc,
+        "namespace_count": len(namespaces),
+        "namespaces": list(namespaces),
+        "privileged_count": priv,
+        "root_count": root,
+        "priv_esc_count": pe,
+        "readonly_fs_count": ro,
+        "host_network_count": host_net,
+        "host_pid_count": host_pid,
+        "host_ipc_count": host_ipc,
+        "default_sa_count": default_sa,
+        "no_liveness_count": no_lv,
+        "no_cpu_limit_count": no_cpu,
+        "no_mem_limit_count": no_mem,
+        "pods": pods,
+    }
 
 # ============================================================================
 # AI COPILOT SECTION
@@ -160,75 +233,101 @@ async def get_optimization_advisor():
     }
 
 @router.get("/copilot/security-advisor")
-async def get_security_advisor():
-    """AI Copilot - Security Advisor"""
-    return {
-        "summary": {
-            "total_issues": 26,
-            "critical": 3,
-            "high": 8,
-            "medium": 15,
-            "low": 0,
-            "security_score": 72
-        },
-        "issues": [
-            {
-                "id": "sec-001",
-                "severity": "critical",
-                "category": "Container Security",
-                "title": "Containers Running as Root",
-                "description": "2 containers are running with root privileges, which poses a security risk",
-                "affected_resources": ["nginx-proxy", "debug-pod"],
-                "remediation": "Update container security context to run as non-root user",
-                "cve_ids": []
+async def get_security_advisor(cluster: Optional[str] = Query(None)):
+    """AI Copilot - Security Advisor — real data from cluster"""
+    try:
+        ctx = await _ai_security_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        tc = ctx["total_containers"] or 1
+        tp = ctx["total_pods"] or 1
+
+        # Derive security score from signals
+        priv_rate = 1 - ctx["privileged_count"] / tc
+        root_rate = 1 - ctx["root_count"] / tc
+        pe_rate   = 1 - ctx["priv_esc_count"] / tc
+        ro_rate   = ctx["readonly_fs_count"] / tc
+        hn_rate   = 1 - ctx["host_network_count"] / tp
+        sa_rate   = 1 - ctx["default_sa_count"] / tp
+        security_score = round((priv_rate*20 + root_rate*15 + pe_rate*15 + ro_rate*10
+                                + hn_rate*15 + sa_rate*15 + (1 - ctx["no_liveness_count"]/tc)*10), 1)
+
+        issues = []
+        if ctx["privileged_count"] > 0:
+            pods_sample = [p["name"] for p in ctx["pods"] if any(c.get("privileged") for c in (p.get("containers") or []))][:5]
+            issues.append({"id": "sec-001", "severity": "critical", "category": "Container Security",
+                           "title": "Privileged Containers Running in Cluster",
+                           "description": f"{ctx['privileged_count']} containers running with privileged: true — full host access",
+                           "affected_resources": pods_sample,
+                           "remediation": "Remove privileged: true from all container securityContexts",
+                           "cve_ids": []})
+        if ctx["root_count"] > 0:
+            pods_sample = [p["name"] for p in ctx["pods"] if any(c.get("run_as_root") for c in (p.get("containers") or []))][:5]
+            issues.append({"id": "sec-002", "severity": "critical", "category": "Container Security",
+                           "title": "Containers Running as Root (UID 0)",
+                           "description": f"{ctx['root_count']} containers running as root user",
+                           "affected_resources": pods_sample,
+                           "remediation": "Set runAsNonRoot: true and specify non-zero runAsUser",
+                           "cve_ids": []})
+        if ctx["host_network_count"] > 0:
+            pods_sample = [p["name"] for p in ctx["pods"] if p.get("host_network")][:5]
+            issues.append({"id": "sec-003", "severity": "high", "category": "Network Security",
+                           "title": "Pods Using Host Network Namespace",
+                           "description": f"{ctx['host_network_count']} pods with hostNetwork: true — unrestricted node network access",
+                           "affected_resources": pods_sample,
+                           "remediation": "Set hostNetwork: false unless absolutely required",
+                           "cve_ids": []})
+        if ctx["priv_esc_count"] > 0:
+            issues.append({"id": "sec-004", "severity": "high", "category": "Container Security",
+                           "title": "Privilege Escalation Allowed",
+                           "description": f"{ctx['priv_esc_count']} containers allow allowPrivilegeEscalation: true",
+                           "affected_resources": [f"{ctx['priv_esc_count']} containers"],
+                           "remediation": "Set allowPrivilegeEscalation: false in all securityContexts",
+                           "cve_ids": []})
+        if ctx["default_sa_count"] > 0:
+            issues.append({"id": "sec-005", "severity": "medium", "category": "RBAC",
+                           "title": "Default Service Account Usage",
+                           "description": f"{ctx['default_sa_count']} pods using default service account",
+                           "affected_resources": [f"{ctx['default_sa_count']} pods"],
+                           "remediation": "Create dedicated service accounts per workload",
+                           "cve_ids": []})
+        writable = tc - ctx["readonly_fs_count"]
+        if writable > 0:
+            issues.append({"id": "sec-006", "severity": "medium", "category": "Container Security",
+                           "title": "Writable Root Filesystems",
+                           "description": f"{writable} containers with readOnlyRootFilesystem: false",
+                           "affected_resources": [f"{writable} containers"],
+                           "remediation": "Set readOnlyRootFilesystem: true",
+                           "cve_ids": []})
+
+        sev_counts = {s: sum(1 for i in issues if i["severity"] == s) for s in ("critical","high","medium","low")}
+
+        cis_score = round(security_score)
+        return {
+            "summary": {
+                "total_issues": len(issues),
+                "critical": sev_counts["critical"],
+                "high": sev_counts["high"],
+                "medium": sev_counts["medium"],
+                "low": 0,
+                "security_score": round(security_score, 1),
+                "total_pods": tp,
+                "total_containers": tc,
+                "cluster_name": ctx["cluster_name"],
             },
-            {
-                "id": "sec-002",
-                "severity": "critical",
-                "category": "Secrets Management",
-                "title": "Exposed Secrets in Environment Variables",
-                "description": "Database credentials found in pod environment variables",
-                "affected_resources": ["api-server"],
-                "remediation": "Move credentials to Kubernetes secrets",
-                "cve_ids": []
+            "issues": issues,
+            "compliance_status": {
+                "cis_benchmark": "Partial" if cis_score < 80 else "Compliant",
+                "pci_dss": "Compliant" if ctx["privileged_count"] == 0 else "Non-Compliant",
+                "hipaa": "Compliant" if ctx["readonly_fs_count"] / tc > 0.5 else "Needs Review",
             },
-            {
-                "id": "sec-003",
-                "severity": "high",
-                "category": "Vulnerability Management",
-                "title": "High-Severity CVEs in Container Images",
-                "description": "4 images contain high-severity vulnerabilities",
-                "affected_resources": ["redis:6.0", "nginx:1.19", "postgres:12"],
-                "remediation": "Upgrade to patched image versions",
-                "cve_ids": ["CVE-2024-1234", "CVE-2024-5678"]
-            },
-            {
-                "id": "sec-004",
-                "severity": "high",
-                "category": "Network Security",
-                "title": "Missing Network Policies",
-                "description": "5 namespaces lack network policies for pod-to-pod communication",
-                "affected_resources": ["default", "staging", "qa", "dev", "monitoring"],
-                "remediation": "Implement network policies to restrict traffic",
-                "cve_ids": []
-            },
-            {
-                "id": "sec-005",
-                "severity": "medium",
-                "category": "RBAC",
-                "title": "Overly Permissive Service Accounts",
-                "description": "3 service accounts have cluster-admin privileges",
-                "affected_resources": ["jenkins-sa", "ci-cd-sa", "admin-sa"],
-                "remediation": "Apply principle of least privilege to service accounts",
-                "cve_ids": []
-            }
-        ],
-        "compliance_status": {
-            "cis_benchmark": "Partial",
-            "pci_dss": "Compliant",
-            "hipaa": "Compliant"
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"security-advisor error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/copilot/incident-investigator")
 async def get_incident_investigator():
@@ -511,99 +610,122 @@ async def get_resource_fixes():
     }
 
 @router.get("/autofix/security-fixes")
-async def get_security_fixes():
-    """Get security-related fixes"""
-    return {
-        "category": "security_fixes",
-        "total_fixes": 12,
-        "critical": 3,
-        "high": 5,
-        "medium": 4,
-        "fixes": [
-            {
-                "fix_id": "sec-001",
-                "severity": "critical",
-                "type": "root_container",
-                "resource": "pod/nginx-proxy-8f7d",
-                "namespace": "production",
-                "issue": "Container running as root user",
-                "fix": "Update security context to run as UID 1000",
-                "status": "ready",
-                "cve_ids": []
-            },
-            {
-                "fix_id": "sec-002",
-                "severity": "critical",
-                "type": "exposed_secret",
-                "resource": "deployment/api-server",
-                "namespace": "production",
-                "issue": "Database password in environment variable",
-                "fix": "Move to Kubernetes secret",
-                "status": "ready",
-                "cve_ids": []
-            },
-            {
-                "fix_id": "sec-003",
-                "severity": "high",
-                "type": "vulnerable_image",
-                "resource": "deployment/redis-cache",
-                "namespace": "cache",
-                "issue": "Image contains CVE-2024-1234",
-                "fix": "Upgrade to redis:7.2.4",
-                "status": "ready",
-                "cve_ids": ["CVE-2024-1234"]
-            }
-        ]
-    }
+async def get_security_fixes(cluster: Optional[str] = Query(None)):
+    """Get security-related fixes — real data from cluster signals"""
+    try:
+        ctx = await _ai_security_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        fixes = []
+        tc = ctx["total_containers"] or 1
+
+        if ctx["privileged_count"] > 0:
+            priv_pods = [p["name"] for p in ctx["pods"]
+                         if any(c.get("privileged") for c in (p.get("containers") or []))]
+            for i, pod in enumerate(priv_pods[:5]):
+                ns = next((p.get("namespace","") for p in ctx["pods"] if p.get("name") == pod), "")
+                fixes.append({"fix_id": f"sec-{len(fixes)+1:03d}", "severity": "critical",
+                               "type": "privileged_container", "resource": f"pod/{pod}",
+                               "namespace": ns, "issue": "Container running with privileged: true",
+                               "fix": "Remove privileged: true from securityContext", "status": "ready", "cve_ids": []})
+
+        if ctx["root_count"] > 0:
+            root_pods = [p["name"] for p in ctx["pods"]
+                         if any(c.get("run_as_root") for c in (p.get("containers") or []))]
+            for pod in root_pods[:5]:
+                ns = next((p.get("namespace","") for p in ctx["pods"] if p.get("name") == pod), "")
+                fixes.append({"fix_id": f"sec-{len(fixes)+1:03d}", "severity": "critical",
+                               "type": "root_container", "resource": f"pod/{pod}",
+                               "namespace": ns, "issue": "Container running as root (UID 0)",
+                               "fix": "Set runAsNonRoot: true and runAsUser: 1000", "status": "ready", "cve_ids": []})
+
+        if ctx["host_network_count"] > 0:
+            hn_pods = [p["name"] for p in ctx["pods"] if p.get("host_network")]
+            for pod in hn_pods[:5]:
+                ns = next((p.get("namespace","") for p in ctx["pods"] if p.get("name") == pod), "")
+                fixes.append({"fix_id": f"sec-{len(fixes)+1:03d}", "severity": "high",
+                               "type": "host_network", "resource": f"pod/{pod}",
+                               "namespace": ns, "issue": "Pod using host network namespace",
+                               "fix": "Set hostNetwork: false in pod spec", "status": "ready", "cve_ids": []})
+
+        if ctx["priv_esc_count"] > 0:
+            fixes.append({"fix_id": f"sec-{len(fixes)+1:03d}", "severity": "high",
+                           "type": "privilege_escalation", "resource": f"{ctx['priv_esc_count']} containers",
+                           "namespace": "multiple", "issue": "allowPrivilegeEscalation: true",
+                           "fix": "Set allowPrivilegeEscalation: false", "status": "ready", "cve_ids": []})
+
+        writable = tc - ctx["readonly_fs_count"]
+        if writable > 0:
+            fixes.append({"fix_id": f"sec-{len(fixes)+1:03d}", "severity": "medium",
+                           "type": "writable_fs", "resource": f"{writable} containers",
+                           "namespace": "multiple", "issue": "readOnlyRootFilesystem: false",
+                           "fix": "Set readOnlyRootFilesystem: true", "status": "ready", "cve_ids": []})
+
+        sev_counts = {s: sum(1 for f in fixes if f["severity"] == s) for s in ("critical","high","medium")}
+        return {
+            "category": "security_fixes", "total_fixes": len(fixes),
+            "critical": sev_counts["critical"], "high": sev_counts["high"], "medium": sev_counts["medium"],
+            "fixes": fixes, "cluster_name": ctx["cluster_name"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"security-fixes error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/autofix/compliance-fixes")
-async def get_compliance_fixes():
-    """Get compliance-related fixes"""
-    return {
-        "category": "compliance_fixes",
-        "total_fixes": 18,
-        "frameworks": {
-            "cis_benchmark": 8,
-            "pci_dss": 4,
-            "hipaa": 3,
-            "soc2": 3
-        },
-        "fixes": [
-            {
-                "fix_id": "comp-001",
-                "framework": "CIS Benchmark",
-                "control": "5.2.3",
-                "type": "pod_security_policy",
-                "resource": "namespace/production",
-                "issue": "Missing Pod Security Standards",
-                "fix": "Apply restricted Pod Security Standard",
-                "status": "ready",
-                "impact": "medium"
-            },
-            {
-                "fix_id": "comp-002",
-                "framework": "PCI DSS",
-                "control": "2.2.4",
-                "type": "network_policy",
-                "resource": "namespace/payment",
-                "issue": "Missing network segmentation",
-                "fix": "Create network policies for payment namespace",
-                "status": "ready",
-                "impact": "high"
-            },
-            {
-                "fix_id": "comp-003",
-                "framework": "HIPAA",
-                "control": "164.312(a)(1)",
-                "type": "encryption",
-                "resource": "pvc/patient-data",
-                "issue": "Unencrypted persistent volume",
-                "fix": "Enable encryption at rest",
-                "status": "ready",
-                "impact": "critical"
-            }
+async def get_compliance_fixes(cluster: Optional[str] = Query(None)):
+    """Get compliance-related fixes — real data from cluster signals"""
+    try:
+        ctx = await _ai_security_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        tc = ctx["total_containers"] or 1
+        tp = ctx["total_pods"] or 1
+        fixes = []
+
+        items = [
+            ("CIS Benchmark", "4.2.1", "privileged_container", "critical",
+             f"{ctx['privileged_count']} containers have privileged: true",
+             "Remove privileged: true — violates CIS 4.2.1", ctx["privileged_count"] > 0),
+            ("CIS Benchmark", "4.2.3", "root_container", "critical",
+             f"{ctx['root_count']} containers run as root",
+             "Set runAsNonRoot: true — violates CIS 4.2.3", ctx["root_count"] > 0),
+            ("PCI DSS", "Req 1", "host_network", "high",
+             f"{ctx['host_network_count']} pods using host network",
+             "Set hostNetwork: false — PCI DSS network isolation", ctx["host_network_count"] > 0),
+            ("CIS Benchmark", "4.3.1", "writable_fs", "medium",
+             f"{tc - ctx['readonly_fs_count']} containers have writable root FS",
+             "Set readOnlyRootFilesystem: true — CIS 4.3.1", (tc - ctx["readonly_fs_count"]) > 0),
+            ("ISO 27001", "A.9", "default_sa", "medium",
+             f"{ctx['default_sa_count']} pods using default SA",
+             "Create dedicated service accounts — ISO 27001 A.9", ctx["default_sa_count"] > 0),
+            ("CIS Benchmark", "4.4.1", "cpu_limits", "medium",
+             f"{ctx['no_cpu_limit_count']} containers missing CPU limits",
+             "Add resources.limits.cpu — CIS 4.4.1", ctx["no_cpu_limit_count"] > 0),
         ]
-    }
+
+        for fw, ctrl, ftype, sev, issue, fix, active in items:
+            if active:
+                fixes.append({"fix_id": f"comp-{len(fixes)+1:03d}", "framework": fw, "control": ctrl,
+                               "type": ftype, "resource": issue.split()[0] + " resources",
+                               "issue": issue, "fix": fix, "status": "ready", "impact": sev})
+
+        fw_counts = {}
+        for f in fixes:
+            fw_counts[f["framework"]] = fw_counts.get(f["framework"], 0) + 1
+
+        return {
+            "category": "compliance_fixes", "total_fixes": len(fixes),
+            "frameworks": fw_counts, "fixes": fixes, "cluster_name": ctx["cluster_name"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"compliance-fixes error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/autofix/bulk-fixes")
 async def get_bulk_fixes():
@@ -942,107 +1064,123 @@ async def get_reliability_recommendations():
     }
 
 @router.get("/recommendations/security")
-async def get_security_recommendations():
-    """Get AI-powered security recommendations"""
-    return {
-        "category": "security",
-        "total_recommendations": 18,
-        "critical": 3,
-        "high": 7,
-        "medium": 8,
-        "recommendations": [
-            {
-                "id": "sec-rec-001",
-                "priority": "critical",
-                "title": "Remove Root Container Privileges",
-                "description": "2 containers running as root user",
-                "impact": "critical",
-                "effort": "low",
-                "confidence": 0.98,
-                "affected_resources": 2,
-                "cve_ids": [],
-                "compliance_impact": ["CIS Benchmark 5.2.6", "PCI DSS 2.2.4"]
-            },
-            {
-                "id": "sec-rec-002",
-                "priority": "critical",
-                "title": "Rotate Exposed Secrets",
-                "description": "Database credentials in environment variables",
-                "impact": "critical",
-                "effort": "medium",
-                "confidence": 0.95,
-                "affected_resources": 1,
-                "cve_ids": [],
-                "compliance_impact": ["SOC 2", "HIPAA 164.312(a)(2)(iv)"]
-            },
-            {
-                "id": "sec-rec-003",
-                "priority": "high",
-                "title": "Patch Vulnerable Container Images",
-                "description": "4 images with high-severity CVEs",
-                "impact": "high",
-                "effort": "low",
-                "confidence": 0.92,
-                "affected_resources": 4,
-                "cve_ids": ["CVE-2024-1234", "CVE-2024-5678"],
-                "compliance_impact": ["CIS Benchmark 4.5.1"]
-            }
+async def get_security_recommendations(cluster: Optional[str] = Query(None)):
+    """Get AI-powered security recommendations — real data"""
+    try:
+        ctx = await _ai_security_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        tc = ctx["total_containers"] or 1
+        tp = ctx["total_pods"] or 1
+        recs = []
+
+        items = [
+            ("critical", "Remediate Privileged Containers",
+             f"Remove privileged: true from {ctx['privileged_count']} containers",
+             "low", 0.99, ctx["privileged_count"],
+             ["CIS Benchmark 4.2.1", "PCI DSS Req 6"],
+             ctx["privileged_count"] > 0),
+            ("critical", "Enforce Non-Root User Execution",
+             f"Set runAsNonRoot: true on {ctx['root_count']} containers running as UID 0",
+             "low", 0.98, ctx["root_count"],
+             ["CIS Benchmark 4.2.3", "PCI DSS 2.2.4"],
+             ctx["root_count"] > 0),
+            ("high", "Disable Host Namespace Access",
+             f"Set hostNetwork/hostPID/hostIPC: false on {ctx['host_network_count']+ctx['host_pid_count']+ctx['host_ipc_count']} pods",
+             "medium", 0.97, ctx["host_network_count"] + ctx["host_pid_count"] + ctx["host_ipc_count"],
+             ["CIS Benchmark 4.1.x", "NIST CM-6"],
+             (ctx["host_network_count"] + ctx["host_pid_count"] + ctx["host_ipc_count"]) > 0),
+            ("high", "Block Privilege Escalation",
+             f"Set allowPrivilegeEscalation: false on {ctx['priv_esc_count']} containers",
+             "low", 0.96, ctx["priv_esc_count"],
+             ["CIS Benchmark 4.2.2"],
+             ctx["priv_esc_count"] > 0),
+            ("medium", "Enable Read-Only Root Filesystem",
+             f"Set readOnlyRootFilesystem: true on {tc - ctx['readonly_fs_count']} containers",
+             "medium", 0.90, tc - ctx["readonly_fs_count"],
+             ["CIS Benchmark 4.3.1", "GDPR"],
+             (tc - ctx["readonly_fs_count"]) > 0),
+            ("medium", "Segregate Service Accounts",
+             f"Create dedicated service accounts for {ctx['default_sa_count']} pods using default SA",
+             "medium", 0.88, ctx["default_sa_count"],
+             ["ISO 27001 A.9", "SOC 2 CC6"],
+             ctx["default_sa_count"] > 0),
         ]
-    }
+
+        for i, (priority, title, desc, effort, conf, affected, compliance, active) in enumerate(items):
+            if active:
+                recs.append({"id": f"sec-rec-{len(recs)+1:03d}", "priority": priority, "title": title,
+                             "description": desc, "impact": priority, "effort": effort,
+                             "confidence": conf, "affected_resources": affected,
+                             "cve_ids": [], "compliance_impact": compliance})
+
+        sev_counts = {s: sum(1 for r in recs if r["priority"] == s) for s in ("critical","high","medium","low")}
+        return {
+            "category": "security", "total_recommendations": len(recs),
+            "critical": sev_counts["critical"], "high": sev_counts["high"], "medium": sev_counts["medium"],
+            "recommendations": recs, "cluster_name": ctx["cluster_name"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"security-recommendations error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/recommendations/compliance")
-async def get_compliance_recommendations():
-    """Get AI-powered compliance recommendations"""
-    return {
-        "category": "compliance",
-        "total_recommendations": 14,
-        "frameworks": {
-            "cis_benchmark": 6,
-            "pci_dss": 3,
-            "hipaa": 2,
-            "soc2": 3
-        },
-        "recommendations": [
-            {
-                "id": "comp-rec-001",
-                "priority": "high",
-                "framework": "CIS Benchmark",
-                "control": "5.2.3",
-                "title": "Apply Pod Security Standards",
-                "description": "Production namespace missing Pod Security Standards",
-                "impact": "high",
-                "effort": "medium",
-                "confidence": 0.95,
-                "affected_resources": 1,
-                "compliance_gap": "CIS Kubernetes Benchmark v1.8.0"
-            },
-            {
-                "id": "comp-rec-002",
-                "priority": "high",
-                "framework": "PCI DSS",
-                "control": "2.2.4",
-                "title": "Implement Network Segmentation",
-                "description": "Payment namespace lacks network policies",
-                "impact": "critical",
-                "effort": "medium",
-                "confidence": 0.98,
-                "affected_resources": 1,
-                "compliance_gap": "PCI DSS Requirement 1.3"
-            },
-            {
-                "id": "comp-rec-003",
-                "priority": "medium",
-                "framework": "HIPAA",
-                "control": "164.312(a)(1)",
-                "title": "Enable Encryption at Rest",
-                "description": "Patient data PVC not encrypted",
-                "impact": "critical",
-                "effort": "high",
-                "confidence": 0.92,
-                "affected_resources": 1,
-                "compliance_gap": "HIPAA Security Rule"
-            }
+async def get_compliance_recommendations(cluster: Optional[str] = Query(None)):
+    """Get AI-powered compliance recommendations — real data"""
+    try:
+        ctx = await _ai_security_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        tc = ctx["total_containers"] or 1
+        recs = []
+
+        items = [
+            ("high", "CIS Benchmark", "4.2.1", "Remove Privileged Containers",
+             f"{ctx['privileged_count']} containers violate CIS 4.2.1",
+             "high", "medium", 0.99, ctx["privileged_count"],
+             "CIS Kubernetes Benchmark v1.8", ctx["privileged_count"] > 0),
+            ("high", "PCI DSS", "Req 1", "Enforce Network Isolation",
+             f"{ctx['host_network_count']} pods bypass network policies via host network",
+             "critical", "medium", 0.97, ctx["host_network_count"],
+             "PCI DSS v4.0 Requirement 1", ctx["host_network_count"] > 0),
+            ("high", "ISO 27001", "A.9", "Implement Service Account Segregation",
+             f"{ctx['default_sa_count']} pods use default SA — violates ISO 27001 A.9",
+             "high", "medium", 0.88, ctx["default_sa_count"],
+             "ISO 27001:2022 Annex A.9", ctx["default_sa_count"] > 0),
+            ("medium", "CIS Benchmark", "4.3.1", "Enforce Read-Only Filesystem",
+             f"{tc - ctx['readonly_fs_count']} containers have writable root FS",
+             "medium", "low", 0.90, tc - ctx["readonly_fs_count"],
+             "CIS Benchmark v1.8 Section 4.3", (tc - ctx["readonly_fs_count"]) > 0),
+            ("medium", "CIS Benchmark", "4.4.1", "Add Resource Limits",
+             f"{ctx['no_cpu_limit_count']} containers missing CPU limits",
+             "medium", "low", 0.85, ctx["no_cpu_limit_count"],
+             "CIS Benchmark v1.8 Section 4.4", ctx["no_cpu_limit_count"] > 0),
         ]
-    }
+
+        for priority, fw, ctrl, title, desc, impact, effort, conf, affected, gap, active in items:
+            if active:
+                recs.append({"id": f"comp-rec-{len(recs)+1:03d}", "priority": priority, "framework": fw,
+                             "control": ctrl, "title": title, "description": desc,
+                             "impact": impact, "effort": effort, "confidence": conf,
+                             "affected_resources": affected, "compliance_gap": gap})
+
+        fw_counts = {}
+        for r in recs:
+            fw_counts[r["framework"]] = fw_counts.get(r["framework"], 0) + 1
+
+        return {
+            "category": "compliance", "total_recommendations": len(recs),
+            "frameworks": fw_counts, "recommendations": recs,
+            "cluster_name": ctx["cluster_name"],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"compliance-recommendations error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Made with Bob - Comprehensive Autonomous AI API
