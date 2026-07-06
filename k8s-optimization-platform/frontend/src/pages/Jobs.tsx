@@ -64,6 +64,29 @@ import TimerIcon from '@mui/icons-material/Timer';
 import DeleteIcon from '@mui/icons-material/Delete';
 import { API_BASE_URL } from '../config/api';
 
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:     '#0f1724',
+  card:   '#1e2433',
+  hover:  '#252e42',
+  border: '#2a3245',
+  text:   '#e8eaf0',
+  muted:  '#8b95a9',
+  body:   '#c8cdd8',
+  green:  '#4ade80',
+  red:    '#f87171',
+  yellow: '#f59e0b',
+};
+const selectSx = {
+  color: T.text, fontSize: 13, height: 38,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '& .MuiSvgIcon-root': { color: T.muted },
+  bgcolor: T.card,
+};
+const menuProps = { PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } };
+
 interface Container {
   name: string;
   image: string;
@@ -400,36 +423,38 @@ const Jobs: React.FC = () => {
     sum + generateInvestigations(job).filter(i => i.type === 'error' || i.type === 'warning').length, 0
   );
 
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
+  const dlgSx = { '& .MuiDialog-paper': { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 2 } };
+
   if (clustersLoading) {
-    return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
+    return <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress sx={{ color: T.green }} /></Box>;
   }
 
   if (clusters.length === 0) {
     return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
+      <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+        <Typography sx={{ color: T.text }} variant="h5">No clusters attached yet</Typography>
+        <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
           Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
+        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}>Go to Cluster Onboarding</Button>
       </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
       <Box mb={3} display="flex" justifyContent="space-between" alignItems="flex-start">
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Jobs
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage batch processing and one-time task execution
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Jobs</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            Manage batch processing and one-time task execution · {filteredJobs.length} of {totalJobs} shown
           </Typography>
         </Box>
         <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Cluster</InputLabel>
-          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange}>
+          <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Cluster</InputLabel>
+          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange} sx={selectSx} MenuProps={menuProps}>
             <MenuItem value="all">All Clusters</MenuItem>
             {clusters.map((c) => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
           </Select>
@@ -437,60 +462,26 @@ const Jobs: React.FC = () => {
       </Box>
 
       {/* Summary Cards */}
-      <Grid container spacing={3} mb={3}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <WorkIcon color="primary" />
-                <Typography color="text.secondary" gutterBottom>
-                  Total Jobs
-                </Typography>
-              </Box>
-              <Typography variant="h4">{totalJobs}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>Completed</Typography>
-              <Typography variant="h4" color="success.main">{completedJobs}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0}% success rate
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>Running</Typography>
-              <Typography variant="h4" color="info.main">{runningJobs}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {failedJobs} failed
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Badge badgeContent={totalIssues} color="error">
-                  <BugReportIcon color="action" />
-                </Badge>
-                <Typography color="text.secondary" gutterBottom>Issues</Typography>
-              </Box>
-              <Typography variant="h4" color={totalIssues > 0 ? "error.main" : "success.main"}>
-                {totalIssues}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Grid container spacing={2} mb={3}>
+        {[
+          { label: 'Total Jobs', value: totalJobs, accent: T.text },
+          { label: 'Completed', value: completedJobs, accent: T.green, sub: `${totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0}% success rate` },
+          { label: 'Running', value: runningJobs, accent: T.yellow, sub: `${failedJobs} failed` },
+          { label: 'Issues', value: totalIssues, accent: totalIssues > 0 ? T.red : T.green },
+        ].map(({ label, value, accent, sub }) => (
+          <Grid item xs={6} sm={3} key={label}>
+            <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>{label}</Typography>
+                <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent, lineHeight: 1 }}>{value}</Typography>
+                {sub && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
 
       {/* Search and Actions */}
       <Box display="flex" gap={2} mb={2}>
@@ -502,42 +493,40 @@ const Jobs: React.FC = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
+            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+            sx: { color: T.text, fontSize: 13, bgcolor: T.card,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+            },
           }}
         />
         <Tooltip title="Refresh">
-          <IconButton onClick={() => fetchJobs(selectedClusterId)} color="primary">
-            <RefreshIcon />
+          <IconButton onClick={() => fetchJobs(selectedClusterId)} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+            <RefreshIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
 
       {/* Jobs Table */}
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+        <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>Status</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Namespace</TableCell>
-              <TableCell>Completions</TableCell>
-              <TableCell>Duration</TableCell>
-              <TableCell>Issues</TableCell>
-              <TableCell>Age</TableCell>
-              <TableCell>Actions</TableCell>
+            <TableRow sx={{ bgcolor: '#161f30' }}>
+              <TableCell sx={headSx}>Status</TableCell>
+              <TableCell sx={headSx}>Name</TableCell>
+              <TableCell sx={headSx}>Namespace</TableCell>
+              <TableCell sx={headSx}>Completions</TableCell>
+              <TableCell sx={headSx}>Duration</TableCell>
+              <TableCell sx={headSx}>Issues</TableCell>
+              <TableCell sx={headSx}>Age</TableCell>
+              <TableCell sx={headSx}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredJobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
-                  <Typography color="text.secondary">
-                    {searchTerm ? 'No jobs match your search' : 'No jobs found'}
-                  </Typography>
+                <TableCell colSpan={8} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                  {searchTerm ? 'No jobs match your search' : (loading ? 'Loading…' : 'No jobs found')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -546,68 +535,67 @@ const Jobs: React.FC = () => {
                 const issueCount = investigations.filter(i => i.type === 'error' || i.type === 'warning').length;
                 
                 return (
-                  <TableRow key={`${job.namespace}-${job.name}`} hover>
-                    <TableCell>
+                  <TableRow key={`${job.namespace}-${job.name}`} hover sx={{ cursor: 'pointer', '&:hover': { bgcolor: T.hover } }}>
+                    <TableCell sx={cellSx}>
                       <Tooltip title={getStatusLabel(job)}>
                         {getStatusIcon(job)}
                       </Tooltip>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight="medium">{job.name}</Typography>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text }}>{job.name}</Typography>
                     </TableCell>
-                    <TableCell>
-                      <Chip label={job.namespace} size="small" variant="outlined" />
+                    <TableCell sx={cellSx}>
+                      <Chip label={job.namespace} size="small" sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={cellSx}>
                       <Box sx={{ width: '100%' }}>
-                        <Typography variant="body2">
+                        <Typography sx={{ fontSize: 12, color: T.body }}>
                           {job.succeeded}/{job.completions || '?'}
                         </Typography>
                         {job.completions && (
-                          <LinearProgress 
-                            variant="determinate" 
+                          <LinearProgress
+                            variant="determinate"
                             value={getCompletionPercentage(job)}
-                            color={getJobStatus(job) === 'error' ? 'error' : 'primary'}
-                            sx={{ mt: 0.5 }}
+                            sx={{ mt: 0.5, height: 4, borderRadius: 2, bgcolor: T.border,
+                              '& .MuiLinearProgress-bar': { bgcolor: getJobStatus(job) === 'error' ? T.red : T.green, borderRadius: 2 } }}
                           />
                         )}
                       </Box>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{formatDuration(job.duration)}</Typography>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{formatDuration(job.duration)}</Typography>
                     </TableCell>
-                    <TableCell>
-                      <Badge badgeContent={issueCount} color="error">
-                        <Chip 
-                          label={issueCount === 0 ? "Healthy" : `${issueCount} issues`}
-                          size="small"
-                          color={issueCount === 0 ? "success" : "error"}
-                        />
-                      </Badge>
+                    <TableCell sx={cellSx}>
+                      <Chip
+                        label={issueCount === 0 ? 'Healthy' : `${issueCount} issues`}
+                        size="small"
+                        sx={{ bgcolor: issueCount === 0 ? '#052e16' : '#450a0a', color: issueCount === 0 ? T.green : T.red, border: `1px solid ${issueCount === 0 ? T.green+'44' : T.red+'44'}`, fontSize: 11, height: 20 }}
+                      />
                     </TableCell>
-                    <TableCell>{job.age}</TableCell>
-                    <TableCell>
+                    <TableCell sx={{ ...cellSx, color: T.muted }}>{job.age}</TableCell>
+                    <TableCell sx={cellSx}>
                       <Box display="flex" gap={1}>
                         <Tooltip title="View Details">
-                          <IconButton 
-                            size="small" 
+                          <IconButton
+                            size="small"
+                            sx={{ color: T.muted, '&:hover': { color: T.text } }}
                             onClick={() => {
                               setSelectedJob(job);
                               setDetailsOpen(true);
                             }}
                           >
-                            <InfoIcon />
+                            <InfoIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         {getJobStatus(job) !== 'running' && (
                           <Tooltip title="Delete Job">
                             <IconButton
                               size="small"
-                              color="error"
+                              sx={{ color: T.red, '&:hover': { bgcolor: '#450a0a' } }}
                               onClick={() => handleDeleteJob(job)}
                               disabled={actionLoading}
                             >
-                              <DeleteIcon />
+                              <DeleteIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
                         )}
@@ -621,158 +609,100 @@ const Jobs: React.FC = () => {
         </Table>
       </TableContainer>
 
-      <Box mt={2}>
-        <Typography variant="body2" color="text.secondary">
-          Showing {filteredJobs.length} of {totalJobs} jobs
-        </Typography>
-      </Box>
-
       {/* Details Dialog */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth>
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth sx={dlgSx}>
         {selectedJob && (
           <>
-            <DialogTitle>
+            <DialogTitle sx={{ borderBottom: `1px solid ${T.border}` }}>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
-                  <Typography variant="h6">{selectedJob.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {selectedJob.namespace}
-                  </Typography>
+                  <Typography sx={{ fontWeight: 600, color: T.text }}>{selectedJob.name}</Typography>
+                  <Typography sx={{ fontSize: 12, color: T.muted }}>{selectedJob.namespace}</Typography>
                 </Box>
                 {getStatusIcon(selectedJob)}
               </Box>
             </DialogTitle>
-            <DialogContent>
-              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
-                <Tab label="Overview" />
-                <Tab label="Investigations" />
-                <Tab label="Recommendations" />
-                <Tab label="Diagnostics" />
-                <Tab label="Actions" />
+            <DialogContent sx={{ p: 0 }}>
+              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ borderBottom: `1px solid ${T.border}`, px: 2, '& .MuiTabs-indicator': { bgcolor: T.green } }}>
+                {['Overview', 'Investigations', 'Recommendations', 'Diagnostics', 'Actions'].map((lbl) => (
+                  <Tab key={lbl} label={lbl} sx={{ color: T.muted, '&.Mui-selected': { color: T.text }, textTransform: 'none', minHeight: 40 }} />
+                ))}
               </Tabs>
+              <Box sx={{ p: 3 }}>
 
               {/* Overview Tab */}
               {activeTab === 0 && (
-                <Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Execution Status</Typography>
-                          <Typography>Completions: {selectedJob.completions || 'N/A'}</Typography>
-                          <Typography>Parallelism: {selectedJob.parallelism || 'N/A'}</Typography>
-                          <Typography>Active: {selectedJob.active}</Typography>
-                          <Typography color="success.main">Succeeded: {selectedJob.succeeded}</Typography>
-                          {selectedJob.failed > 0 && (
-                            <Typography color="error">Failed: {selectedJob.failed}</Typography>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Timing</Typography>
-                          <Typography>Duration: <strong>{formatDuration(selectedJob.duration)}</strong></Typography>
-                          <Typography>Age: {selectedJob.age}</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Started: {fmtTime(selectedJob.start_time)}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Completed: {fmtTime(selectedJob.completion_time)}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Containers</Typography>
-                          {selectedJob.containers.map((container, idx) => (
-                            <Box key={idx} mb={2}>
-                              <Typography variant="body2" fontWeight="medium">{container.name}</Typography>
-                              <Typography variant="caption" color="text.secondary">{container.image}</Typography>
-                              <Box mt={1}>
-                                <Typography variant="caption">
-                                  CPU: {container.resources.requests?.cpu || 'N/A'} / {container.resources.limits?.cpu || 'N/A'}
-                                </Typography>
-                                <br />
-                                <Typography variant="caption">
-                                  Memory: {container.resources.requests?.memory || 'N/A'} / {container.resources.limits?.memory || 'N/A'}
-                                </Typography>
-                              </Box>
+                <Grid container spacing={2}>
+                  {[
+                    { label: 'Execution Status', rows: [
+                      ['Completions', selectedJob.completions || 'N/A'],
+                      ['Parallelism', selectedJob.parallelism || 'N/A'],
+                      ['Active', selectedJob.active],
+                      ['Succeeded', selectedJob.succeeded],
+                      ...(selectedJob.failed > 0 ? [['Failed', selectedJob.failed]] : []),
+                    ]},
+                    { label: 'Timing', rows: [
+                      ['Duration', formatDuration(selectedJob.duration)],
+                      ['Age', selectedJob.age],
+                      ['Started', fmtTime(selectedJob.start_time)],
+                      ['Completed', fmtTime(selectedJob.completion_time)],
+                    ]},
+                  ].map(({ label, rows }) => (
+                    <Grid item xs={12} md={6} key={label as string}>
+                      <Card sx={{ bgcolor: T.bg, border: `1px solid ${T.border}`, borderRadius: 1 }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>{label as string}</Typography>
+                          {(rows as [string, unknown][]).map(([k, v]) => (
+                            <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, borderBottom: `1px solid ${T.border}` }}>
+                              <Typography sx={{ fontSize: 12, color: T.muted }}>{k}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.body }}>{String(v)}</Typography>
                             </Box>
                           ))}
                         </CardContent>
                       </Card>
                     </Grid>
-                    {selectedJob.conditions.length > 0 && (
-                      <Grid item xs={12}>
-                        <Card variant="outlined">
-                          <CardContent>
-                            <Typography variant="subtitle2" gutterBottom>Conditions</Typography>
-                            {selectedJob.conditions.map((condition, idx) => (
-                              <Box key={idx} mb={1}>
-                                <Box display="flex" alignItems="center" gap={1}>
-                                  {condition.status === 'True' ? 
-                                    <CheckCircleIcon color="success" fontSize="small" /> : 
-                                    <ErrorIcon color="error" fontSize="small" />
-                                  }
-                                  <Typography variant="body2" fontWeight="medium">{condition.type}</Typography>
-                                </Box>
-                                <Typography variant="caption" color="text.secondary">
-                                  {condition.reason}: {condition.message}
-                                </Typography>
-                              </Box>
-                            ))}
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    )}
-                  </Grid>
-                </Box>
+                  ))}
+                  {selectedJob.containers.length > 0 && (
+                    <Grid item xs={12}>
+                      <Card sx={{ bgcolor: T.bg, border: `1px solid ${T.border}`, borderRadius: 1 }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>Containers</Typography>
+                          {selectedJob.containers.map((c, i) => (
+                            <Box key={i} sx={{ mb: 1.5, pb: 1.5, borderBottom: `1px solid ${T.border}` }}>
+                              <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{c.name}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.muted }}>{c.image}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>
+                                CPU: {c.resources.requests?.cpu || 'N/A'} / {c.resources.limits?.cpu || 'N/A'} &nbsp;·&nbsp; Mem: {c.resources.requests?.memory || 'N/A'} / {c.resources.limits?.memory || 'N/A'}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  )}
+                </Grid>
               )}
 
               {/* Investigations Tab */}
               {activeTab === 1 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <TroubleshootIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Active Investigations
-                  </Typography>
                   {generateInvestigations(selectedJob).map((inv, idx) => (
-                    <Accordion key={idx}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          {inv.type === 'error' && <ErrorIcon color="error" />}
-                          {inv.type === 'warning' && <WarningIcon color="warning" />}
-                          {inv.type === 'info' && <InfoIcon color="info" />}
-                          <Typography>{inv.title}</Typography>
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Typography variant="body2" paragraph>{inv.description}</Typography>
-                        {inv.action && (
-                          <Box>
-                            <Typography variant="caption" color="text.secondary">
-                              Recommended Action:
-                            </Typography>
-                            <Typography variant="body2">{inv.action}</Typography>
-                            <Button 
-                              size="small" 
-                              variant="contained" 
-                              sx={{ mt: 1 }}
-                              onClick={() => handleAutoFix(selectedJob, inv.title)}
-                            >
-                              Auto-Fix
-                            </Button>
-                          </Box>
-                        )}
-                      </AccordionDetails>
-                    </Accordion>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`,
+                      bgcolor: inv.type === 'error' ? '#1a0a0a' : inv.type === 'warning' ? '#1a1200' : '#0a1a0a' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {inv.type === 'error' && <ErrorIcon sx={{ fontSize: 16, color: T.red }} />}
+                        {inv.type === 'warning' && <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />}
+                        {inv.type === 'info' && <InfoIcon sx={{ fontSize: 16, color: T.green }} />}
+                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{inv.title}</Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{inv.description}</Typography>
+                      {inv.action && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>→ {inv.action}</Typography>}
+                    </Box>
                   ))}
                   {generateInvestigations(selectedJob).length === 0 && (
-                    <Alert severity="success">No issues found - Job is healthy!</Alert>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                      <Typography sx={{ fontSize: 13, color: T.green }}>No issues found — Job is healthy</Typography>
+                    </Box>
                   )}
                 </Box>
               )}
@@ -780,52 +710,17 @@ const Jobs: React.FC = () => {
               {/* Recommendations Tab */}
               {activeTab === 2 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <RecommendIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Optimization Recommendations
-                  </Typography>
                   {generateRecommendations(selectedJob).map((rec, idx) => (
-                    <Card key={idx} sx={{ mb: 2 }} variant="outlined">
-                      <CardContent>
-                        <Box display="flex" alignItems="center" gap={1} mb={1}>
-                          <Chip 
-                            label={rec.category} 
-                            size="small" 
-                            color={
-                              rec.category === 'security' ? 'error' :
-                              rec.category === 'performance' ? 'warning' :
-                              rec.category === 'cost' ? 'info' : 'success'
-                            }
-                          />
-                          <Chip 
-                            label={rec.priority} 
-                            size="small" 
-                            variant="outlined"
-                            color={
-                              rec.priority === 'high' ? 'error' :
-                              rec.priority === 'medium' ? 'warning' : 'default'
-                            }
-                          />
-                        </Box>
-                        <Typography variant="subtitle2" gutterBottom>{rec.title}</Typography>
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                          {rec.description}
-                        </Typography>
-                        <Divider sx={{ my: 1 }} />
-                        <Typography variant="caption" color="text.secondary">Impact:</Typography>
-                        <Typography variant="body2" paragraph>{rec.impact}</Typography>
-                        <Typography variant="caption" color="text.secondary">Action:</Typography>
-                        <Typography variant="body2">{rec.action}</Typography>
-                        <Button 
-                          size="small" 
-                          variant="outlined" 
-                          sx={{ mt: 1 }}
-                          onClick={() => handleAutoFix(selectedJob, rec.title)}
-                        >
-                          Apply Recommendation
-                        </Button>
-                      </CardContent>
-                    </Card>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`, bgcolor: T.bg }}>
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        <Chip label={rec.category} size="small" sx={{ bgcolor: T.border, color: T.text, fontSize: 11, height: 20 }} />
+                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? '#450a0a' : rec.priority === 'medium' ? '#451a03' : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
+                      </Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{rec.title}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>{rec.description}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>Impact: {rec.impact}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted }}>→ {rec.action}</Typography>
+                    </Box>
                   ))}
                 </Box>
               )}
@@ -833,121 +728,55 @@ const Jobs: React.FC = () => {
               {/* Diagnostics Tab */}
               {activeTab === 3 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <HealthAndSafetyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Health Checks & Validations
-                  </Typography>
-                  <List>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color={selectedJob.failed === 0 ? "success" : "error"} />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Execution Status"
-                        secondary={`${selectedJob.succeeded} succeeded, ${selectedJob.failed} failed`}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <TimerIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Duration"
-                        secondary={formatDuration(selectedJob.duration)}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SecurityIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Security Checks"
-                        secondary="Image tags, resource limits"
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SpeedIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Performance"
-                        secondary="Parallelism and completion time analysis"
-                      />
-                    </ListItem>
-                  </List>
+                  {[
+                    { ok: selectedJob.failed === 0, label: 'Execution Status', sub: `${selectedJob.succeeded} succeeded, ${selectedJob.failed} failed` },
+                    { ok: true, label: 'Duration', sub: formatDuration(selectedJob.duration) },
+                    { ok: selectedJob.containers.every(c => c.resources.limits), label: 'Resource Limits', sub: 'All containers have limits' },
+                    { ok: !selectedJob.containers.some(c => c.image.includes(':latest')), label: 'Image Tags', sub: 'No :latest tags used' },
+                  ].map(({ ok, label, sub }) => (
+                    <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, borderBottom: `1px solid ${T.border}` }}>
+                      {ok ? <CheckCircleIcon sx={{ fontSize: 18, color: T.green }} /> : <ErrorIcon sx={{ fontSize: 18, color: T.red }} />}
+                      <Box>
+                        <Typography sx={{ fontSize: 13, color: T.text }}>{label}</Typography>
+                        <Typography sx={{ fontSize: 12, color: T.muted }}>{sub}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
                 </Box>
               )}
 
               {/* Actions Tab */}
               {activeTab === 4 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Available Actions
-                  </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Job Management</Typography>
-                          {getJobStatus(selectedJob) !== 'running' && (
-                            <Button
-                              variant="contained"
-                              color="error"
-                              fullWidth
-                              sx={{ mb: 1 }}
-                              onClick={() => handleDeleteJob(selectedJob)}
-                              disabled={actionLoading}
-                              startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
-                            >
-                              Delete Job
-                            </Button>
-                          )}
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            View Pod Logs
-                          </Button>
-                          <Button variant="outlined" fullWidth>
-                            View Events
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Automated Fixes</Typography>
-                          <Button variant="contained" color="success" fullWidth sx={{ mb: 1 }}>
-                            Apply All Safe Recommendations
-                          </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            Fix Resource Limits
-                          </Button>
-                          <Button variant="outlined" fullWidth>
-                            Update Image Tags
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
+                  {getJobStatus(selectedJob) !== 'running' && (
+                    <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: '#dc2626' } }}
+                      onClick={() => handleDeleteJob(selectedJob)} disabled={actionLoading}
+                      startIcon={actionLoading ? <CircularProgress size={16} /> : <DeleteIcon />}>
+                      Delete Job
+                    </Button>
+                  )}
+                  <Button variant="outlined" fullWidth sx={{ mb: 1, color: T.muted, borderColor: T.border }}>View Pod Logs</Button>
+                  <Button variant="outlined" fullWidth sx={{ color: T.muted, borderColor: T.border }}>View Events</Button>
                 </Box>
               )}
+              </Box>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+            <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+              <Button onClick={() => setDetailsOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Close</Button>
             </DialogActions>
           </>
         )}
       </Dialog>
 
       {/* Confirm dialog */}
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirm Action</DialogTitle>
-        <DialogContent>
-          <Typography>{confirmAction?.label}</Typography>
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth sx={dlgSx}>
+        <DialogTitle sx={{ borderBottom: `1px solid ${T.border}`, color: T.text }}>Confirm Action</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography sx={{ color: T.body }}>{confirmAction?.label}</Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={runConfirmed}>Confirm Delete</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+          <Button onClick={() => setConfirmOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" sx={{ bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: '#dc2626' }, textTransform: 'none' }} onClick={runConfirmed}>Confirm Delete</Button>
         </DialogActions>
       </Dialog>
 

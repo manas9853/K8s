@@ -64,6 +64,29 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import DnsIcon from '@mui/icons-material/Dns';
 import { API_BASE_URL } from '../config/api';
 
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:     '#0f1724',
+  card:   '#1e2433',
+  hover:  '#252e42',
+  border: '#2a3245',
+  text:   '#e8eaf0',
+  muted:  '#8b95a9',
+  body:   '#c8cdd8',
+  green:  '#4ade80',
+  red:    '#f87171',
+  yellow: '#f59e0b',
+};
+const selectSx = {
+  color: T.text, fontSize: 13, height: 38,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '& .MuiSvgIcon-root': { color: T.muted },
+  bgcolor: T.card,
+};
+const menuProps = { PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } };
+
 interface Container {
   name: string;
   image: string;
@@ -377,36 +400,38 @@ const DaemonSets: React.FC = () => {
     sum + generateInvestigations(ds).filter(i => i.type === 'error' || i.type === 'warning').length, 0
   );
 
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
+  const dlgSx = { '& .MuiDialog-paper': { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 2 } };
+
   if (clustersLoading) {
-    return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
+    return <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress sx={{ color: T.green }} /></Box>;
   }
 
   if (clusters.length === 0) {
     return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
+      <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+        <Typography sx={{ color: T.text }} variant="h5">No clusters attached yet</Typography>
+        <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
           Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
+        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}>Go to Cluster Onboarding</Button>
       </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
       <Box mb={3} display="flex" justifyContent="space-between" alignItems="flex-start">
         <Box>
-          <Typography variant="h4" gutterBottom>
-            DaemonSets
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage node-level workloads that run on every node in the cluster
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>DaemonSets</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            Node-level workloads running on every cluster node · {filteredDaemonSets.length} of {totalDaemonSets} shown
           </Typography>
         </Box>
         <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Cluster</InputLabel>
-          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange}>
+          <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Cluster</InputLabel>
+          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange} sx={selectSx} MenuProps={menuProps}>
             <MenuItem value="all">All Clusters</MenuItem>
             {clusters.map((c) => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
           </Select>
@@ -414,76 +439,26 @@ const DaemonSets: React.FC = () => {
       </Box>
 
       {/* Summary Cards */}
-      <Grid container spacing={3} mb={3}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <ComputerIcon color="primary" />
-                <Typography color="text.secondary" gutterBottom>
-                  Total DaemonSets
-                </Typography>
-              </Box>
-              <Typography variant="h4">
-                {totalDaemonSets}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Healthy
-              </Typography>
-              <Typography variant="h4" color="success.main">
-                {healthyDaemonSets}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {totalDaemonSets > 0 ? Math.round((healthyDaemonSets / totalDaemonSets) * 100) : 0}% healthy
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Node Coverage
-              </Typography>
-              <Typography variant="h4">
-                {coveredNodes}/{totalNodes}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {totalNodes > 0 ? Math.round((coveredNodes / totalNodes) * 100) : 0}% covered
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Badge badgeContent={totalIssues} color="error">
-                  <BugReportIcon color="action" />
-                </Badge>
-                <Typography color="text.secondary" gutterBottom>
-                  Issues Found
-                </Typography>
-              </Box>
-              <Typography variant="h4" color={totalIssues > 0 ? "error.main" : "success.main"}>
-                {totalIssues}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Grid container spacing={2} mb={3}>
+        {[
+          { label: 'Total DaemonSets', value: totalDaemonSets, accent: T.text },
+          { label: 'Healthy', value: healthyDaemonSets, accent: T.green, sub: `${totalDaemonSets > 0 ? Math.round((healthyDaemonSets / totalDaemonSets) * 100) : 0}% healthy` },
+          { label: 'Node Coverage', value: `${coveredNodes}/${totalNodes}`, accent: T.body, sub: `${totalNodes > 0 ? Math.round((coveredNodes / totalNodes) * 100) : 0}% covered` },
+          { label: 'Issues', value: totalIssues, accent: totalIssues > 0 ? T.red : T.green },
+        ].map(({ label, value, accent, sub }) => (
+          <Grid item xs={6} sm={3} key={label}>
+            <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>{label}</Typography>
+                <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent, lineHeight: 1 }}>{value}</Typography>
+                {sub && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
+      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
 
       {/* Search and Actions */}
       <Box display="flex" gap={2} mb={2}>
@@ -495,123 +470,89 @@ const DaemonSets: React.FC = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
+            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+            sx: { color: T.text, fontSize: 13, bgcolor: T.card,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+            },
           }}
         />
         <Tooltip title="Refresh">
-          <IconButton onClick={() => fetchDaemonSets(selectedClusterId)} color="primary">
-            <RefreshIcon />
+          <IconButton onClick={() => fetchDaemonSets(selectedClusterId)} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+            <RefreshIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
 
       {/* DaemonSets Table */}
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+        <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>Status</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Namespace</TableCell>
-              <TableCell>Nodes</TableCell>
-              <TableCell>Coverage</TableCell>
-              <TableCell>Issues</TableCell>
-              <TableCell>Age</TableCell>
-              <TableCell>Actions</TableCell>
+            <TableRow sx={{ bgcolor: '#161f30' }}>
+              <TableCell sx={headSx}>Status</TableCell>
+              <TableCell sx={headSx}>Name</TableCell>
+              <TableCell sx={headSx}>Namespace</TableCell>
+              <TableCell sx={headSx}>Nodes</TableCell>
+              <TableCell sx={headSx}>Coverage</TableCell>
+              <TableCell sx={headSx}>Issues</TableCell>
+              <TableCell sx={headSx}>Age</TableCell>
+              <TableCell sx={headSx}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredDaemonSets.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
-                  <Typography color="text.secondary">
-                    {searchTerm ? 'No daemonsets match your search' : 'No daemonsets found'}
-                  </Typography>
+                <TableCell colSpan={8} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                  {searchTerm ? 'No daemonsets match your search' : (loading ? 'Loading…' : 'No daemonsets found')}
                 </TableCell>
               </TableRow>
             ) : (
               filteredDaemonSets.map((ds) => {
                 const investigations = generateInvestigations(ds);
                 const issueCount = investigations.filter(i => i.type === 'error' || i.type === 'warning').length;
-                
                 return (
-                  <TableRow key={`${ds.namespace}-${ds.name}`} hover>
-                    <TableCell>
+                  <TableRow key={`${ds.namespace}-${ds.name}`} hover sx={{ cursor: 'pointer', '&:hover': { bgcolor: T.hover } }}>
+                    <TableCell sx={cellSx}>
                       <Tooltip title={`${ds.number_ready}/${ds.desired_number_scheduled} nodes ready`}>
                         {getStatusIcon(ds)}
                       </Tooltip>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight="medium">
-                        {ds.name}
-                      </Typography>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text }}>{ds.name}</Typography>
                     </TableCell>
-                    <TableCell>
-                      <Chip label={ds.namespace} size="small" variant="outlined" />
+                    <TableCell sx={cellSx}>
+                      <Chip label={ds.namespace} size="small" sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {ds.desired_number_scheduled}
-                      </Typography>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{ds.desired_number_scheduled}</Typography>
                       {ds.number_misscheduled > 0 && (
-                        <Typography variant="caption" color="error">
-                          {ds.number_misscheduled} misscheduled
-                        </Typography>
+                        <Typography sx={{ fontSize: 11, color: T.red }}>{ds.number_misscheduled} misscheduled</Typography>
                       )}
                     </TableCell>
-                    <TableCell>
-                      <Box sx={{ width: '100%' }}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <Typography variant="body2">
-                            {ds.number_ready}/{ds.desired_number_scheduled}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary">
-                            ({getNodeCoverage(ds)}%)
-                          </Typography>
-                        </Box>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={getNodeCoverage(ds)}
-                          color={getStatusColor(ds)}
-                          sx={{ mt: 0.5 }}
-                        />
-                      </Box>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{ds.number_ready}/{ds.desired_number_scheduled} ({getNodeCoverage(ds)}%)</Typography>
+                      <LinearProgress variant="determinate" value={getNodeCoverage(ds)}
+                        sx={{ mt: 0.5, height: 4, borderRadius: 2, bgcolor: T.border,
+                          '& .MuiLinearProgress-bar': { bgcolor: getNodeCoverage(ds) === 100 ? T.green : getNodeCoverage(ds) > 50 ? T.yellow : T.red, borderRadius: 2 } }} />
                     </TableCell>
-                    <TableCell>
-                      <Badge badgeContent={issueCount} color="error">
-                        <Chip 
-                          label={issueCount === 0 ? "Healthy" : `${issueCount} issues`}
-                          size="small"
-                          color={issueCount === 0 ? "success" : "error"}
-                        />
-                      </Badge>
+                    <TableCell sx={cellSx}>
+                      <Chip label={issueCount === 0 ? 'Healthy' : `${issueCount} issues`} size="small"
+                        sx={{ bgcolor: issueCount === 0 ? '#052e16' : '#450a0a', color: issueCount === 0 ? T.green : T.red,
+                          border: `1px solid ${issueCount === 0 ? T.green+'44' : T.red+'44'}`, fontSize: 11, height: 20 }} />
                     </TableCell>
-                    <TableCell>{ds.age}</TableCell>
-                    <TableCell>
+                    <TableCell sx={{ ...cellSx, color: T.muted }}>{ds.age}</TableCell>
+                    <TableCell sx={cellSx}>
                       <Box display="flex" gap={1}>
                         <Tooltip title="View Details">
-                          <IconButton
-                            size="small"
-                            onClick={() => {
-                              setSelectedDaemonSet(ds);
-                              setDetailsOpen(true);
-                            }}
-                          >
-                            <InfoIcon />
+                          <IconButton size="small" sx={{ color: T.muted, '&:hover': { color: T.text } }}
+                            onClick={() => { setSelectedDaemonSet(ds); setDetailsOpen(true); }}>
+                            <InfoIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title="Restart Pods">
-                          <IconButton
-                            size="small"
-                            color="primary"
-                            onClick={() => handleRestartPods(ds)}
-                            disabled={actionLoading}
-                          >
-                            <RefreshIcon />
+                          <IconButton size="small" sx={{ color: T.muted, '&:hover': { color: T.text } }}
+                            onClick={() => handleRestartPods(ds)} disabled={actionLoading}>
+                            <RefreshIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                       </Box>
@@ -624,156 +565,98 @@ const DaemonSets: React.FC = () => {
         </Table>
       </TableContainer>
 
-      <Box mt={2}>
-        <Typography variant="body2" color="text.secondary">
-          Showing {filteredDaemonSets.length} of {totalDaemonSets} daemonsets
-        </Typography>
-      </Box>
-
       {/* Details Dialog */}
-      <Dialog 
-        open={detailsOpen} 
-        onClose={() => setDetailsOpen(false)}
-        maxWidth="lg"
-        fullWidth
-      >
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth sx={dlgSx}>
         {selectedDaemonSet && (
           <>
-            <DialogTitle>
+            <DialogTitle sx={{ borderBottom: `1px solid ${T.border}` }}>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
-                  <Typography variant="h6">{selectedDaemonSet.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {selectedDaemonSet.namespace}
-                  </Typography>
+                  <Typography sx={{ fontWeight: 600, color: T.text }}>{selectedDaemonSet.name}</Typography>
+                  <Typography sx={{ fontSize: 12, color: T.muted }}>{selectedDaemonSet.namespace}</Typography>
                 </Box>
                 {getStatusIcon(selectedDaemonSet)}
               </Box>
             </DialogTitle>
-            <DialogContent>
-              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
-                <Tab label="Overview" />
-                <Tab label="Investigations" />
-                <Tab label="Recommendations" />
-                <Tab label="Diagnostics" />
-                <Tab label="Actions" />
+            <DialogContent sx={{ p: 0 }}>
+              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ borderBottom: `1px solid ${T.border}`, px: 2, '& .MuiTabs-indicator': { bgcolor: T.green } }}>
+                {['Overview', 'Investigations', 'Recommendations', 'Diagnostics', 'Actions'].map((lbl) => (
+                  <Tab key={lbl} label={lbl} sx={{ color: T.muted, '&.Mui-selected': { color: T.text }, textTransform: 'none', minHeight: 40 }} />
+                ))}
               </Tabs>
-
+              <Box sx={{ p: 3 }}>
               {/* Overview Tab */}
               {activeTab === 0 && (
-                <Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Node Coverage</Typography>
-                          <Typography>Desired: {selectedDaemonSet.desired_number_scheduled}</Typography>
-                          <Typography>Current: {selectedDaemonSet.current_number_scheduled}</Typography>
-                          <Typography>Ready: {selectedDaemonSet.number_ready}</Typography>
-                          <Typography>Available: {selectedDaemonSet.number_available}</Typography>
-                          {selectedDaemonSet.number_misscheduled > 0 && (
-                            <Typography color="error">Misscheduled: {selectedDaemonSet.number_misscheduled}</Typography>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                       <Card variant="outlined">
-                         <CardContent>
-                           <Typography variant="subtitle2" gutterBottom>DaemonSet Info</Typography>
-                           <Typography>Age: {selectedDaemonSet.age}</Typography>
-                           <Typography variant="caption" color="text.secondary" display="block">
-                             Created: {fmtTime(selectedDaemonSet.created_at)}
-                           </Typography>
-                           <Typography>Node coverage: {getNodeCoverage(selectedDaemonSet)}%</Typography>
-                           {Object.keys(selectedDaemonSet.selector).length > 0 && (
-                             <>
-                               <Divider sx={{ my: 1 }} />
-                               <Typography variant="caption" color="text.secondary" display="block">Selector:</Typography>
-                               {Object.entries(selectedDaemonSet.selector).map(([k, v]) => (
-                                 <Chip key={k} label={`${k}=${v}`} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
-                               ))}
-                             </>
-                           )}
-                           {Object.keys(selectedDaemonSet.labels).length > 0 && (
-                             <>
-                               <Divider sx={{ my: 1 }} />
-                               <Typography variant="caption" color="text.secondary" display="block">Labels:</Typography>
-                               {Object.entries(selectedDaemonSet.labels).slice(0, 5).map(([k, v]) => (
-                                 <Chip key={k} label={`${k}=${v}`} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
-                               ))}
-                             </>
-                           )}
-                         </CardContent>
-                       </Card>
-                     </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Containers</Typography>
-                          {selectedDaemonSet.containers.map((container, idx) => (
-                            <Box key={idx} mb={2}>
-                              <Typography variant="body2" fontWeight="medium">{container.name}</Typography>
-                              <Typography variant="caption" color="text.secondary">{container.image}</Typography>
-                              <Box mt={1}>
-                                <Typography variant="caption">
-                                  CPU: {container.resources.requests?.cpu || 'N/A'} / {container.resources.limits?.cpu || 'N/A'}
-                                </Typography>
-                                <br />
-                                <Typography variant="caption">
-                                  Memory: {container.resources.requests?.memory || 'N/A'} / {container.resources.limits?.memory || 'N/A'}
-                                </Typography>
-                              </Box>
+                <Grid container spacing={2}>
+                  {[
+                    { label: 'Node Coverage', rows: [
+                      ['Desired', selectedDaemonSet.desired_number_scheduled],
+                      ['Current', selectedDaemonSet.current_number_scheduled],
+                      ['Ready', selectedDaemonSet.number_ready],
+                      ['Available', selectedDaemonSet.number_available],
+                      ...(selectedDaemonSet.number_misscheduled > 0 ? [['Misscheduled', selectedDaemonSet.number_misscheduled]] : []),
+                    ]},
+                    { label: 'DaemonSet Info', rows: [
+                      ['Age', selectedDaemonSet.age],
+                      ['Created', fmtTime(selectedDaemonSet.created_at)],
+                      ['Coverage', `${getNodeCoverage(selectedDaemonSet)}%`],
+                    ]},
+                  ].map(({ label, rows }) => (
+                    <Grid item xs={12} md={6} key={label as string}>
+                      <Card sx={{ bgcolor: T.bg, border: `1px solid ${T.border}`, borderRadius: 1 }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>{label as string}</Typography>
+                          {(rows as [string, unknown][]).map(([k, v]) => (
+                            <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, borderBottom: `1px solid ${T.border}` }}>
+                              <Typography sx={{ fontSize: 12, color: T.muted }}>{k}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.body }}>{String(v)}</Typography>
                             </Box>
                           ))}
                         </CardContent>
                       </Card>
                     </Grid>
-                  </Grid>
-                </Box>
+                  ))}
+                  {selectedDaemonSet.containers.length > 0 && (
+                    <Grid item xs={12}>
+                      <Card sx={{ bgcolor: T.bg, border: `1px solid ${T.border}`, borderRadius: 1 }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>Containers</Typography>
+                          {selectedDaemonSet.containers.map((c, i) => (
+                            <Box key={i} sx={{ mb: 1.5, pb: 1.5, borderBottom: `1px solid ${T.border}` }}>
+                              <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{c.name}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.muted }}>{c.image}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>
+                                CPU: {c.resources.requests?.cpu || 'N/A'} / {c.resources.limits?.cpu || 'N/A'} &nbsp;·&nbsp; Mem: {c.resources.requests?.memory || 'N/A'} / {c.resources.limits?.memory || 'N/A'}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  )}
+                </Grid>
               )}
 
               {/* Investigations Tab */}
               {activeTab === 1 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <TroubleshootIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Active Investigations
-                  </Typography>
                   {generateInvestigations(selectedDaemonSet).map((inv, idx) => (
-                    <Accordion key={idx}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          {inv.type === 'error' && <ErrorIcon color="error" />}
-                          {inv.type === 'warning' && <WarningIcon color="warning" />}
-                          {inv.type === 'info' && <InfoIcon color="info" />}
-                          <Typography>{inv.title}</Typography>
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Typography variant="body2" paragraph>{inv.description}</Typography>
-                        {inv.action && (
-                          <Box>
-                            <Typography variant="caption" color="text.secondary">
-                              Recommended Action:
-                            </Typography>
-                            <Typography variant="body2">{inv.action}</Typography>
-                            <Button
-                                size="small"
-                                variant="contained"
-                                sx={{ mt: 1 }}
-                                onClick={() => handleAutoFix(selectedDaemonSet, inv.title)}
-                                disabled={actionLoading}
-                              >
-                                Auto-Fix
-                              </Button>
-                          </Box>
-                        )}
-                      </AccordionDetails>
-                    </Accordion>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`,
+                      bgcolor: inv.type === 'error' ? '#1a0a0a' : inv.type === 'warning' ? '#1a1200' : '#0a1a0a' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {inv.type === 'error' && <ErrorIcon sx={{ fontSize: 16, color: T.red }} />}
+                        {inv.type === 'warning' && <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />}
+                        {inv.type === 'info' && <InfoIcon sx={{ fontSize: 16, color: T.green }} />}
+                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{inv.title}</Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{inv.description}</Typography>
+                      {inv.action && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>→ {inv.action}</Typography>}
+                    </Box>
                   ))}
                   {generateInvestigations(selectedDaemonSet).length === 0 && (
-                    <Alert severity="success">No issues found - DaemonSet is healthy!</Alert>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                      <Typography sx={{ fontSize: 13, color: T.green }}>No issues found — DaemonSet is healthy</Typography>
+                    </Box>
                   )}
                 </Box>
               )}
@@ -781,53 +664,17 @@ const DaemonSets: React.FC = () => {
               {/* Recommendations Tab */}
               {activeTab === 2 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <RecommendIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Optimization Recommendations
-                  </Typography>
                   {generateRecommendations(selectedDaemonSet).map((rec, idx) => (
-                    <Card key={idx} sx={{ mb: 2 }} variant="outlined">
-                      <CardContent>
-                        <Box display="flex" alignItems="center" gap={1} mb={1}>
-                          <Chip 
-                            label={rec.category} 
-                            size="small" 
-                            color={
-                              rec.category === 'security' ? 'error' :
-                              rec.category === 'performance' ? 'warning' :
-                              rec.category === 'cost' ? 'info' : 'success'
-                            }
-                          />
-                          <Chip 
-                            label={rec.priority} 
-                            size="small" 
-                            variant="outlined"
-                            color={
-                              rec.priority === 'high' ? 'error' :
-                              rec.priority === 'medium' ? 'warning' : 'default'
-                            }
-                          />
-                        </Box>
-                        <Typography variant="subtitle2" gutterBottom>{rec.title}</Typography>
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                          {rec.description}
-                        </Typography>
-                        <Divider sx={{ my: 1 }} />
-                        <Typography variant="caption" color="text.secondary">Impact:</Typography>
-                        <Typography variant="body2" paragraph>{rec.impact}</Typography>
-                        <Typography variant="caption" color="text.secondary">Action:</Typography>
-                        <Typography variant="body2">{rec.action}</Typography>
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          sx={{ mt: 1 }}
-                          onClick={() => handleAutoFix(selectedDaemonSet, rec.title)}
-                          disabled={actionLoading}
-                        >
-                          Apply Recommendation
-                        </Button>
-                      </CardContent>
-                    </Card>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`, bgcolor: T.bg }}>
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        <Chip label={rec.category} size="small" sx={{ bgcolor: T.border, color: T.text, fontSize: 11, height: 20 }} />
+                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? '#450a0a' : rec.priority === 'medium' ? '#451a03' : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
+                      </Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{rec.title}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>{rec.description}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>Impact: {rec.impact}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted }}>→ {rec.action}</Typography>
+                    </Box>
                   ))}
                 </Box>
               )}
@@ -835,117 +682,54 @@ const DaemonSets: React.FC = () => {
               {/* Diagnostics Tab */}
               {activeTab === 3 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <HealthAndSafetyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Health Checks & Validations
-                  </Typography>
-                  <List>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color={selectedDaemonSet.number_ready === selectedDaemonSet.desired_number_scheduled ? "success" : "error"} />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Node Coverage"
-                        secondary={`${selectedDaemonSet.number_ready}/${selectedDaemonSet.desired_number_scheduled} nodes covered`}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color={selectedDaemonSet.number_misscheduled === 0 ? "success" : "error"} />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Scheduling"
-                        secondary={`${selectedDaemonSet.number_misscheduled} misscheduled pods`}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <DnsIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Node Selectors"
-                        secondary="Validate node affinity and tolerations"
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SecurityIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Security Checks"
-                        secondary="Image tags, resource limits, privileged access"
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <NetworkCheckIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Network Validation"
-                        secondary="Host network and port conflicts"
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SpeedIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Performance Metrics"
-                        secondary="Per-node resource utilization"
-                      />
-                    </ListItem>
-                  </List>
+                  {[
+                    { ok: selectedDaemonSet.number_ready === selectedDaemonSet.desired_number_scheduled, label: 'Node Coverage', sub: `${selectedDaemonSet.number_ready}/${selectedDaemonSet.desired_number_scheduled} nodes covered` },
+                    { ok: selectedDaemonSet.number_misscheduled === 0, label: 'Scheduling', sub: `${selectedDaemonSet.number_misscheduled} misscheduled pods` },
+                    { ok: selectedDaemonSet.containers.every(c => c.resources.limits), label: 'Resource Limits', sub: 'All containers have limits' },
+                    { ok: !selectedDaemonSet.containers.some(c => c.image.includes(':latest')), label: 'Image Tags', sub: 'No :latest tags' },
+                  ].map(({ ok, label, sub }) => (
+                    <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, borderBottom: `1px solid ${T.border}` }}>
+                      {ok ? <CheckCircleIcon sx={{ fontSize: 18, color: T.green }} /> : <ErrorIcon sx={{ fontSize: 18, color: T.red }} />}
+                      <Box>
+                        <Typography sx={{ fontSize: 13, color: T.text }}>{label}</Typography>
+                        <Typography sx={{ fontSize: 12, color: T.muted }}>{sub}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
                 </Box>
               )}
 
               {/* Actions Tab */}
               {activeTab === 4 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Available Actions
+                  <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}
+                    onClick={() => handleRestartPods(selectedDaemonSet)} disabled={actionLoading}
+                    startIcon={actionLoading ? <CircularProgress size={16} /> : <RefreshIcon />}>
+                    Restart All Pods (Rolling)
+                  </Button>
+                  <Typography sx={{ fontSize: 12, color: T.muted }}>
+                    Replaces pods one at a time across all {selectedDaemonSet.desired_number_scheduled} nodes
                   </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Pod Management</Typography>
-                          <Button
-                            variant="contained"
-                            fullWidth
-                            sx={{ mb: 1 }}
-                            onClick={() => handleRestartPods(selectedDaemonSet)}
-                            disabled={actionLoading}
-                            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
-                          >
-                            Restart All Pods
-                          </Button>
-                          <Typography variant="caption" color="text.secondary">
-                            Rolling restart on all {selectedDaemonSet.desired_number_scheduled} nodes — pods are replaced one at a time
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
                 </Box>
               )}
+              </Box>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+            <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+              <Button onClick={() => setDetailsOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Close</Button>
             </DialogActions>
           </>
         )}
       </Dialog>
 
       {/* Confirm dialog */}
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirm Action</DialogTitle>
-        <DialogContent>
-          <Typography>{confirmAction?.label}</Typography>
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth sx={dlgSx}>
+        <DialogTitle sx={{ borderBottom: `1px solid ${T.border}`, color: T.text }}>Confirm Action</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography sx={{ color: T.body }}>{confirmAction?.label}</Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button variant="contained" color="warning" onClick={runConfirmed}>Confirm</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+          <Button onClick={() => setConfirmOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' }, textTransform: 'none' }} onClick={runConfirmed}>Confirm</Button>
         </DialogActions>
       </Dialog>
 

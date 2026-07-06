@@ -1,390 +1,266 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Box,
-  Typography,
-  Paper,
-  Grid,
-  Card,
-  CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  LinearProgress,
-  IconButton,
-  TextField,
-  MenuItem,
+  Box, Typography, Grid, Card, CardContent,
+  CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Chip, Paper, LinearProgress,
+  TextField, InputAdornment, FormControl, InputLabel, Select, MenuItem,
+  SelectChangeEvent,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
+  Search as SearchIcon,
   Warning as WarningIcon,
 } from '@mui/icons-material';
+import { API_BASE_URL } from '../config/api';
 
-interface NamespaceWasteData {
-  namespace: string;
-  cluster: string;
-  waste_percentage: number;
-  cpu_waste: number;
-  memory_waste: number;
-  storage_waste: number;
-  monthly_cost: number;
-  pod_count: number;
-  over_provisioned_pods: number;
-  idle_pods: number;
-  recommendation: string;
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:     '#0f1724',
+  card:   '#1e2433',
+  hover:  '#252e42',
+  border: '#2a3245',
+  text:   '#e8eaf0',
+  muted:  '#8b95a9',
+  body:   '#c8cdd8',
+  green:  '#4ade80',
+  red:    '#f87171',
+  yellow: '#f59e0b',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface NsRow {
+  name:          string;
+  current_cost:  number;
+  optimized_cost:number;
+  savings:       number;
+  waste_pct:     number;  // savings_percent from API
+  pod_count:     number;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const wasteColor = (pct: number) =>
+  pct >= 60 ? T.red : pct >= 35 ? T.yellow : T.green;
+
+const wasteBarBg = (pct: number) =>
+  pct >= 60 ? '#450a0a' : pct >= 35 ? '#451a03' : '#052e16';
+
+const selectSx = {
+  color: T.body, bgcolor: T.bg,
+  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+  '& .MuiSvgIcon-root':                            { color: T.muted },
+};
+const menuProps = { PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } };
+
+const StatCard: React.FC<{ label: string; value: string | number; sub?: string; accent?: string }> = ({ label, value, sub, accent }) => (
+  <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+      <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>{label}</Typography>
+      <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent ?? T.text, lineHeight: 1 }}>{value}</Typography>
+      {sub && <Typography sx={{ fontSize: 11, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+    </CardContent>
+  </Card>
+);
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 const NamespaceWaste: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [namespaces, setNamespaces] = useState<NamespaceWasteData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedCluster, setSelectedCluster] = useState<string>('all');
+  const [rows,       setRows]      = useState<NsRow[]>([]);
+  const [loading,    setLoading]   = useState(true);
+  const [error,      setError]     = useState<string | null>(null);
+  const [search,     setSearch]    = useState('');
+  const [wasteFilter,setWasteFilter] = useState('all');
 
   const fetchData = async () => {
-    setLoading(true);
     try {
-      const response = await fetch('/api/v1/heatmap/namespace-waste');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      setNamespaces(data.namespaces || []);
-    } catch (error) {
-      console.error('Error fetching namespace waste data:', error);
-      // Mock data
-      setNamespaces([
-        {
-          namespace: 'analytics',
-          cluster: 'prod-cluster-us-east',
-          waste_percentage: 63,
-          cpu_waste: 68,
-          memory_waste: 58,
-          storage_waste: 63,
-          monthly_cost: 1850.25,
-          pod_count: 45,
-          over_provisioned_pods: 28,
-          idle_pods: 5,
-          recommendation: 'Reduce CPU requests by 40%, Memory by 30%',
-        },
-        {
-          namespace: 'payments',
-          cluster: 'prod-cluster-us-east',
-          waste_percentage: 42,
-          cpu_waste: 45,
-          memory_waste: 39,
-          storage_waste: 42,
-          monthly_cost: 980.50,
-          pod_count: 32,
-          over_provisioned_pods: 13,
-          idle_pods: 2,
-          recommendation: 'Optimize 13 over-provisioned pods',
-        },
-        {
-          namespace: 'frontend',
-          cluster: 'prod-cluster-us-east',
-          waste_percentage: 35,
-          cpu_waste: 38,
-          memory_waste: 32,
-          storage_waste: 35,
-          monthly_cost: 720.75,
-          pod_count: 28,
-          over_provisioned_pods: 10,
-          idle_pods: 1,
-          recommendation: 'Right-size 10 pods',
-        },
-        {
-          namespace: 'backend',
-          cluster: 'prod-cluster-us-east',
-          waste_percentage: 48,
-          cpu_waste: 52,
-          memory_waste: 44,
-          storage_waste: 48,
-          monthly_cost: 1240.00,
-          pod_count: 38,
-          over_provisioned_pods: 18,
-          idle_pods: 3,
-          recommendation: 'Reduce resource requests across 18 pods',
-        },
-        {
-          namespace: 'monitoring',
-          cluster: 'prod-cluster-us-east',
-          waste_percentage: 28,
-          cpu_waste: 30,
-          memory_waste: 26,
-          storage_waste: 28,
-          monthly_cost: 450.30,
-          pod_count: 15,
-          over_provisioned_pods: 4,
-          idle_pods: 0,
-          recommendation: 'Well optimized, minor adjustments needed',
-        },
-        {
-          namespace: 'staging-app',
-          cluster: 'staging-cluster',
-          waste_percentage: 72,
-          cpu_waste: 75,
-          memory_waste: 69,
-          storage_waste: 72,
-          monthly_cost: 890.40,
-          pod_count: 22,
-          over_provisioned_pods: 16,
-          idle_pods: 4,
-          recommendation: 'Critical: Reduce resources by 50%',
-        },
-        {
-          namespace: 'dev-testing',
-          cluster: 'dev-cluster',
-          waste_percentage: 65,
-          cpu_waste: 68,
-          memory_waste: 62,
-          storage_waste: 65,
-          monthly_cost: 520.15,
-          pod_count: 18,
-          over_provisioned_pods: 12,
-          idle_pods: 3,
-          recommendation: 'Scale down idle pods, optimize requests',
-        },
-      ]);
+      setLoading(true); setError(null);
+      const res = await fetch(`${API_BASE_URL}/v1/cost-savings/overview${clusterParam}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const nsRows: NsRow[] = (data.savings_by_namespace ?? []).map((n: any) => ({
+        name:           n.name,
+        current_cost:   n.current_cost,
+        optimized_cost: n.optimized_cost,
+        savings:        n.savings,
+        waste_pct:      n.savings_percent,
+        pod_count:      0,
+      }));
+      setRows(nsRows);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [clusterParam]);
+  useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line
 
-  const getWasteColor = (percentage: number) => {
-    if (percentage >= 60) return 'error';
-    if (percentage >= 40) return 'warning';
-    return 'success';
-  };
+  const filtered = useMemo(() => rows.filter(r => {
+    const q = search.toLowerCase();
+    const matchSearch = r.name.toLowerCase().includes(q);
+    const matchWaste =
+      wasteFilter === 'all'    ? true :
+      wasteFilter === 'high'   ? r.waste_pct >= 60 :
+      wasteFilter === 'medium' ? r.waste_pct >= 35 && r.waste_pct < 60 :
+                                 r.waste_pct < 35;
+    return matchSearch && matchWaste;
+  }), [rows, search, wasteFilter]);
 
-  const filteredNamespaces = selectedCluster === 'all'
-    ? namespaces
-    : namespaces.filter(ns => ns.cluster === selectedCluster);
+  const totalCurrent  = filtered.reduce((s, r) => s + r.current_cost, 0);
+  const totalSavings  = filtered.reduce((s, r) => s + r.savings, 0);
+  const avgWaste      = filtered.length > 0 ? filtered.reduce((s, r) => s + r.waste_pct, 0) / filtered.length : 0;
+  const highWasteNs   = rows.filter(r => r.waste_pct >= 60).length;
 
-  const clusters = ['all', ...Array.from(new Set(namespaces.map(ns => ns.cluster)))];
-  const totalWaste = filteredNamespaces.reduce((sum, ns) => sum + ns.monthly_cost, 0);
-  const avgWaste = filteredNamespaces.length > 0
-    ? filteredNamespaces.reduce((sum, ns) => sum + ns.waste_percentage, 0) / filteredNamespaces.length
-    : 0;
-  const totalPods = filteredNamespaces.reduce((sum, ns) => sum + ns.pod_count, 0);
-  const overProvisionedPods = filteredNamespaces.reduce((sum, ns) => sum + ns.over_provisioned_pods, 0);
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.2 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
+    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: '#161f30' };
+
+  if (loading) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress sx={{ color: T.green }} />
+    </Box>
+  );
+  if (error) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+    </Box>
+  );
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Namespace Waste Heatmap
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Identify waste hotspots by namespace
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Namespace Waste</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            {filtered.length} of {rows.length} namespaces — over-provisioned resource spend vs. optimised sizing
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField
-            select
-            size="small"
-            value={selectedCluster}
-            onChange={(e) => setSelectedCluster(e.target.value)}
-            sx={{ minWidth: 200 }}
-            label="Filter by Cluster"
-          >
-            {clusters.map((cluster) => (
-              <MenuItem key={cluster} value={cluster}>
-                {cluster === 'all' ? 'All Clusters' : cluster}
-              </MenuItem>
-            ))}
-          </TextField>
-          <IconButton onClick={fetchData} disabled={loading}>
-            <RefreshIcon />
-          </IconButton>
-        </Box>
+        <IconButton onClick={fetchData} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+          <RefreshIcon fontSize="small" />
+        </IconButton>
       </Box>
 
-      {loading && <LinearProgress sx={{ mb: 2 }} />}
-
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Total Waste Cost
-              </Typography>
-              <Typography variant="h4" color="error.main">
-                ${totalWaste.toFixed(2)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Monthly across namespaces
-              </Typography>
-            </CardContent>
-          </Card>
+      {/* Stats */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Total Current Spend" value={`$${totalCurrent.toFixed(0)}/mo`} sub="Across shown namespaces" accent={T.body} />
         </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Average Waste
-              </Typography>
-              <Typography variant="h4" color="warning.main">
-                {avgWaste.toFixed(1)}%
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Per namespace average
-              </Typography>
-            </CardContent>
-          </Card>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Potential Savings" value={`$${totalSavings.toFixed(0)}/mo`} sub={`$${(totalSavings * 12).toFixed(0)}/yr`} accent={T.red} />
         </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Over-Provisioned Pods
-              </Typography>
-              <Typography variant="h4" color="error.main">
-                {overProvisionedPods}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Out of {totalPods} total pods
-              </Typography>
-            </CardContent>
-          </Card>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Avg Waste" value={`${avgWaste.toFixed(1)}%`} sub="Across filtered rows" accent={wasteColor(avgWaste)} />
         </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Namespaces Analyzed
-              </Typography>
-              <Typography variant="h4" color="primary.main">
-                {filteredNamespaces.length}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Active namespaces
-              </Typography>
-            </CardContent>
-          </Card>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="High Waste NS" value={highWasteNs} sub="≥60% over-provisioned" accent={T.red} />
         </Grid>
       </Grid>
 
-      {/* Namespace Waste Table */}
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Namespace Waste Details
-        </Typography>
-        <TableContainer>
-          <Table>
-            <TableHead>
+      {/* Filters */}
+      <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3 }}>
+        <Grid container spacing={2} alignItems="center">
+          <Grid item xs={12} md={6}>
+            <TextField fullWidth size="small"
+              placeholder="Search namespace…"
+              value={search} onChange={e => setSearch(e.target.value)}
+              InputProps={{
+                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+                sx: { color: T.body, bgcolor: T.bg,
+                  '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+                  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+                },
+              }}
+            />
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth size="small">
+              <InputLabel sx={{ color: T.muted }}>Waste Level</InputLabel>
+              <Select value={wasteFilter} label="Waste Level"
+                onChange={(e: SelectChangeEvent) => setWasteFilter(e.target.value)}
+                sx={selectSx} MenuProps={menuProps}>
+                <MenuItem value="all">All Levels</MenuItem>
+                <MenuItem value="high">High (≥60%)</MenuItem>
+                <MenuItem value="medium">Medium (35–60%)</MenuItem>
+                <MenuItem value="low">Low (&lt;35%)</MenuItem>
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {/* Table */}
+      <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={headSx}>Namespace</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Current/mo</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Optimal/mo</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Waste/mo</TableCell>
+              <TableCell sx={{ ...headSx, minWidth: 160 }}>Waste %</TableCell>
+              <TableCell sx={headSx}>Recommendation</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filtered.length === 0 ? (
               <TableRow>
-                <TableCell>Namespace</TableCell>
-                <TableCell>Cluster</TableCell>
-                <TableCell align="center">Total Waste</TableCell>
-                <TableCell align="center">CPU Waste</TableCell>
-                <TableCell align="center">Memory Waste</TableCell>
-                <TableCell align="center">Storage Waste</TableCell>
-                <TableCell align="right">Monthly Cost</TableCell>
-                <TableCell align="center">Pods</TableCell>
-                <TableCell>Recommendation</TableCell>
+                <TableCell colSpan={6} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                  No namespaces match your filters
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredNamespaces.map((ns) => (
-                <TableRow key={`${ns.cluster}-${ns.namespace}`} hover>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="medium">
-                      {ns.namespace}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip label={ns.cluster} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
-                      <Chip
-                        label={`${ns.waste_percentage}%`}
-                        color={getWasteColor(ns.waste_percentage)}
-                        size="small"
-                      />
-                      {ns.waste_percentage >= 60 && <WarningIcon color="error" fontSize="small" />}
+            ) : filtered.map(row => {
+              const wPct = row.waste_pct;
+              const rec = wPct >= 80 ? 'Critical: reduce requests by ~80%'
+                : wPct >= 60 ? 'High waste — right-size pod requests'
+                : wPct >= 35 ? 'Moderate over-provisioning detected'
+                : 'Well sized — minor optimisations possible';
+              return (
+                <TableRow key={row.name} hover sx={{ '&:hover': { bgcolor: T.hover } }}>
+                  <TableCell sx={cellSx}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                      {wPct >= 60 && <WarningIcon sx={{ fontSize: 14, color: T.red, flexShrink: 0 }} />}
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text, fontFamily: 'monospace' }}>
+                        {row.name}
+                      </Typography>
                     </Box>
                   </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ width: '100%' }}>
-                      <Typography variant="body2" gutterBottom>
-                        {ns.cpu_waste}%
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={ns.cpu_waste}
-                        color={getWasteColor(ns.cpu_waste)}
-                      />
+                  <TableCell sx={{ ...cellSx, textAlign: 'right', color: T.muted }}>${row.current_cost.toFixed(2)}</TableCell>
+                  <TableCell sx={{ ...cellSx, textAlign: 'right', color: T.green }}>${row.optimized_cost.toFixed(2)}</TableCell>
+                  <TableCell sx={{ ...cellSx, textAlign: 'right' }}>
+                    <Typography sx={{ fontSize: 12, fontWeight: 700, color: wasteColor(wPct) }}>
+                      ${row.savings.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                  <TableCell sx={{ ...cellSx, minWidth: 160 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ flex: 1, height: 6, bgcolor: T.border, borderRadius: 3, overflow: 'hidden' }}>
+                        <Box sx={{ height: '100%', width: `${Math.min(100, wPct)}%`, bgcolor: wasteColor(wPct), borderRadius: 3 }} />
+                      </Box>
+                      <Chip label={`${wPct.toFixed(0)}%`} size="small"
+                        sx={{ bgcolor: wasteBarBg(wPct), color: wasteColor(wPct),
+                          border: `1px solid ${wasteColor(wPct)}44`, fontSize: 10, height: 18, minWidth: 44 }} />
                     </Box>
                   </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ width: '100%' }}>
-                      <Typography variant="body2" gutterBottom>
-                        {ns.memory_waste}%
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={ns.memory_waste}
-                        color={getWasteColor(ns.memory_waste)}
-                      />
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ width: '100%' }}>
-                      <Typography variant="body2" gutterBottom>
-                        {ns.storage_waste}%
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={ns.storage_waste}
-                        color={getWasteColor(ns.storage_waste)}
-                      />
-                    </Box>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" fontWeight="medium" color="error.main">
-                      ${ns.monthly_cost.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Typography variant="body2">
-                      {ns.pod_count} total
-                    </Typography>
-                    <Typography variant="caption" color="error.main">
-                      {ns.over_provisioned_pods} over-provisioned
-                    </Typography>
-                    {ns.idle_pods > 0 && (
-                      <Typography variant="caption" color="warning.main" display="block">
-                        {ns.idle_pods} idle
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {ns.recommendation}
-                    </Typography>
+                  <TableCell sx={{ ...cellSx, maxWidth: 260 }}>
+                    <Typography noWrap sx={{ fontSize: 11, color: T.muted }} title={rec}>{rec}</Typography>
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Typography sx={{ fontSize: 12, color: T.muted, mt: 2, textAlign: 'right' }}>
+        {filtered.length} of {rows.length} namespaces shown · waste = (current − optimal) / current
+      </Typography>
     </Box>
   );
 };
 
 export default NamespaceWaste;
-
-// Made with Bob

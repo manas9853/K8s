@@ -1152,240 +1152,208 @@ async def get_cluster_score_endpoint():
     return {"clusters": clusters}
 
 
-@router.get("/namespace-score")
-async def get_namespace_score():
-    """
-    Get namespace-level optimization scores from real Kubernetes data
-    """
-    if not K8S_AVAILABLE:
-        return {"namespaces": []}
-    
+def _get_pods_from_db(cluster_id: str | None = None) -> tuple[str, list]:
+    """Load pod list directly from db_manager — works without K8s connectivity."""
     try:
-        # Fetch pods data
-        pods_data = await fetch_pods_data()
-        
-        if not pods_data:
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return ("unknown", [])
+        if cluster_id:
+            target = next((c for c in clusters if c["cluster_name"] == cluster_id), clusters[0])
+        else:
+            target = clusters[0]
+        cluster_name = target["cluster_name"]
+        metrics_row = db_manager.get_latest_metrics(cluster_name)
+        if not metrics_row:
+            return (cluster_name, [])
+        pods_domain = metrics_row.get("pods") or {}
+        if isinstance(pods_domain, str):
+            import json as _json
+            pods_domain = _json.loads(pods_domain)
+        pods = pods_domain.get("items", []) if isinstance(pods_domain, dict) else []
+        return (cluster_name, pods)
+    except Exception as e:
+        logger.error(f"_get_pods_from_db error: {e}")
+        return ("unknown", [])
+
+
+def _parse_cpu(val) -> float:
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if s.endswith('m'):
+        return float(s[:-1]) / 1000
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _parse_mem_mb(val) -> float:
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    s = str(val).strip()
+    if s.endswith('Mi'):
+        return float(s[:-2])
+    if s.endswith('Gi'):
+        return float(s[:-2]) * 1024
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _pod_cpu_req(pod: dict) -> float:
+    v = pod.get('cpu_request') or (pod.get('cpu_metrics') or {}).get('requested')
+    return _parse_cpu(v)
+
+def _pod_cpu_use(pod: dict) -> float:
+    v = pod.get('cpu_usage') or pod.get('cpu_usage_cores') or (pod.get('cpu_metrics') or {}).get('current')
+    return _parse_cpu(v)
+
+def _pod_mem_req(pod: dict) -> float:
+    v = pod.get('memory_request_mb') or pod.get('memory_request') or (pod.get('memory_metrics') or {}).get('requested')
+    return _parse_mem_mb(v)
+
+def _pod_mem_use(pod: dict) -> float:
+    v = pod.get('memory_usage_mb') or pod.get('memory_usage') or (pod.get('memory_metrics') or {}).get('current')
+    return _parse_mem_mb(v)
+
+
+def _eff_score(used: float, requested: float) -> float:
+    """Convert a used/requested ratio into a 0-100 score. Optimal 60-85%."""
+    if requested <= 0:
+        return 50.0  # unknown → neutral
+    ratio = (used / requested) * 100
+    if 60 <= ratio <= 85:
+        return 100.0
+    if ratio < 60:
+        return max(20.0, ratio / 60 * 100)
+    return max(20.0, 100 - (ratio - 85) * 2)
+
+
+@router.get("/namespace-score")
+async def get_namespace_score(cluster_id: str | None = None):
+    """Namespace-level optimization scores computed from agent DB pod data."""
+    try:
+        cluster_name, pods = _get_pods_from_db(cluster_id)
+        if not pods:
             return {"namespaces": []}
-        
-        # Group by namespace
-        namespace_stats = defaultdict(lambda: {
-            'cluster': '',
-            'pods': [],
-            'total_cpu_req': 0.0,
-            'total_cpu_used': 0.0,
-            'total_mem_req': 0.0,
-            'total_mem_used': 0.0,
-            'issues': 0
-        })
-        
-        for pod in pods_data:
+
+        ns_stats: dict = {}
+        for pod in pods:
             ns = pod.get('namespace', 'default')
-            cluster = pod.get('cluster_id', 'unknown')
-            
-            if not namespace_stats[ns]['cluster']:
-                namespace_stats[ns]['cluster'] = cluster
-            
-            namespace_stats[ns]['pods'].append(pod)
-            
-            cpu_metrics = pod.get('cpu_metrics', {})
-            mem_metrics = pod.get('memory_metrics', {})
-            
-            namespace_stats[ns]['total_cpu_req'] += cpu_metrics.get(
-                'requested', 0
-            )
-            namespace_stats[ns]['total_cpu_used'] += cpu_metrics.get(
-                'current', 0
-            )
-            namespace_stats[ns]['total_mem_req'] += mem_metrics.get(
-                'requested', 0
-            )
-            namespace_stats[ns]['total_mem_used'] += mem_metrics.get(
-                'current', 0
-            )
-            
-            # Count issues
-            if pod.get('status') in ['over_provisioned', 'under_provisioned']:
-                namespace_stats[ns]['issues'] += 1
-        
-        # Calculate scores
+            if ns not in ns_stats:
+                ns_stats[ns] = {
+                    'cluster': cluster_name,
+                    'pod_count': 0,
+                    'issues': 0,
+                    'cpu_req': 0.0, 'cpu_use': 0.0,
+                    'mem_req': 0.0, 'mem_use': 0.0,
+                }
+            s = ns_stats[ns]
+            s['pod_count'] += 1
+            s['cpu_req'] += _pod_cpu_req(pod)
+            s['cpu_use'] += _pod_cpu_use(pod)
+            s['mem_req'] += _pod_mem_req(pod)
+            s['mem_use'] += _pod_mem_use(pod)
+            if pod.get('status') in ('over_provisioned', 'under_provisioned'):
+                s['issues'] += 1
+
         namespaces = []
-        for ns_name, stats in namespace_stats.items():
-            # CPU efficiency
-            cpu_eff = (
-                (stats['total_cpu_used'] / stats['total_cpu_req'] * 100)
-                if stats['total_cpu_req'] > 0 else 0
-            )
-            
-            # Memory efficiency
-            mem_eff = (
-                (stats['total_mem_used'] / stats['total_mem_req'] * 100)
-                if stats['total_mem_req'] > 0 else 0
-            )
-            
-            # Storage efficiency (simulated)
-            storage_eff = 75.0
-            
-            # Resource utilization
-            resource_util = (cpu_eff + mem_eff) / 2
-            
-            # Pod health (based on issues)
-            pod_count = len(stats['pods'])
-            pod_health = (
-                ((pod_count - stats['issues']) / pod_count * 100)
-                if pod_count > 0 else 100
-            )
-            
-            # Overall score (weighted average)
-            overall = (
-                cpu_eff * 0.25 +
-                mem_eff * 0.25 +
-                storage_eff * 0.15 +
-                resource_util * 0.20 +
-                pod_health * 0.15
-            )
-            
+        for ns_name, s in ns_stats.items():
+            cpu_score = _eff_score(s['cpu_use'], s['cpu_req'])
+            mem_score = _eff_score(s['mem_use'], s['mem_req'])
+            pod_health = max(0.0, 100.0 - (s['issues'] / max(s['pod_count'], 1)) * 100)
+            overall = round(cpu_score * 0.35 + mem_score * 0.30 + pod_health * 0.20 + 75.0 * 0.15, 1)
             namespaces.append({
-                'namespace': ns_name,
-                'cluster': stats['cluster'],
-                'overall_score': round(overall, 1),
-                'cpu_efficiency': round(cpu_eff, 1),
-                'memory_efficiency': round(mem_eff, 1),
-                'storage_efficiency': round(storage_eff, 1),
-                'resource_utilization': round(resource_util, 1),
-                'pod_health': round(pod_health, 1),
-                'grade': get_grade_from_score(overall),
-                'status': get_status_from_score(overall),
-                'pod_count': pod_count,
-                'issues_count': stats['issues']
+                'namespace':           ns_name,
+                'cluster':             s['cluster'],
+                'overall_score':       overall,
+                'cpu_efficiency':      round(cpu_score, 1),
+                'memory_efficiency':   round(mem_score, 1),
+                'storage_efficiency':  75.0,
+                'resource_utilization': round((cpu_score + mem_score) / 2, 1),
+                'pod_health':          round(pod_health, 1),
+                'grade':               get_grade_from_score(overall),
+                'status':              get_status_from_score(overall),
+                'pod_count':           s['pod_count'],
+                'issues_count':        s['issues'],
             })
-        
+
         return {
-            "namespaces": sorted(
-                namespaces,
-                key=lambda x: x['overall_score'],
-                reverse=True
-            )
+            "namespaces": sorted(namespaces, key=lambda x: x['overall_score'], reverse=True)
         }
-        
     except Exception as e:
         logger.error(f"Error calculating namespace scores: {e}")
         return {"namespaces": []}
 
 
 @router.get("/team-score")
-async def get_team_score():
+async def get_team_score(cluster_id: str | None = None):
     """
-    Get team-level optimization scores from real Kubernetes data
+    Team-level scores grouped by namespace prefix (e.g. 'kube' ← kube-system).
+    Falls back to grouping all namespaces when no team labels exist.
     """
-    if not K8S_AVAILABLE:
-        return {"teams": []}
-    
     try:
-        # Fetch pods data
-        pods_data = await fetch_pods_data()
-        
-        if not pods_data:
+        cluster_name, pods = _get_pods_from_db(cluster_id)
+        if not pods:
             return {"teams": []}
-        
-        # Group by team (using namespace prefix as team identifier)
-        team_stats = defaultdict(lambda: {
-            'namespaces': set(),
-            'pods': [],
-            'total_cpu_req': 0.0,
-            'total_cpu_used': 0.0,
-            'total_mem_req': 0.0,
-            'total_mem_used': 0.0,
-            'issues': 0,
-            'recommendations': 0
-        })
-        
-        for pod in pods_data:
+
+        team_stats: dict = {}
+        for pod in pods:
             ns = pod.get('namespace', 'default')
-            # Extract team from namespace
+            # Group by namespace prefix (before first '-'), capitalised
             team = ns.split('-')[0] if '-' in ns else ns
-            
-            team_stats[team]['namespaces'].add(ns)
-            team_stats[team]['pods'].append(pod)
-            
-            cpu_metrics = pod.get('cpu_metrics', {})
-            mem_metrics = pod.get('memory_metrics', {})
-            
-            team_stats[team]['total_cpu_req'] += cpu_metrics.get(
-                'requested', 0
-            )
-            team_stats[team]['total_cpu_used'] += cpu_metrics.get(
-                'current', 0
-            )
-            team_stats[team]['total_mem_req'] += mem_metrics.get(
-                'requested', 0
-            )
-            team_stats[team]['total_mem_used'] += mem_metrics.get(
-                'current', 0
-            )
-            
-            # Count issues and recommendations
-            status = pod.get('status', '')
-            if status in ['over_provisioned', 'under_provisioned']:
-                team_stats[team]['issues'] += 1
-                team_stats[team]['recommendations'] += 1
-        
-        # Calculate scores
+
+            if team not in team_stats:
+                team_stats[team] = {
+                    'namespaces': set(),
+                    'pod_count': 0,
+                    'issues': 0,
+                    'cpu_req': 0.0, 'cpu_use': 0.0,
+                    'mem_req': 0.0, 'mem_use': 0.0,
+                }
+            s = team_stats[team]
+            s['namespaces'].add(ns)
+            s['pod_count'] += 1
+            s['cpu_req'] += _pod_cpu_req(pod)
+            s['cpu_use'] += _pod_cpu_use(pod)
+            s['mem_req'] += _pod_mem_req(pod)
+            s['mem_use'] += _pod_mem_use(pod)
+            if pod.get('status') in ('over_provisioned', 'under_provisioned'):
+                s['issues'] += 1
+
         teams = []
-        for team_name, stats in team_stats.items():
-            # CPU efficiency
-            cpu_eff = (
-                (stats['total_cpu_used'] / stats['total_cpu_req'] * 100)
-                if stats['total_cpu_req'] > 0 else 0
-            )
-            
-            # Memory efficiency
-            mem_eff = (
-                (stats['total_mem_used'] / stats['total_mem_req'] * 100)
-                if stats['total_mem_req'] > 0 else 0
-            )
-            
-            # Compliance score (based on issues)
-            pod_count = len(stats['pods'])
-            compliance = (
-                ((pod_count - stats['issues']) / pod_count * 100)
-                if pod_count > 0 else 100
-            )
-            
-            # Best practices score (simulated)
-            best_practices = 80.0
-            
-            # Overall score
-            overall = (
-                cpu_eff * 0.30 +
-                mem_eff * 0.30 +
-                compliance * 0.25 +
-                best_practices * 0.15
-            )
-            
+        for team_name, s in team_stats.items():
+            cpu_score   = _eff_score(s['cpu_use'], s['cpu_req'])
+            mem_score   = _eff_score(s['mem_use'], s['mem_req'])
+            compliance  = max(0.0, 100.0 - (s['issues'] / max(s['pod_count'], 1)) * 100)
+            best_prac   = 80.0
+            overall     = round(cpu_score * 0.30 + mem_score * 0.30 + compliance * 0.25 + best_prac * 0.15, 1)
             teams.append({
-                'team_name': team_name.capitalize() + ' Team',
-                'overall_score': round(overall, 1),
-                'cpu_efficiency': round(cpu_eff, 1),
-                'memory_efficiency': round(mem_eff, 1),
-                'compliance_score': round(compliance, 1),
-                'best_practices_score': round(best_practices, 1),
-                'grade': get_grade_from_score(overall),
-                'status': get_status_from_score(overall),
-                'namespace_count': len(stats['namespaces']),
-                'pod_count': pod_count,
-                'issues_count': stats['issues'],
-                'recommendations_count': stats['recommendations']
+                'team_name':             team_name.capitalize() + ' Team',
+                'overall_score':         overall,
+                'cpu_efficiency':        round(cpu_score, 1),
+                'memory_efficiency':     round(mem_score, 1),
+                'compliance_score':      round(compliance, 1),
+                'best_practices_score':  best_prac,
+                'grade':                 get_grade_from_score(overall),
+                'status':                get_status_from_score(overall),
+                'namespace_count':       len(s['namespaces']),
+                'pod_count':             s['pod_count'],
+                'issues_count':          s['issues'],
+                'recommendations_count': s['issues'],
             })
-        
+
         return {
-            "teams": sorted(
-                teams,
-                key=lambda x: x['overall_score'],
-                reverse=True
-            )
+            "teams": sorted(teams, key=lambda x: x['overall_score'], reverse=True)
         }
-        
     except Exception as e:
         logger.error(f"Error calculating team scores: {e}")
         return {"teams": []}
-# Made with Bob - NOW WITH REAL KUBERNETES DATA from xforce-devops!
+# Made with Bob - reads from db_manager, no K8s connectivity required

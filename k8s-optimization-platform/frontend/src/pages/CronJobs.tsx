@@ -65,6 +65,29 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { API_BASE_URL } from '../config/api';
 
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:     '#0f1724',
+  card:   '#1e2433',
+  hover:  '#252e42',
+  border: '#2a3245',
+  text:   '#e8eaf0',
+  muted:  '#8b95a9',
+  body:   '#c8cdd8',
+  green:  '#4ade80',
+  red:    '#f87171',
+  yellow: '#f59e0b',
+};
+const selectSx = {
+  color: T.text, fontSize: 13, height: 38,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '& .MuiSvgIcon-root': { color: T.muted },
+  bgcolor: T.card,
+};
+const menuProps = { PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } };
+
 interface Container {
   name: string;
   image: string;
@@ -519,36 +542,38 @@ const CronJobs: React.FC = () => {
     sum + generateInvestigations(cronJob).filter(i => i.type === 'error' || i.type === 'warning').length, 0
   );
 
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
+  const dlgSx = { '& .MuiDialog-paper': { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 2 } };
+
   if (clustersLoading) {
-    return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
+    return <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress sx={{ color: T.green }} /></Box>;
   }
 
   if (clusters.length === 0) {
     return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
+      <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+        <Typography sx={{ color: T.text }} variant="h5">No clusters attached yet</Typography>
+        <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
           Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
+        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}>Go to Cluster Onboarding</Button>
       </Box>
     );
   }
 
   return (
-    <Box>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
       <Box mb={3} display="flex" justifyContent="space-between" alignItems="flex-start">
         <Box>
-          <Typography variant="h4" gutterBottom>
-            CronJobs
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Manage scheduled and recurring job execution
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>CronJobs</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            Manage scheduled and recurring job execution · {filteredCronJobs.length} of {totalCronJobs} shown
           </Typography>
         </Box>
         <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Cluster</InputLabel>
-          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange}>
+          <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Cluster</InputLabel>
+          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange} sx={selectSx} MenuProps={menuProps}>
             <MenuItem value="all">All Clusters</MenuItem>
             {clusters.map((c) => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
           </Select>
@@ -556,60 +581,26 @@ const CronJobs: React.FC = () => {
       </Box>
 
       {/* Summary Cards */}
-      <Grid container spacing={3} mb={3}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <ScheduleIcon color="primary" />
-                <Typography color="text.secondary" gutterBottom>
-                  Total CronJobs
-                </Typography>
-              </Box>
-              <Typography variant="h4">{totalCronJobs}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>Active</Typography>
-              <Typography variant="h4" color="success.main">{activeCronJobs}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                {suspendedCronJobs} suspended
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>Running Jobs</Typography>
-              <Typography variant="h4" color="info.main">{runningJobs}</Typography>
-              <Typography variant="body2" color="text.secondary">
-                Currently executing
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Badge badgeContent={totalIssues} color="error">
-                  <BugReportIcon color="action" />
-                </Badge>
-                <Typography color="text.secondary" gutterBottom>Issues</Typography>
-              </Box>
-              <Typography variant="h4" color={totalIssues > 0 ? "error.main" : "success.main"}>
-                {totalIssues}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Grid container spacing={2} mb={3}>
+        {[
+          { label: 'Total CronJobs', value: totalCronJobs, accent: T.text },
+          { label: 'Active', value: activeCronJobs, accent: T.green, sub: `${suspendedCronJobs} suspended` },
+          { label: 'Running Jobs', value: runningJobs, accent: T.yellow, sub: 'Currently executing' },
+          { label: 'Issues', value: totalIssues, accent: totalIssues > 0 ? T.red : T.green },
+        ].map(({ label, value, accent, sub }) => (
+          <Grid item xs={6} sm={3} key={label}>
+            <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>{label}</Typography>
+                <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent, lineHeight: 1 }}>{value}</Typography>
+                {sub && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
 
       {/* Search and Actions */}
       <Box display="flex" gap={2} mb={2}>
@@ -621,42 +612,40 @@ const CronJobs: React.FC = () => {
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
+            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+            sx: { color: T.text, fontSize: 13, bgcolor: T.card,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+            },
           }}
         />
         <Tooltip title="Refresh">
-          <IconButton onClick={() => fetchCronJobs(selectedClusterId)} color="primary">
-            <RefreshIcon />
+          <IconButton onClick={() => fetchCronJobs(selectedClusterId)} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+            <RefreshIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
 
       {/* CronJobs Table */}
-      <TableContainer component={Paper}>
-        <Table>
+      <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+        <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>Status</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Namespace</TableCell>
-              <TableCell>Schedule</TableCell>
-              <TableCell>Last Run</TableCell>
-              <TableCell>Next Run</TableCell>
-              <TableCell>Issues</TableCell>
-              <TableCell>Actions</TableCell>
+            <TableRow sx={{ bgcolor: '#161f30' }}>
+              <TableCell sx={headSx}>Status</TableCell>
+              <TableCell sx={headSx}>Name</TableCell>
+              <TableCell sx={headSx}>Namespace</TableCell>
+              <TableCell sx={headSx}>Schedule</TableCell>
+              <TableCell sx={headSx}>Last Run</TableCell>
+              <TableCell sx={headSx}>Next Run</TableCell>
+              <TableCell sx={headSx}>Issues</TableCell>
+              <TableCell sx={headSx}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filteredCronJobs.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center">
-                  <Typography color="text.secondary">
-                    {searchTerm ? 'No cronjobs match your search' : 'No cronjobs found'}
-                  </Typography>
+                <TableCell colSpan={8} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                  {searchTerm ? 'No cronjobs match your search' : (loading ? 'Loading…' : 'No cronjobs found')}
                 </TableCell>
               </TableRow>
             ) : (
@@ -665,61 +654,60 @@ const CronJobs: React.FC = () => {
                 const issueCount = investigations.filter(i => i.type === 'error' || i.type === 'warning').length;
                 
                 return (
-                  <TableRow key={`${cronJob.namespace}-${cronJob.name}`} hover>
-                    <TableCell>
+                  <TableRow key={`${cronJob.namespace}-${cronJob.name}`} hover sx={{ cursor: 'pointer', '&:hover': { bgcolor: T.hover } }}>
+                    <TableCell sx={cellSx}>
                       <Tooltip title={getStatusLabel(cronJob)}>
                         {getStatusIcon(cronJob)}
                       </Tooltip>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight="medium">{cronJob.name}</Typography>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text }}>{cronJob.name}</Typography>
                     </TableCell>
-                    <TableCell>
-                      <Chip label={cronJob.namespace} size="small" variant="outlined" />
+                    <TableCell sx={cellSx}>
+                      <Chip label={cronJob.namespace} size="small" sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={cellSx}>
                       <Tooltip title={cronJob.schedule}>
-                        <Typography variant="body2">{parseSchedule(cronJob.schedule)}</Typography>
+                        <Typography sx={{ fontSize: 12, color: T.body }}>{parseSchedule(cronJob.schedule)}</Typography>
                       </Tooltip>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">{getTimeSinceLastRun(cronJob)}</Typography>
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{getTimeSinceLastRun(cronJob)}</Typography>
                     </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color="text.secondary">
+                    <TableCell sx={cellSx}>
+                      <Typography sx={{ fontSize: 12, color: cronJob.suspend ? T.red : T.muted }}>
                         {getNextRunTime(cronJob)}
                       </Typography>
                     </TableCell>
-                    <TableCell>
-                      <Badge badgeContent={issueCount} color="error">
-                        <Chip 
-                          label={issueCount === 0 ? "Healthy" : `${issueCount} issues`}
-                          size="small"
-                          color={issueCount === 0 ? "success" : "error"}
-                        />
-                      </Badge>
+                    <TableCell sx={cellSx}>
+                      <Chip
+                        label={issueCount === 0 ? 'Healthy' : `${issueCount} issues`}
+                        size="small"
+                        sx={{ bgcolor: issueCount === 0 ? '#052e16' : '#450a0a', color: issueCount === 0 ? T.green : T.red, border: `1px solid ${issueCount === 0 ? T.green+'44' : T.red+'44'}`, fontSize: 11, height: 20 }}
+                      />
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={cellSx}>
                       <Box display="flex" gap={1}>
                         <Tooltip title="View Details">
-                          <IconButton 
-                            size="small" 
+                          <IconButton
+                            size="small"
+                            sx={{ color: T.muted, '&:hover': { color: T.text } }}
                             onClick={() => {
                               setSelectedCronJob(cronJob);
                               setDetailsOpen(true);
                             }}
                           >
-                            <InfoIcon />
+                            <InfoIcon fontSize="small" />
                           </IconButton>
                         </Tooltip>
                         <Tooltip title={cronJob.suspend ? "Resume" : "Suspend"}>
                           <IconButton
                             size="small"
-                            color={cronJob.suspend ? "success" : "warning"}
+                            sx={{ color: cronJob.suspend ? T.green : T.yellow, '&:hover': { bgcolor: T.hover } }}
                             onClick={() => handleSuspendResume(cronJob)}
                             disabled={actionLoading}
                           >
-                            {cronJob.suspend ? <PlayArrowIcon /> : <PauseIcon />}
+                            {cronJob.suspend ? <PlayArrowIcon fontSize="small" /> : <PauseIcon fontSize="small" />}
                           </IconButton>
                         </Tooltip>
                       </Box>
@@ -732,139 +720,84 @@ const CronJobs: React.FC = () => {
         </Table>
       </TableContainer>
 
-      <Box mt={2}>
-        <Typography variant="body2" color="text.secondary">
-          Showing {filteredCronJobs.length} of {totalCronJobs} cronjobs
-        </Typography>
-      </Box>
-
       {/* Details Dialog */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth>
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth sx={dlgSx}>
         {selectedCronJob && (
           <>
-            <DialogTitle>
+            <DialogTitle sx={{ borderBottom: `1px solid ${T.border}` }}>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
-                  <Typography variant="h6">{selectedCronJob.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {selectedCronJob.namespace}
-                  </Typography>
+                  <Typography sx={{ fontWeight: 600, color: T.text }}>{selectedCronJob.name}</Typography>
+                  <Typography sx={{ fontSize: 12, color: T.muted }}>{selectedCronJob.namespace}</Typography>
                 </Box>
                 {getStatusIcon(selectedCronJob)}
               </Box>
             </DialogTitle>
-            <DialogContent>
-              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
-                <Tab label="Overview" />
-                <Tab label="Investigations" />
-                <Tab label="Recommendations" />
-                <Tab label="Diagnostics" />
-                <Tab label="Actions" />
+            <DialogContent sx={{ p: 0 }}>
+              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ borderBottom: `1px solid ${T.border}`, px: 2, '& .MuiTabs-indicator': { bgcolor: T.green } }}>
+                {['Overview', 'Investigations', 'Recommendations', 'Diagnostics', 'Actions'].map((lbl) => (
+                  <Tab key={lbl} label={lbl} sx={{ color: T.muted, '&.Mui-selected': { color: T.text }, textTransform: 'none', minHeight: 40 }} />
+                ))}
               </Tabs>
+              <Box sx={{ p: 3 }}>
 
               {/* Overview Tab */}
               {activeTab === 0 && (
-                <Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Schedule Information</Typography>
-                           <Typography>Schedule: <strong>{parseSchedule(selectedCronJob.schedule)}</strong></Typography>
-                           <Typography variant="caption" color="text.secondary" display="block">
-                             Cron expression: {selectedCronJob.schedule}
-                           </Typography>
-                           <Divider sx={{ my: 1 }} />
-                           <Typography>Status: <strong>{selectedCronJob.suspend ? 'Suspended' : 'Active'}</strong></Typography>
-                           <Typography>Active Jobs: {selectedCronJob.active}</Typography>
-                           <Typography variant="caption" color="text.secondary" display="block">
-                             Last scheduled: {fmtTime(selectedCronJob.last_schedule_time)} ({getTimeSinceLastRun(selectedCronJob)})
-                           </Typography>
-                           <Typography variant="caption" color="text.secondary" display="block">
-                             Last successful: {fmtTime(selectedCronJob.last_successful_time)}
-                           </Typography>
-                           <Typography>Next Run: {getNextRunTime(selectedCronJob)}</Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Job Template</Typography>
-                           <Typography>Completions: {selectedCronJob.job_template.completions ?? 'N/A'}</Typography>
-                           <Typography>Parallelism: {selectedCronJob.job_template.parallelism ?? 'N/A'}</Typography>
-                           <Typography>Backoff Limit: {selectedCronJob.job_template.backoff_limit}</Typography>
-                           <Typography>Concurrency: {selectedCronJob.concurrency || 'Allow'}</Typography>
-                           <Typography>Age: {selectedCronJob.age}</Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Containers</Typography>
-                          {selectedCronJob.job_template.containers.map((container, idx) => (
-                            <Box key={idx} mb={2}>
-                              <Typography variant="body2" fontWeight="medium">{container.name}</Typography>
-                              <Typography variant="caption" color="text.secondary">{container.image}</Typography>
-                              <Box mt={1}>
-                                <Typography variant="caption">
-                                  CPU: {container.resources.requests?.cpu || 'N/A'} / {container.resources.limits?.cpu || 'N/A'}
-                                </Typography>
-                                <br />
-                                <Typography variant="caption">
-                                  Memory: {container.resources.requests?.memory || 'N/A'} / {container.resources.limits?.memory || 'N/A'}
-                                </Typography>
-                              </Box>
+                <Grid container spacing={2}>
+                  {[
+                    { label: 'Schedule', rows: [
+                      ['Expression', selectedCronJob.schedule],
+                      ['Parsed', parseSchedule(selectedCronJob.schedule)],
+                      ['Status', selectedCronJob.suspend ? 'Suspended' : 'Active'],
+                      ['Active Jobs', selectedCronJob.active],
+                      ['Last Scheduled', getTimeSinceLastRun(selectedCronJob)],
+                      ['Next Run', getNextRunTime(selectedCronJob)],
+                    ]},
+                    { label: 'Job Template', rows: [
+                      ['Completions', selectedCronJob.job_template.completions ?? 'N/A'],
+                      ['Parallelism', selectedCronJob.job_template.parallelism ?? 'N/A'],
+                      ['Backoff Limit', selectedCronJob.job_template.backoff_limit],
+                      ['Concurrency', selectedCronJob.concurrency || 'Allow'],
+                      ['Age', selectedCronJob.age],
+                    ]},
+                  ].map(({ label, rows }) => (
+                    <Grid item xs={12} md={6} key={label as string}>
+                      <Card sx={{ bgcolor: T.bg, border: `1px solid ${T.border}`, borderRadius: 1 }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>{label as string}</Typography>
+                          {(rows as [string, unknown][]).map(([k, v]) => (
+                            <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, borderBottom: `1px solid ${T.border}` }}>
+                              <Typography sx={{ fontSize: 12, color: T.muted }}>{k}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.body }}>{String(v)}</Typography>
                             </Box>
                           ))}
                         </CardContent>
                       </Card>
                     </Grid>
-                  </Grid>
-                </Box>
+                  ))}
+                </Grid>
               )}
 
               {/* Investigations Tab */}
               {activeTab === 1 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <TroubleshootIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Active Investigations
-                  </Typography>
                   {generateInvestigations(selectedCronJob).map((inv, idx) => (
-                    <Accordion key={idx}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          {inv.type === 'error' && <ErrorIcon color="error" />}
-                          {inv.type === 'warning' && <WarningIcon color="warning" />}
-                          {inv.type === 'info' && <InfoIcon color="info" />}
-                          <Typography>{inv.title}</Typography>
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Typography variant="body2" paragraph>{inv.description}</Typography>
-                        {inv.action && (
-                          <Box>
-                            <Typography variant="caption" color="text.secondary">
-                              Recommended Action:
-                            </Typography>
-                            <Typography variant="body2">{inv.action}</Typography>
-                            <Button 
-                              size="small" 
-                              variant="contained" 
-                              sx={{ mt: 1 }}
-                              onClick={() => handleAutoFix(selectedCronJob, inv.title)}
-                            >
-                              Auto-Fix
-                            </Button>
-                          </Box>
-                        )}
-                      </AccordionDetails>
-                    </Accordion>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`,
+                      bgcolor: inv.type === 'error' ? '#1a0a0a' : inv.type === 'warning' ? '#1a1200' : '#0a1a0a' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {inv.type === 'error' && <ErrorIcon sx={{ fontSize: 16, color: T.red }} />}
+                        {inv.type === 'warning' && <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />}
+                        {inv.type === 'info' && <InfoIcon sx={{ fontSize: 16, color: T.green }} />}
+                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{inv.title}</Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{inv.description}</Typography>
+                      {inv.action && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>→ {inv.action}</Typography>}
+                    </Box>
                   ))}
                   {generateInvestigations(selectedCronJob).length === 0 && (
-                    <Alert severity="success">No issues found - CronJob is healthy!</Alert>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                      <Typography sx={{ fontSize: 13, color: T.green }}>No issues found — CronJob is healthy</Typography>
+                    </Box>
                   )}
                 </Box>
               )}
@@ -872,52 +805,17 @@ const CronJobs: React.FC = () => {
               {/* Recommendations Tab */}
               {activeTab === 2 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <RecommendIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Optimization Recommendations
-                  </Typography>
                   {generateRecommendations(selectedCronJob).map((rec, idx) => (
-                    <Card key={idx} sx={{ mb: 2 }} variant="outlined">
-                      <CardContent>
-                        <Box display="flex" alignItems="center" gap={1} mb={1}>
-                          <Chip 
-                            label={rec.category} 
-                            size="small" 
-                            color={
-                              rec.category === 'security' ? 'error' :
-                              rec.category === 'performance' ? 'warning' :
-                              rec.category === 'cost' ? 'info' : 'success'
-                            }
-                          />
-                          <Chip 
-                            label={rec.priority} 
-                            size="small" 
-                            variant="outlined"
-                            color={
-                              rec.priority === 'high' ? 'error' :
-                              rec.priority === 'medium' ? 'warning' : 'default'
-                            }
-                          />
-                        </Box>
-                        <Typography variant="subtitle2" gutterBottom>{rec.title}</Typography>
-                        <Typography variant="body2" color="text.secondary" paragraph>
-                          {rec.description}
-                        </Typography>
-                        <Divider sx={{ my: 1 }} />
-                        <Typography variant="caption" color="text.secondary">Impact:</Typography>
-                        <Typography variant="body2" paragraph>{rec.impact}</Typography>
-                        <Typography variant="caption" color="text.secondary">Action:</Typography>
-                        <Typography variant="body2">{rec.action}</Typography>
-                        <Button 
-                          size="small" 
-                          variant="outlined" 
-                          sx={{ mt: 1 }}
-                          onClick={() => handleAutoFix(selectedCronJob, rec.title)}
-                        >
-                          Apply Recommendation
-                        </Button>
-                      </CardContent>
-                    </Card>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`, bgcolor: T.bg }}>
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        <Chip label={rec.category} size="small" sx={{ bgcolor: T.border, color: T.text, fontSize: 11, height: 20 }} />
+                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? '#450a0a' : rec.priority === 'medium' ? '#451a03' : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
+                      </Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{rec.title}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>{rec.description}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>Impact: {rec.impact}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted }}>→ {rec.action}</Typography>
+                    </Box>
                   ))}
                 </Box>
               )}
@@ -925,136 +823,55 @@ const CronJobs: React.FC = () => {
               {/* Diagnostics Tab */}
               {activeTab === 3 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <HealthAndSafetyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Health Checks & Validations
-                  </Typography>
-                  <List>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color={!selectedCronJob.suspend ? "success" : "warning"} />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Schedule Status"
-                        secondary={selectedCronJob.suspend ? 'Suspended' : 'Active'}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <AccessTimeIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Last Execution"
-                        secondary={getTimeSinceLastRun(selectedCronJob)}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <TimerIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Next Scheduled Run"
-                        secondary={getNextRunTime(selectedCronJob)}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SecurityIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Security Checks"
-                        secondary="Image tags, resource limits, retry policy"
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SpeedIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText 
-                        primary="Performance"
-                        secondary="Schedule optimization and execution efficiency"
-                      />
-                    </ListItem>
-                  </List>
+                  {[
+                    { ok: !selectedCronJob.suspend, label: 'Schedule Status', sub: selectedCronJob.suspend ? 'Suspended' : 'Active' },
+                    { ok: !!selectedCronJob.last_schedule_time, label: 'Last Execution', sub: getTimeSinceLastRun(selectedCronJob) },
+                    { ok: selectedCronJob.job_template.containers.every(c => c.resources.limits), label: 'Resource Limits', sub: 'All containers have limits' },
+                    { ok: !selectedCronJob.job_template.containers.some(c => c.image.includes(':latest')), label: 'Image Tags', sub: 'No :latest tags' },
+                  ].map(({ ok, label, sub }) => (
+                    <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, borderBottom: `1px solid ${T.border}` }}>
+                      {ok ? <CheckCircleIcon sx={{ fontSize: 18, color: T.green }} /> : <WarningIcon sx={{ fontSize: 18, color: T.yellow }} />}
+                      <Box>
+                        <Typography sx={{ fontSize: 13, color: T.text }}>{label}</Typography>
+                        <Typography sx={{ fontSize: 12, color: T.muted }}>{sub}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
                 </Box>
               )}
 
               {/* Actions Tab */}
               {activeTab === 4 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Available Actions
-                  </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Schedule Management</Typography>
-                          <Button
-                            variant="contained"
-                            color={selectedCronJob.suspend ? "success" : "warning"}
-                            fullWidth
-                            sx={{ mb: 1 }}
-                            onClick={() => handleSuspendResume(selectedCronJob)}
-                            disabled={actionLoading}
-                            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
-                          >
-                            {selectedCronJob.suspend ? 'Resume CronJob' : 'Suspend CronJob'}
-                          </Button>
-                          <Button
-                            variant="contained"
-                            color="primary"
-                            fullWidth
-                            sx={{ mb: 1 }}
-                            onClick={() => handleTriggerNow(selectedCronJob)}
-                            disabled={actionLoading}
-                            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
-                          >
-                            Trigger Job Now
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Automated Fixes</Typography>
-                          <Button variant="contained" color="success" fullWidth sx={{ mb: 1 }}>
-                            Apply All Safe Recommendations
-                          </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            Fix Resource Limits
-                          </Button>
-                          <Button variant="outlined" fullWidth sx={{ mb: 1 }}>
-                            Update Image Tags
-                          </Button>
-                          <Button variant="outlined" fullWidth>
-                            Optimize Schedule
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
+                  <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: selectedCronJob.suspend ? T.green : T.yellow, color: '#000', '&:hover': { opacity: 0.9 } }}
+                    onClick={() => handleSuspendResume(selectedCronJob)} disabled={actionLoading}
+                    startIcon={actionLoading ? <CircularProgress size={16} /> : (selectedCronJob.suspend ? <PlayArrowIcon /> : <PauseIcon />)}>
+                    {selectedCronJob.suspend ? 'Resume CronJob' : 'Suspend CronJob'}
+                  </Button>
+                  <Button variant="outlined" fullWidth sx={{ mb: 1, color: T.text, borderColor: T.border }}
+                    onClick={() => handleTriggerNow(selectedCronJob)} disabled={actionLoading}>
+                    Trigger Job Now
+                  </Button>
                 </Box>
               )}
+              </Box>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+            <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+              <Button onClick={() => setDetailsOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Close</Button>
             </DialogActions>
           </>
         )}
       </Dialog>
 
       {/* Confirm dialog */}
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirm Action</DialogTitle>
-        <DialogContent>
-          <Typography>{confirmAction?.label}</Typography>
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth sx={dlgSx}>
+        <DialogTitle sx={{ borderBottom: `1px solid ${T.border}`, color: T.text }}>Confirm Action</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography sx={{ color: T.body }}>{confirmAction?.label}</Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button variant="contained" color="warning" onClick={runConfirmed}>Confirm</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+          <Button onClick={() => setConfirmOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" sx={{ bgcolor: T.yellow, color: '#000', '&:hover': { opacity: 0.9 }, textTransform: 'none' }} onClick={runConfirmed}>Confirm</Button>
         </DialogActions>
       </Dialog>
 

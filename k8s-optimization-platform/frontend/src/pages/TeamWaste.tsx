@@ -1,368 +1,244 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
-  Box,
-  Typography,
-  Paper,
-  Grid,
-  Card,
-  CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  LinearProgress,
-  IconButton,
-  Avatar,
+  Box, Typography, Grid, Card, CardContent,
+  CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
+  TableContainer, TableHead, TableRow, Chip, Paper,
+  TextField, InputAdornment,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
+  Search as SearchIcon,
   Group as GroupIcon,
-  TrendingUp as TrendingUpIcon,
+  Info as InfoIcon,
 } from '@mui/icons-material';
+import { API_BASE_URL } from '../config/api';
 
-interface TeamWasteData {
-  team_name: string;
-  owner: string;
-  total_waste_percentage: number;
-  monthly_waste_cost: number;
-  annual_waste_cost: number;
-  namespace_count: number;
-  pod_count: number;
-  cpu_waste: number;
-  memory_waste: number;
-  potential_savings: number;
-  waste_trend: string;
-  top_wasting_namespace: string;
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:     '#0f1724',
+  card:   '#1e2433',
+  hover:  '#252e42',
+  border: '#2a3245',
+  text:   '#e8eaf0',
+  muted:  '#8b95a9',
+  body:   '#c8cdd8',
+  green:  '#4ade80',
+  red:    '#f87171',
+  yellow: '#f59e0b',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface TeamRow {
+  name:           string;
+  current_cost:   number;
+  optimized_cost: number;
+  savings:        number;
+  waste_pct:      number;
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const wasteColor = (pct: number) =>
+  pct >= 60 ? T.red : pct >= 35 ? T.yellow : T.green;
+
+const wasteBarBg = (pct: number) =>
+  pct >= 60 ? '#450a0a' : pct >= 35 ? '#451a03' : '#052e16';
+
+const StatCard: React.FC<{ label: string; value: string | number; sub?: string; accent?: string }> = ({ label, value, sub, accent }) => (
+  <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+    <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+      <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>{label}</Typography>
+      <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent ?? T.text, lineHeight: 1 }}>{value}</Typography>
+      {sub && <Typography sx={{ fontSize: 11, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+    </CardContent>
+  </Card>
+);
+
+// ─── Main ─────────────────────────────────────────────────────────────────────
 const TeamWaste: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [teams, setTeams] = useState<TeamWasteData[]>([]);
+  const [rows,    setRows]    = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+  const [search,  setSearch]  = useState('');
 
   const fetchData = async () => {
-    setLoading(true);
     try {
-      const response = await fetch('/api/v1/heatmap/team-waste');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      setTeams(data.teams || []);
-    } catch (error) {
-      console.error('Error fetching team waste data:', error);
-      // Mock data
-      setTeams([
-        {
-          team_name: 'Analytics Team',
-          owner: 'Sarah Johnson',
-          total_waste_percentage: 58,
-          monthly_waste_cost: 4250.75,
-          annual_waste_cost: 51009.00,
-          namespace_count: 5,
-          pod_count: 87,
-          cpu_waste: 62,
-          memory_waste: 54,
-          potential_savings: 2550.45,
-          waste_trend: 'increasing',
-          top_wasting_namespace: 'analytics-prod',
-        },
-        {
-          team_name: 'Payments Team',
-          owner: 'Michael Chen',
-          total_waste_percentage: 42,
-          monthly_waste_cost: 2890.50,
-          annual_waste_cost: 34686.00,
-          namespace_count: 3,
-          pod_count: 54,
-          cpu_waste: 45,
-          memory_waste: 39,
-          potential_savings: 1445.25,
-          waste_trend: 'stable',
-          top_wasting_namespace: 'payments-backend',
-        },
-        {
-          team_name: 'Frontend Team',
-          owner: 'Emily Rodriguez',
-          total_waste_percentage: 35,
-          monthly_waste_cost: 1850.25,
-          annual_waste_cost: 22203.00,
-          namespace_count: 4,
-          pod_count: 62,
-          cpu_waste: 38,
-          memory_waste: 32,
-          potential_savings: 925.13,
-          waste_trend: 'decreasing',
-          top_wasting_namespace: 'frontend-staging',
-        },
-        {
-          team_name: 'Infrastructure Team',
-          owner: 'David Kim',
-          total_waste_percentage: 28,
-          monthly_waste_cost: 1240.00,
-          annual_waste_cost: 14880.00,
-          namespace_count: 6,
-          pod_count: 45,
-          cpu_waste: 30,
-          memory_waste: 26,
-          potential_savings: 620.00,
-          waste_trend: 'stable',
-          top_wasting_namespace: 'monitoring',
-        },
-        {
-          team_name: 'ML/AI Team',
-          owner: 'Dr. Lisa Wang',
-          total_waste_percentage: 65,
-          monthly_waste_cost: 5890.40,
-          annual_waste_cost: 70684.80,
-          namespace_count: 4,
-          pod_count: 38,
-          cpu_waste: 70,
-          memory_waste: 60,
-          potential_savings: 3534.24,
-          waste_trend: 'increasing',
-          top_wasting_namespace: 'ml-training',
-        },
-        {
-          team_name: 'DevOps Team',
-          owner: 'James Wilson',
-          total_waste_percentage: 32,
-          monthly_waste_cost: 980.75,
-          annual_waste_cost: 11769.00,
-          namespace_count: 7,
-          pod_count: 52,
-          cpu_waste: 35,
-          memory_waste: 29,
-          potential_savings: 490.38,
-          waste_trend: 'decreasing',
-          top_wasting_namespace: 'ci-cd',
-        },
-      ]);
+      setLoading(true); setError(null);
+      const res = await fetch(`${API_BASE_URL}/v1/cost-savings/overview${clusterParam}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+
+      const teams: TeamRow[] = (data.savings_by_team ?? []).map((t: any) => ({
+        name:           t.name,
+        current_cost:   t.current_cost,
+        optimized_cost: t.optimized_cost,
+        savings:        t.savings,
+        waste_pct:      t.savings_percent,
+      }));
+      setRows(teams);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch');
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, [clusterParam]);
+  useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line
 
-  const getWasteColor = (percentage: number) => {
-    if (percentage >= 60) return 'error';
-    if (percentage >= 40) return 'warning';
-    return 'success';
-  };
+  const filtered = useMemo(() => rows.filter(r =>
+    r.name.toLowerCase().includes(search.toLowerCase())
+  ), [rows, search]);
 
-  const getTrendIcon = (trend: string) => {
-    if (trend === 'increasing') return <TrendingUpIcon color="error" fontSize="small" />;
-    if (trend === 'decreasing') return <TrendingUpIcon color="success" fontSize="small" sx={{ transform: 'rotate(180deg)' }} />;
-    return <TrendingUpIcon color="info" fontSize="small" sx={{ transform: 'rotate(90deg)' }} />;
-  };
+  const totalCurrent = filtered.reduce((s, r) => s + r.current_cost, 0);
+  const totalSavings = filtered.reduce((s, r) => s + r.savings, 0);
+  const avgWaste     = filtered.length > 0 ? filtered.reduce((s, r) => s + r.waste_pct, 0) / filtered.length : 0;
 
-  const totalWaste = teams.reduce((sum, t) => sum + t.monthly_waste_cost, 0);
-  const totalSavings = teams.reduce((sum, t) => sum + t.potential_savings, 0);
-  const avgWaste = teams.length > 0 ? teams.reduce((sum, t) => sum + t.total_waste_percentage, 0) / teams.length : 0;
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.2 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
+    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: '#161f30' };
+
+  // Note: pods have no "team" label in this cluster — all pods roll up to "unknown"
+  // We show this transparently and explain the label situation
+  const allUnknown = rows.length === 1 && rows[0]?.name === 'unknown';
+
+  if (loading) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress sx={{ color: T.green }} />
+    </Box>
+  );
+  if (error) return (
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+    </Box>
+  );
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
+      {/* Header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Team Waste & Accountability
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Track resource waste by team ownership
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Team Waste</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            Resource waste grouped by pod <code style={{ fontFamily: 'monospace', color: T.body }}>team</code> label
           </Typography>
         </Box>
-        <IconButton onClick={fetchData} disabled={loading}>
-          <RefreshIcon />
+        <IconButton onClick={fetchData} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+          <RefreshIcon fontSize="small" />
         </IconButton>
       </Box>
 
-      {loading && <LinearProgress sx={{ mb: 2 }} />}
+      {/* Info banner if no team labels set */}
+      {allUnknown && (
+        <Paper sx={{ bgcolor: '#1a1a0a', border: `1px solid ${T.yellow}44`, borderRadius: 2, p: 2, mb: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+          <InfoIcon sx={{ color: T.yellow, fontSize: 18, mt: 0.2, flexShrink: 0 }} />
+          <Box>
+            <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.yellow }}>No team labels detected</Typography>
+            <Typography sx={{ fontSize: 12, color: T.body, mt: 0.25 }}>
+              None of the pods in this cluster have a <code style={{ fontFamily: 'monospace' }}>team</code> label, so all
+              cost is attributed to <strong>"unknown"</strong>. To enable per-team breakdown, add{' '}
+              <code style={{ fontFamily: 'monospace' }}>team: &lt;name&gt;</code> labels to your pod specs or deployment templates.
+            </Typography>
+          </Box>
+        </Paper>
+      )}
 
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Total Team Waste
-              </Typography>
-              <Typography variant="h4" color="error.main">
-                ${totalWaste.toFixed(2)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Monthly across all teams
-              </Typography>
-            </CardContent>
-          </Card>
+      {/* Stats */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Teams Tracked" value={rows.length} sub={allUnknown ? 'No team labels set' : 'Distinct team labels'} />
         </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Potential Savings
-              </Typography>
-              <Typography variant="h4" color="success.main">
-                ${totalSavings.toFixed(2)}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Monthly if optimized
-              </Typography>
-            </CardContent>
-          </Card>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Total Spend" value={`$${totalCurrent.toFixed(0)}/mo`} sub="All tracked teams" accent={T.body} />
         </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Average Waste
-              </Typography>
-              <Typography variant="h4" color="warning.main">
-                {avgWaste.toFixed(1)}%
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Per team average
-              </Typography>
-            </CardContent>
-          </Card>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Potential Savings" value={`$${totalSavings.toFixed(0)}/mo`} sub={`$${(totalSavings * 12).toFixed(0)}/yr`} accent={T.red} />
         </Grid>
-
-        <Grid item xs={12} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Teams Tracked
-              </Typography>
-              <Typography variant="h4" color="primary.main">
-                {teams.length}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Active teams
-              </Typography>
-            </CardContent>
-          </Card>
+        <Grid item xs={6} sm={3}>
+          <StatCard label="Avg Waste" value={`${avgWaste.toFixed(1)}%`} sub="Across teams" accent={wasteColor(avgWaste)} />
         </Grid>
       </Grid>
 
-      {/* Team Waste Table */}
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom>
-          Team Waste Details
-        </Typography>
-        <TableContainer>
-          <Table>
-            <TableHead>
+      {/* Search */}
+      <Paper sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3 }}>
+        <TextField fullWidth size="small"
+          placeholder="Search team…"
+          value={search} onChange={e => setSearch(e.target.value)}
+          InputProps={{
+            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+            sx: { color: T.body, bgcolor: T.bg,
+              '& .MuiOutlinedInput-notchedOutline':            { borderColor: T.border },
+              '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: T.muted },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: T.border },
+            },
+          }}
+        />
+      </Paper>
+
+      {/* Table */}
+      <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell sx={headSx}>Team</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Current/mo</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Optimal/mo</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Waste/mo</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'right' }}>Annual Waste</TableCell>
+              <TableCell sx={{ ...headSx, minWidth: 160 }}>Waste %</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filtered.length === 0 ? (
               <TableRow>
-                <TableCell>Team</TableCell>
-                <TableCell>Owner</TableCell>
-                <TableCell align="center">Waste %</TableCell>
-                <TableCell align="center">CPU Waste</TableCell>
-                <TableCell align="center">Memory Waste</TableCell>
-                <TableCell align="right">Monthly Cost</TableCell>
-                <TableCell align="right">Annual Cost</TableCell>
-                <TableCell align="right">Potential Savings</TableCell>
-                <TableCell align="center">Resources</TableCell>
-                <TableCell align="center">Trend</TableCell>
-                <TableCell>Top Wasting NS</TableCell>
+                <TableCell colSpan={6} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                  No teams match your search
+                </TableCell>
               </TableRow>
-            </TableHead>
-            <TableBody>
-              {teams.map((team) => (
-                <TableRow key={team.team_name} hover>
-                  <TableCell>
+            ) : filtered.map(row => {
+              const wPct = row.waste_pct;
+              return (
+                <TableRow key={row.name} hover sx={{ '&:hover': { bgcolor: T.hover } }}>
+                  <TableCell sx={cellSx}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                        <GroupIcon fontSize="small" />
-                      </Avatar>
-                      <Typography variant="body2" fontWeight="medium">
-                        {team.team_name}
+                      <GroupIcon sx={{ fontSize: 16, color: T.muted }} />
+                      <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text, fontFamily: 'monospace' }}>
+                        {row.name}
                       </Typography>
                     </Box>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{team.owner}</Typography>
+                  <TableCell sx={{ ...cellSx, textAlign: 'right', color: T.muted }}>${row.current_cost.toFixed(2)}</TableCell>
+                  <TableCell sx={{ ...cellSx, textAlign: 'right', color: T.green }}>${row.optimized_cost.toFixed(2)}</TableCell>
+                  <TableCell sx={{ ...cellSx, textAlign: 'right' }}>
+                    <Typography sx={{ fontSize: 12, fontWeight: 700, color: wasteColor(wPct) }}>
+                      ${row.savings.toFixed(2)}
+                    </Typography>
                   </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={`${team.total_waste_percentage}%`}
-                      color={getWasteColor(team.total_waste_percentage)}
-                      size="small"
-                    />
+                  <TableCell sx={{ ...cellSx, textAlign: 'right', color: T.muted }}>
+                    ${(row.savings * 12).toFixed(0)}
                   </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ width: '100%' }}>
-                      <Typography variant="body2" gutterBottom>
-                        {team.cpu_waste}%
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={team.cpu_waste}
-                        color={getWasteColor(team.cpu_waste)}
-                      />
+                  <TableCell sx={{ ...cellSx, minWidth: 160 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box sx={{ flex: 1, height: 6, bgcolor: T.border, borderRadius: 3, overflow: 'hidden' }}>
+                        <Box sx={{ height: '100%', width: `${Math.min(100, wPct)}%`, bgcolor: wasteColor(wPct), borderRadius: 3 }} />
+                      </Box>
+                      <Chip label={`${wPct.toFixed(0)}%`} size="small"
+                        sx={{ bgcolor: wasteBarBg(wPct), color: wasteColor(wPct),
+                          border: `1px solid ${wasteColor(wPct)}44`, fontSize: 10, height: 18, minWidth: 44 }} />
                     </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ width: '100%' }}>
-                      <Typography variant="body2" gutterBottom>
-                        {team.memory_waste}%
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={team.memory_waste}
-                        color={getWasteColor(team.memory_waste)}
-                      />
-                    </Box>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" fontWeight="medium" color="error.main">
-                      ${team.monthly_waste_cost.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" color="text.secondary">
-                      ${team.annual_waste_cost.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2" fontWeight="medium" color="success.main">
-                      ${team.potential_savings.toFixed(2)}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Typography variant="body2">
-                      {team.namespace_count} NS
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {team.pod_count} pods
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    {getTrendIcon(team.waste_trend)}
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={team.top_wasting_namespace}
-                      size="small"
-                      variant="outlined"
-                      color="error"
-                    />
                   </TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+
+      <Typography sx={{ fontSize: 12, color: T.muted, mt: 2, textAlign: 'right' }}>
+        {filtered.length} of {rows.length} teams shown · grouped by pod <code style={{ fontFamily: 'monospace' }}>team</code> label
+      </Typography>
     </Box>
   );
 };
 
 export default TeamWaste;
-
-// Made with Bob

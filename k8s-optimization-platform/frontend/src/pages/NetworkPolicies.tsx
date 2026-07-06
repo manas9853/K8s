@@ -63,6 +63,29 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import PolicyIcon from '@mui/icons-material/Policy';
 import { API_BASE_URL } from '../config/api';
 
+// ─── Dark theme tokens ────────────────────────────────────────────────────────
+const T = {
+  bg:     '#0f1724',
+  card:   '#1e2433',
+  hover:  '#252e42',
+  border: '#2a3245',
+  text:   '#e8eaf0',
+  muted:  '#8b95a9',
+  body:   '#c8cdd8',
+  green:  '#4ade80',
+  red:    '#f87171',
+  yellow: '#f59e0b',
+};
+const selectSx = {
+  color: T.text, fontSize: 13, height: 38,
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+  '& .MuiSvgIcon-root': { color: T.muted },
+  bgcolor: T.card,
+};
+const menuProps = { PaperProps: { sx: { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}` } } };
+
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
 interface NetworkPolicy {
@@ -384,37 +407,39 @@ const NetworkPolicies: React.FC = () => {
 
   // ─── Guard states ────────────────────────────────────────────────────────────
 
+  const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
+  const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
+  const dlgSx = { '& .MuiDialog-paper': { bgcolor: T.card, color: T.text, border: `1px solid ${T.border}`, borderRadius: 2 } };
+
   if (clustersLoading) {
-    return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
+    return <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CircularProgress sx={{ color: T.green }} /></Box>;
   }
 
   if (clusters.length === 0) {
     return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
+      <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+        <Typography sx={{ color: T.text }} variant="h5">No clusters attached yet</Typography>
+        <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
           Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
+        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}>Go to Cluster Onboarding</Button>
       </Box>
     );
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
-
   return (
-    <Box>
+    <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
       {/* ── Header ── */}
       <Box mb={3} display="flex" justifyContent="space-between" alignItems="flex-start">
         <Box>
-          <Typography variant="h4" gutterBottom>Network Policies</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Kubernetes network policies controlling pod-to-pod and external traffic
+          <Typography sx={{ fontSize: 22, fontWeight: 700, color: T.text }}>Network Policies</Typography>
+          <Typography sx={{ fontSize: 13, color: T.muted, mt: 0.5 }}>
+            Pod-to-pod and external traffic control · {filtered.length} of {totalPolicies} shown
           </Typography>
         </Box>
         <FormControl size="small" sx={{ minWidth: 220 }}>
-          <InputLabel>Cluster</InputLabel>
-          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange}>
+          <InputLabel sx={{ color: T.muted, fontSize: 13 }}>Cluster</InputLabel>
+          <Select value={selectedClusterId} label="Cluster" onChange={handleClusterChange} sx={selectSx} MenuProps={menuProps}>
             <MenuItem value="all">All Clusters</MenuItem>
             {clusters.map(c => <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>)}
           </Select>
@@ -423,196 +448,148 @@ const NetworkPolicies: React.FC = () => {
 
       {/* ── Audit Score Banner ── */}
       {audit && (
-        <Paper variant="outlined" sx={{ mb: 3, p: 2 }}>
+        <Paper sx={{ mb: 3, p: 2, bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
           <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
-            <SecurityIcon color="action" />
+            <SecurityIcon sx={{ color: T.muted }} />
             <Box flex={1}>
-              <Typography variant="subtitle1" fontWeight={600}>
-                Security Score: {audit.score}/100 &nbsp;
-                <Chip label={`Risk: ${audit.risk}`} size="small" variant="outlined" />
-              </Typography>
-              <LinearProgress
-                variant="determinate"
-                value={audit.score}
-                sx={{ mt: 0.5, height: 6, borderRadius: 3, maxWidth: 400 }}
-              />
+              <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                <Typography sx={{ fontWeight: 600, color: T.text }}>Security Score: {audit.score}/100</Typography>
+                <Chip label={`Risk: ${audit.risk}`} size="small" sx={{ bgcolor: audit.risk.toLowerCase() === 'high' ? '#450a0a' : audit.risk.toLowerCase() === 'medium' ? '#451a03' : '#052e16', color: audit.risk.toLowerCase() === 'high' ? T.red : audit.risk.toLowerCase() === 'medium' ? T.yellow : T.green, fontSize: 11, height: 20 }} />
+              </Box>
+              <LinearProgress variant="determinate" value={audit.score}
+                sx={{ height: 6, borderRadius: 3, maxWidth: 400, bgcolor: T.border, '& .MuiLinearProgress-bar': { bgcolor: audit.score >= 80 ? T.green : audit.score >= 50 ? T.yellow : T.red } }} />
             </Box>
             <Box display="flex" gap={1} flexWrap="wrap">
-              <Chip size="small" label={`${audit.total_namespaces} namespaces`} variant="outlined" />
-              <Chip size="small" label={`${audit.covered_namespaces} covered`} variant="outlined" />
+              {[`${audit.total_namespaces} NS`, `${audit.covered_namespaces} covered`, `CNI: ${audit.cni}`].map(l => (
+                <Chip key={l} size="small" label={l} sx={{ bgcolor: T.bg, color: T.muted, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
+              ))}
               {audit.uncovered_namespaces > 0 && (
-                <Chip size="small" label={`${audit.uncovered_namespaces} uncovered`} variant="outlined" />
+                <Chip size="small" label={`${audit.uncovered_namespaces} uncovered`} sx={{ bgcolor: '#450a0a', color: T.red, fontSize: 11, height: 20 }} />
               )}
-              <Chip size="small" label={`CNI: ${audit.cni}`} variant="outlined" />
             </Box>
           </Box>
         </Paper>
       )}
 
       {/* ── Summary Cards ── */}
-      <Grid container spacing={3} mb={3}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <PolicyIcon color="primary" />
-                <Typography color="text.secondary" gutterBottom>Total Policies</Typography>
-              </Box>
-              <Typography variant="h4">{totalPolicies}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>Full Coverage</Typography>
-              <Typography variant="h4">{bothPolicies}</Typography>
-              <Typography variant="body2" color="text.secondary">Ingress + Egress</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>Traffic Direction</Typography>
-              <Typography variant="h4">{ingressPolicies}</Typography>
-              <Typography variant="body2" color="text.secondary">{egressPolicies} egress</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Box display="flex" alignItems="center" gap={1}>
-                <Badge badgeContent={totalIssues} color="error">
-                  <BugReportIcon color="action" />
-                </Badge>
-                <Typography color="text.secondary" gutterBottom>Issues Found</Typography>
-              </Box>
-              <Typography variant="h4">{totalIssues}</Typography>
-            </CardContent>
-          </Card>
-        </Grid>
+      <Grid container spacing={2} mb={3}>
+        {[
+          { label: 'Total Policies', value: totalPolicies, accent: T.text },
+          { label: 'Full Coverage', value: bothPolicies, accent: T.green, sub: 'Ingress + Egress' },
+          { label: 'Ingress Rules', value: ingressPolicies, accent: T.body, sub: `${egressPolicies} egress` },
+          { label: 'Issues', value: totalIssues, accent: totalIssues > 0 ? T.red : T.green },
+        ].map(({ label, value, accent, sub }) => (
+          <Grid item xs={6} sm={3} key={label}>
+            <Card sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+              <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 0.5 }}>{label}</Typography>
+                <Typography sx={{ fontSize: 28, fontWeight: 700, color: accent, lineHeight: 1 }}>{value}</Typography>
+                {sub && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>{sub}</Typography>}
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
       </Grid>
 
-      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
 
       {/* ── Search ── */}
       <Box display="flex" gap={2} mb={2}>
-        <TextField
-          placeholder="Search policies…"
-          variant="outlined"
-          size="small"
-          fullWidth
-          value={searchTerm}
-          onChange={e => setSearchTerm(e.target.value)}
+        <TextField placeholder="Search policies…" variant="outlined" size="small" fullWidth
+          value={searchTerm} onChange={e => setSearchTerm(e.target.value)}
           InputProps={{
-            startAdornment: (
-              <InputAdornment position="start"><SearchIcon /></InputAdornment>
-            ),
+            startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: T.muted, fontSize: 18 }} /></InputAdornment>,
+            sx: { color: T.text, fontSize: 13, bgcolor: T.card,
+              '& .MuiOutlinedInput-notchedOutline': { borderColor: T.border },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: T.muted },
+            },
           }}
         />
         <Tooltip title="Refresh">
-          <IconButton onClick={() => fetchAll(selectedClusterId)} color="primary">
-            <RefreshIcon />
+          <IconButton onClick={() => fetchAll(selectedClusterId)} sx={{ color: T.muted, border: `1px solid ${T.border}`, borderRadius: 1, '&:hover': { bgcolor: T.hover } }}>
+            <RefreshIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
 
       {/* ── Table ── */}
-      <TableContainer component={Paper}>
-        {loading && <LinearProgress />}
-        <Table>
+      <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
+        {loading && <LinearProgress sx={{ bgcolor: T.border, '& .MuiLinearProgress-bar': { bgcolor: T.green } }} />}
+        <Table size="small">
           <TableHead>
-            <TableRow>
-              <TableCell>Status</TableCell>
-              <TableCell>Name</TableCell>
-              <TableCell>Namespace</TableCell>
-              <TableCell>Policy Types</TableCell>
-              <TableCell>Pod Selector</TableCell>
-              <TableCell align="center">Ingress Rules</TableCell>
-              <TableCell align="center">Egress Rules</TableCell>
-              <TableCell>Issues</TableCell>
-              <TableCell>Age</TableCell>
-              <TableCell>Actions</TableCell>
+            <TableRow sx={{ bgcolor: '#161f30' }}>
+              <TableCell sx={headSx}>Status</TableCell>
+              <TableCell sx={headSx}>Name</TableCell>
+              <TableCell sx={headSx}>Namespace</TableCell>
+              <TableCell sx={headSx}>Policy Types</TableCell>
+              <TableCell sx={headSx}>Pod Selector</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'center' }}>Ingress</TableCell>
+              <TableCell sx={{ ...headSx, textAlign: 'center' }}>Egress</TableCell>
+              <TableCell sx={headSx}>Issues</TableCell>
+              <TableCell sx={headSx}>Age</TableCell>
+              <TableCell sx={headSx}>Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center">
-                  <Typography color="text.secondary">
-                    {loading ? 'Loading…' : searchTerm ? 'No policies match your search' : 'No network policies found'}
-                  </Typography>
+                <TableCell colSpan={10} sx={{ ...cellSx, textAlign: 'center', py: 4, color: T.muted }}>
+                  {loading ? 'Loading…' : searchTerm ? 'No policies match your search' : 'No network policies found'}
                 </TableCell>
               </TableRow>
             ) : filtered.map(pol => {
               const inv   = generateInvestigations(pol);
               const count = inv.filter(i => i.type === 'error' || i.type === 'warning').length;
               return (
-                <TableRow key={`${pol.namespace}/${pol.name}`} hover>
-                  <TableCell>
-                    <Tooltip title={isPolicyCoverage(pol) === 'full' ? 'Full coverage' : isPolicyCoverage(pol) === 'partial' ? 'Partial coverage' : 'No coverage'}>
+                <TableRow key={`${pol.namespace}/${pol.name}`} hover sx={{ cursor: 'pointer', '&:hover': { bgcolor: T.hover } }}>
+                  <TableCell sx={cellSx}>
+                    <Tooltip title={isPolicyCoverage(pol) === 'full' ? 'Full coverage' : isPolicyCoverage(pol) === 'partial' ? 'Partial' : 'No coverage'}>
                       {getStatusIcon(pol)}
                     </Tooltip>
                   </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="medium">{pol.name}</Typography>
+                  <TableCell sx={cellSx}>
+                    <Typography sx={{ fontSize: 12, fontWeight: 600, color: T.text }}>{pol.name}</Typography>
                   </TableCell>
-                  <TableCell>
-                    <Chip label={pol.namespace} size="small" variant="outlined" />
+                  <TableCell sx={cellSx}>
+                    <Chip label={pol.namespace} size="small" sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={cellSx}>
                     <Box display="flex" gap={0.5} flexWrap="wrap">
-                      {pol.policy_types.includes('Ingress') && (
-                        <Chip label="Ingress" size="small" variant="outlined" />
-                      )}
-                      {pol.policy_types.includes('Egress') && (
-                        <Chip label="Egress" size="small" variant="outlined" />
-                      )}
-                      {pol.policy_types.length === 0 && (
-                        <Chip label="None" size="small" variant="outlined" />
-                      )}
+                      {pol.policy_types.includes('Ingress') && <Chip label="Ingress" size="small" sx={{ bgcolor: '#052e16', color: T.green, fontSize: 11, height: 20 }} />}
+                      {pol.policy_types.includes('Egress')  && <Chip label="Egress"  size="small" sx={{ bgcolor: '#052e16', color: T.green, fontSize: 11, height: 20 }} />}
+                      {pol.policy_types.length === 0        && <Chip label="None"    size="small" sx={{ bgcolor: T.bg, color: T.muted, fontSize: 11, height: 20 }} />}
                     </Box>
                   </TableCell>
-                  <TableCell>
+                  <TableCell sx={cellSx}>
                     {Object.keys(pol.pod_selector).length === 0
-                      ? <Chip label="all pods" size="small" variant="outlined" />
+                      ? <Chip label="all pods" size="small" sx={{ bgcolor: '#451a03', color: T.yellow, fontSize: 11, height: 20 }} />
                       : Object.entries(pol.pod_selector).slice(0, 2).map(([k, v]) => (
-                          <Chip key={k} label={`${k}=${v}`} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
+                          <Chip key={k} label={`${k}=${v}`} size="small" sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20, mr: 0.5 }} />
                         ))}
                   </TableCell>
-                  <TableCell align="center">
-                    <Typography variant="body2">{pol.ingress_rules_count}</Typography>
+                  <TableCell sx={{ ...cellSx, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: 12, color: T.body }}>{pol.ingress_rules_count}</Typography>
                   </TableCell>
-                  <TableCell align="center">
-                    <Typography variant="body2">{pol.egress_rules_count}</Typography>
+                  <TableCell sx={{ ...cellSx, textAlign: 'center' }}>
+                    <Typography sx={{ fontSize: 12, color: T.body }}>{pol.egress_rules_count}</Typography>
                   </TableCell>
-                  <TableCell>
-                    <Badge badgeContent={count} color="error">
-                      <Chip
-                        label={count === 0 ? 'Healthy' : `${count} issues`}
-                        size="small"
-                        color={count === 0 ? 'success' : 'error'}
-                      />
-                    </Badge>
+                  <TableCell sx={cellSx}>
+                    <Chip label={count === 0 ? 'Healthy' : `${count} issues`} size="small"
+                      sx={{ bgcolor: count === 0 ? '#052e16' : '#450a0a', color: count === 0 ? T.green : T.red, border: `1px solid ${count === 0 ? T.green+'44' : T.red+'44'}`, fontSize: 11, height: 20 }} />
                   </TableCell>
-                  <TableCell>{pol.age || '-'}</TableCell>
-                  <TableCell>
+                  <TableCell sx={{ ...cellSx, color: T.muted }}>{pol.age || '-'}</TableCell>
+                  <TableCell sx={cellSx}>
                     <Box display="flex" gap={1}>
                       <Tooltip title="View Details">
-                        <IconButton size="small" onClick={() => { setSelectedPolicy(pol); setDetailsOpen(true); setActiveTab(0); }}>
-                          <InfoIcon />
+                        <IconButton size="small" sx={{ color: T.muted, '&:hover': { color: T.text } }}
+                          onClick={() => { setSelectedPolicy(pol); setDetailsOpen(true); setActiveTab(0); }}>
+                          <InfoIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete Policy">
-                        <IconButton
-                          size="small"
-                          color="error"
-                          onClick={() => handleDelete(pol)}
-                          disabled={actionLoading}
-                        >
-                          <DeleteIcon />
+                        <IconButton size="small" sx={{ color: T.red, '&:hover': { bgcolor: '#450a0a' } }}
+                          onClick={() => handleDelete(pol)} disabled={actionLoading}>
+                          <DeleteIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
                     </Box>
@@ -624,48 +601,37 @@ const NetworkPolicies: React.FC = () => {
         </Table>
       </TableContainer>
 
-      <Box mt={2}>
-        <Typography variant="body2" color="text.secondary">
-          Showing {filtered.length} of {totalPolicies} policies
-        </Typography>
-      </Box>
-
-      {/* ── Audit Findings Section ── */}
+      {/* ── Audit Findings ── */}
       {audit && audit.findings.length > 0 && (
         <Box mt={4}>
-          <Typography variant="h6" gutterBottom>
-            <SecurityIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          <Typography sx={{ fontSize: 15, fontWeight: 600, color: T.text, mb: 2 }}>
             Audit Findings ({audit.findings.length})
           </Typography>
-          <TableContainer component={Paper}>
+          <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: 'action.hover' }}>
-                  <TableCell width={80}>Level</TableCell>
-                  <TableCell width={180}>Check</TableCell>
-                  <TableCell>Resource</TableCell>
-                  <TableCell>Finding</TableCell>
+                <TableRow sx={{ bgcolor: '#161f30' }}>
+                  <TableCell sx={{ ...headSx, width: 80 }}>Level</TableCell>
+                  <TableCell sx={{ ...headSx, width: 180 }}>Check</TableCell>
+                  <TableCell sx={headSx}>Resource</TableCell>
+                  <TableCell sx={headSx}>Finding</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {audit.findings.map((f, i) => (
-                  <TableRow key={i} hover>
-                    <TableCell>
+                  <TableRow key={i} hover sx={{ '&:hover': { bgcolor: T.hover } }}>
+                    <TableCell sx={cellSx}>
                       <Box display="flex" alignItems="center" gap={0.5}>
-                        {f.level === 'PASS' && <CheckCircleIcon fontSize="small" color="success" />}
-                        {f.level === 'FAIL' && <ErrorIcon fontSize="small" color="error" />}
-                        {f.level === 'WARN' && <WarningIcon fontSize="small" color="warning" />}
-                        {f.level === 'INFO' && <InfoIcon fontSize="small" color="info" />}
-                        <Typography variant="caption" fontWeight={600}>{f.level}</Typography>
+                        {f.level === 'PASS' && <CheckCircleIcon sx={{ fontSize: 14, color: T.green }} />}
+                        {f.level === 'FAIL' && <ErrorIcon sx={{ fontSize: 14, color: T.red }} />}
+                        {f.level === 'WARN' && <WarningIcon sx={{ fontSize: 14, color: T.yellow }} />}
+                        {f.level === 'INFO' && <InfoIcon sx={{ fontSize: 14, color: T.muted }} />}
+                        <Typography sx={{ fontSize: 11, fontWeight: 600, color: f.level === 'FAIL' ? T.red : f.level === 'WARN' ? T.yellow : f.level === 'PASS' ? T.green : T.muted }}>{f.level}</Typography>
                       </Box>
                     </TableCell>
-                    <TableCell><Typography variant="body2">{f.check}</Typography></TableCell>
-                    <TableCell>
-                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>
-                        {f.resource}
-                      </Typography>
-                    </TableCell>
-                    <TableCell><Typography variant="body2">{f.message}</Typography></TableCell>
+                    <TableCell sx={cellSx}><Typography sx={{ fontSize: 12, color: T.body }}>{f.check}</Typography></TableCell>
+                    <TableCell sx={cellSx}><Typography sx={{ fontSize: 11, color: T.muted, fontFamily: 'monospace' }}>{f.resource}</Typography></TableCell>
+                    <TableCell sx={cellSx}><Typography sx={{ fontSize: 12, color: T.body }}>{f.message}</Typography></TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -675,135 +641,80 @@ const NetworkPolicies: React.FC = () => {
       )}
 
       {/* ── Detail Dialog ── */}
-      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth>
+      <Dialog open={detailsOpen} onClose={() => setDetailsOpen(false)} maxWidth="lg" fullWidth sx={dlgSx}>
         {selectedPolicy && (
           <>
-            <DialogTitle>
+            <DialogTitle sx={{ borderBottom: `1px solid ${T.border}` }}>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
-                  <Typography variant="h6">{selectedPolicy.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{selectedPolicy.namespace}</Typography>
+                  <Typography sx={{ fontWeight: 600, color: T.text }}>{selectedPolicy.name}</Typography>
+                  <Typography sx={{ fontSize: 12, color: T.muted }}>{selectedPolicy.namespace}</Typography>
                 </Box>
                 {getStatusIcon(selectedPolicy)}
               </Box>
             </DialogTitle>
-            <DialogContent>
-              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ mb: 2 }}>
-                <Tab label="Overview" />
-                <Tab label="Investigations" />
-                <Tab label="Recommendations" />
-                <Tab label="Diagnostics" />
-                <Tab label="Actions" />
+            <DialogContent sx={{ p: 0 }}>
+              <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} sx={{ borderBottom: `1px solid ${T.border}`, px: 2, '& .MuiTabs-indicator': { bgcolor: T.green } }}>
+                {['Overview', 'Investigations', 'Recommendations', 'Diagnostics', 'Actions'].map((lbl) => (
+                  <Tab key={lbl} label={lbl} sx={{ color: T.muted, '&.Mui-selected': { color: T.text }, textTransform: 'none', minHeight: 40 }} />
+                ))}
               </Tabs>
+              <Box sx={{ p: 3 }}>
 
               {/* Overview */}
               {activeTab === 0 && (
-                <Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Policy Scope</Typography>
-                          <Typography>
-                            Types: {selectedPolicy.policy_types.length > 0
-                              ? selectedPolicy.policy_types.join(', ')
-                              : 'None defined'}
-                          </Typography>
-                          <Typography>Ingress rules: {selectedPolicy.ingress_rules_count}</Typography>
-                          <Typography>Egress rules: {selectedPolicy.egress_rules_count}</Typography>
-                          <Divider sx={{ my: 1 }} />
-                          <Typography variant="caption" color="text.secondary" display="block">Pod Selector:</Typography>
-                          {Object.keys(selectedPolicy.pod_selector).length === 0
-                            ? <Chip label="all pods (empty selector)" size="small" color="warning" variant="outlined" />
-                            : Object.entries(selectedPolicy.pod_selector).map(([k, v]) => (
-                                <Chip key={k} label={`${k}=${v}`} size="small" sx={{ mr: 0.5, mb: 0.5 }} />
-                              ))}
+                <Grid container spacing={2}>
+                  {[
+                    { label: 'Policy Scope', rows: [
+                      ['Types', selectedPolicy.policy_types.join(', ') || 'None'],
+                      ['Ingress Rules', selectedPolicy.ingress_rules_count],
+                      ['Egress Rules', selectedPolicy.egress_rules_count],
+                      ['Pod Selector', Object.keys(selectedPolicy.pod_selector).length === 0 ? 'all pods' : Object.entries(selectedPolicy.pod_selector).map(([k,v]) => `${k}=${v}`).join(', ')],
+                    ]},
+                    { label: 'Metadata', rows: [
+                      ['Age', selectedPolicy.age || '-'],
+                      ['Created', fmtTime(selectedPolicy.created_at)],
+                      ['Coverage', isPolicyCoverage(selectedPolicy)],
+                      ['Default Deny', isDefaultDeny(selectedPolicy) ? 'Yes' : 'No'],
+                    ]},
+                  ].map(({ label, rows }) => (
+                    <Grid item xs={12} md={6} key={label as string}>
+                      <Card sx={{ bgcolor: T.bg, border: `1px solid ${T.border}`, borderRadius: 1 }}>
+                        <CardContent sx={{ p: 2 }}>
+                          <Typography sx={{ fontSize: 11, color: T.muted, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5 }}>{label as string}</Typography>
+                          {(rows as [string, unknown][]).map(([k, v]) => (
+                            <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.5, borderBottom: `1px solid ${T.border}` }}>
+                              <Typography sx={{ fontSize: 12, color: T.muted }}>{k}</Typography>
+                              <Typography sx={{ fontSize: 12, color: T.body }}>{String(v)}</Typography>
+                            </Box>
+                          ))}
                         </CardContent>
                       </Card>
                     </Grid>
-                    <Grid item xs={12} md={6}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Metadata</Typography>
-                          <Typography>Age: {selectedPolicy.age || '-'}</Typography>
-                          <Typography variant="caption" color="text.secondary" display="block">
-                            Created: {fmtTime(selectedPolicy.created_at)}
-                          </Typography>
-                          {Object.keys(selectedPolicy.labels).length > 0 && (
-                            <>
-                              <Divider sx={{ my: 1 }} />
-                              <Typography variant="caption" color="text.secondary" display="block">Labels:</Typography>
-                              {Object.entries(selectedPolicy.labels).slice(0, 6).map(([k, v]) => (
-                                <Chip key={k} label={`${k}=${v}`} size="small" variant="outlined" sx={{ mr: 0.5, mb: 0.5 }} />
-                              ))}
-                            </>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Coverage Analysis</Typography>
-                          <Box display="flex" gap={1} flexWrap="wrap" mb={1}>
-                            <Chip
-                              label={`Ingress: ${selectedPolicy.policy_types.includes('Ingress') ? 'Controlled' : 'Uncontrolled'}`}
-                              color={selectedPolicy.policy_types.includes('Ingress') ? 'success' : 'error'}
-                              size="small"
-                            />
-                            <Chip
-                              label={`Egress: ${selectedPolicy.policy_types.includes('Egress') ? 'Controlled' : 'Uncontrolled'}`}
-                              color={selectedPolicy.policy_types.includes('Egress') ? 'success' : 'error'}
-                              size="small"
-                            />
-                            {isDefaultDeny(selectedPolicy) && (
-                              <Chip label="Default Deny" color="info" size="small" />
-                            )}
-                          </Box>
-                          <Typography variant="body2" color="text.secondary">
-                            {isPolicyCoverage(selectedPolicy) === 'full'
-                              ? 'This policy controls both inbound and outbound traffic — full zero-trust coverage.'
-                              : isPolicyCoverage(selectedPolicy) === 'partial'
-                              ? 'This policy controls only one traffic direction. Add the missing type for complete isolation.'
-                              : 'This policy does not specify any policy types. Traffic control is undefined.'}
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
-                </Box>
+                  ))}
+                </Grid>
               )}
 
               {/* Investigations */}
               {activeTab === 1 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <TroubleshootIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Active Investigations
-                  </Typography>
                   {generateInvestigations(selectedPolicy).map((inv, idx) => (
-                    <Accordion key={idx}>
-                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          {inv.type === 'error'   && <ErrorIcon color="error" />}
-                          {inv.type === 'warning' && <WarningIcon color="warning" />}
-                          {inv.type === 'info'    && <InfoIcon color="info" />}
-                          <Typography>{inv.title}</Typography>
-                        </Box>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Typography variant="body2" paragraph>{inv.description}</Typography>
-                        {inv.action && (
-                          <Box>
-                            <Typography variant="caption" color="text.secondary">Recommended Action:</Typography>
-                            <Typography variant="body2">{inv.action}</Typography>
-                          </Box>
-                        )}
-                      </AccordionDetails>
-                    </Accordion>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`,
+                      bgcolor: inv.type === 'error' ? '#1a0a0a' : inv.type === 'warning' ? '#1a1200' : '#0a1a0a' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        {inv.type === 'error'   && <ErrorIcon   sx={{ fontSize: 16, color: T.red }} />}
+                        {inv.type === 'warning' && <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />}
+                        {inv.type === 'info'    && <InfoIcon    sx={{ fontSize: 16, color: T.green }} />}
+                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{inv.title}</Typography>
+                      </Box>
+                      <Typography sx={{ fontSize: 12, color: T.body }}>{inv.description}</Typography>
+                      {inv.action && <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>→ {inv.action}</Typography>}
+                    </Box>
                   ))}
                   {generateInvestigations(selectedPolicy).length === 0 && (
-                    <Alert severity="success">No issues found — policy is well-configured!</Alert>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                      <Typography sx={{ fontSize: 13, color: T.green }}>No issues — policy is well-configured</Typography>
+                    </Box>
                   )}
                 </Box>
               )}
@@ -811,45 +722,22 @@ const NetworkPolicies: React.FC = () => {
               {/* Recommendations */}
               {activeTab === 2 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <RecommendIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Optimization Recommendations
-                  </Typography>
                   {generateRecommendations(selectedPolicy).map((rec, idx) => (
-                    <Card key={idx} sx={{ mb: 2 }} variant="outlined">
-                      <CardContent>
-                        <Box display="flex" alignItems="center" gap={1} mb={1}>
-                          <Chip
-                            label={rec.category}
-                            size="small"
-                            color={
-                              rec.category === 'security'     ? 'error'   :
-                              rec.category === 'performance'  ? 'warning' :
-                              rec.category === 'cost'         ? 'info'    : 'success'
-                            }
-                          />
-                          <Chip
-                            label={rec.priority}
-                            size="small"
-                            variant="outlined"
-                            color={
-                              rec.priority === 'high'   ? 'error'   :
-                              rec.priority === 'medium' ? 'warning' : 'default'
-                            }
-                          />
-                        </Box>
-                        <Typography variant="subtitle2" gutterBottom>{rec.title}</Typography>
-                        <Typography variant="body2" color="text.secondary" paragraph>{rec.description}</Typography>
-                        <Divider sx={{ my: 1 }} />
-                        <Typography variant="caption" color="text.secondary">Impact:</Typography>
-                        <Typography variant="body2" paragraph>{rec.impact}</Typography>
-                        <Typography variant="caption" color="text.secondary">Action:</Typography>
-                        <Typography variant="body2">{rec.action}</Typography>
-                      </CardContent>
-                    </Card>
+                    <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`, bgcolor: T.bg }}>
+                      <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+                        <Chip label={rec.category} size="small" sx={{ bgcolor: T.border, color: T.text, fontSize: 11, height: 20 }} />
+                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? '#450a0a' : rec.priority === 'medium' ? '#451a03' : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
+                      </Box>
+                      <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{rec.title}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>{rec.description}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted, mt: 0.5 }}>Impact: {rec.impact}</Typography>
+                      <Typography sx={{ fontSize: 12, color: T.muted }}>→ {rec.action}</Typography>
+                    </Box>
                   ))}
                   {generateRecommendations(selectedPolicy).length === 0 && (
-                    <Alert severity="success">No recommendations — policy looks optimal!</Alert>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                      <Typography sx={{ fontSize: 13, color: T.green }}>No recommendations — policy looks optimal</Typography>
+                    </Box>
                   )}
                 </Box>
               )}
@@ -857,118 +745,54 @@ const NetworkPolicies: React.FC = () => {
               {/* Diagnostics */}
               {activeTab === 3 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <HealthAndSafetyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Health Checks
-                  </Typography>
-                  <List>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color={selectedPolicy.policy_types.includes('Ingress') ? 'success' : 'error'} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Ingress Traffic Control"
-                        secondary={selectedPolicy.policy_types.includes('Ingress')
-                          ? `${selectedPolicy.ingress_rules_count} allow rule(s)`
-                          : 'Not controlled — inbound traffic is unrestricted'}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color={selectedPolicy.policy_types.includes('Egress') ? 'success' : 'error'} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Egress Traffic Control"
-                        secondary={selectedPolicy.policy_types.includes('Egress')
-                          ? `${selectedPolicy.egress_rules_count} allow rule(s)`
-                          : 'Not controlled — outbound traffic is unrestricted'}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <CheckCircleIcon color={Object.keys(selectedPolicy.pod_selector).length > 0 ? 'success' : 'warning'} />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Pod Selector Specificity"
-                        secondary={Object.keys(selectedPolicy.pod_selector).length > 0
-                          ? `Targeted: ${Object.entries(selectedPolicy.pod_selector).map(([k, v]) => `${k}=${v}`).join(', ')}`
-                          : 'Broad: applies to all pods in namespace'}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SecurityIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Default Deny Pattern"
-                        secondary={isDefaultDeny(selectedPolicy)
-                          ? 'Default deny detected — explicit allows required'
-                          : 'No default deny — some traffic may flow implicitly'}
-                      />
-                    </ListItem>
-                    <ListItem>
-                      <ListItemIcon>
-                        <SpeedIcon color="primary" />
-                      </ListItemIcon>
-                      <ListItemText
-                        primary="Rule Complexity"
-                        secondary={`${selectedPolicy.ingress_rules_count + selectedPolicy.egress_rules_count} total rules`}
-                      />
-                    </ListItem>
-                  </List>
+                  {[
+                    { ok: selectedPolicy.policy_types.includes('Ingress'), label: 'Ingress Control', sub: selectedPolicy.policy_types.includes('Ingress') ? `${selectedPolicy.ingress_rules_count} allow rules` : 'Uncontrolled inbound traffic' },
+                    { ok: selectedPolicy.policy_types.includes('Egress'), label: 'Egress Control', sub: selectedPolicy.policy_types.includes('Egress') ? `${selectedPolicy.egress_rules_count} allow rules` : 'Uncontrolled outbound traffic' },
+                    { ok: Object.keys(selectedPolicy.pod_selector).length > 0, label: 'Pod Selector', sub: Object.keys(selectedPolicy.pod_selector).length > 0 ? 'Targeted selector' : 'Broad — applies to all pods' },
+                    { ok: isDefaultDeny(selectedPolicy), label: 'Default Deny', sub: isDefaultDeny(selectedPolicy) ? 'Default deny detected' : 'No default deny set' },
+                  ].map(({ ok, label, sub }) => (
+                    <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 1.5, borderBottom: `1px solid ${T.border}` }}>
+                      {ok ? <CheckCircleIcon sx={{ fontSize: 18, color: T.green }} /> : <WarningIcon sx={{ fontSize: 18, color: T.yellow }} />}
+                      <Box>
+                        <Typography sx={{ fontSize: 13, color: T.text }}>{label}</Typography>
+                        <Typography sx={{ fontSize: 12, color: T.muted }}>{sub}</Typography>
+                      </Box>
+                    </Box>
+                  ))}
                 </Box>
               )}
 
               {/* Actions */}
               {activeTab === 4 && (
                 <Box>
-                  <Typography variant="h6" gutterBottom>
-                    <BuildIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-                    Available Actions
+                  <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: '#dc2626' } }}
+                    onClick={() => handleDelete(selectedPolicy)} disabled={actionLoading}
+                    startIcon={actionLoading ? <CircularProgress size={16} /> : <DeleteIcon />}>
+                    Delete Policy
+                  </Button>
+                  <Typography sx={{ fontSize: 12, color: T.muted }}>
+                    Immediately removes traffic enforcement for all matched pods. Ensure a replacement is ready.
                   </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="subtitle2" gutterBottom>Policy Management</Typography>
-                          <Button
-                            variant="contained"
-                            color="error"
-                            fullWidth
-                            sx={{ mb: 1 }}
-                            onClick={() => handleDelete(selectedPolicy)}
-                            disabled={actionLoading}
-                            startIcon={actionLoading ? <CircularProgress size={16} /> : undefined}
-                          >
-                            Delete Policy
-                          </Button>
-                          <Typography variant="caption" color="text.secondary">
-                            Deleting a NetworkPolicy immediately removes all traffic enforcement for matched pods.
-                            Ensure replacement policy is in place before deleting.
-                          </Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
                 </Box>
               )}
+              </Box>
             </DialogContent>
-            <DialogActions>
-              <Button onClick={() => setDetailsOpen(false)}>Close</Button>
+            <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+              <Button onClick={() => setDetailsOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Close</Button>
             </DialogActions>
           </>
         )}
       </Dialog>
 
       {/* Confirm dialog */}
-      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Confirm Action</DialogTitle>
-        <DialogContent>
-          <Typography>{confirmAction?.label}</Typography>
+      <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)} maxWidth="xs" fullWidth sx={dlgSx}>
+        <DialogTitle sx={{ borderBottom: `1px solid ${T.border}`, color: T.text }}>Confirm Action</DialogTitle>
+        <DialogContent sx={{ pt: 2 }}>
+          <Typography sx={{ color: T.body }}>{confirmAction?.label}</Typography>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setConfirmOpen(false)}>Cancel</Button>
-          <Button variant="contained" color="error" onClick={runConfirmed}>Confirm</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
+          <Button onClick={() => setConfirmOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" sx={{ bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: '#dc2626' }, textTransform: 'none' }} onClick={runConfirmed}>Confirm</Button>
         </DialogActions>
       </Dialog>
 
