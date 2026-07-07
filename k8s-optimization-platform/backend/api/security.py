@@ -1989,55 +1989,137 @@ async def get_secret_exposure(cluster_id: Optional[str] = None):
 @router.get("/secrets-security/rotation")
 async def get_secret_rotation(cluster_id: Optional[str] = None):
     """
-    Secret rotation — uses pod creation timestamps as proxy for secret age.
-    One synthetic secret per namespace, age = oldest pod in that namespace.
+    Secret rotation — reads real Kubernetes Secret metadata from secrets_domain
+    stored by the in-cluster agent in db_manager.
+    Reports rotation status (overdue / needs_rotation / rotated) based on actual
+    secret creation timestamps, type, key count, and reference status.
+    Skips auto-managed SA-token / helm-release secrets.
     """
     try:
-        pods = await fetch_pods_data()
+        from database.db import db_manager
+        from datetime import timezone
 
-        ns_age: dict = {}
-        for pod in pods:
-            ns      = pod.get("namespace", "default")
-            created = pod.get("created") or pod.get("start_time")
-            if created:
-                try:
-                    dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                    age = (datetime.now(dt.tzinfo) - dt).days
-                    ns_age[ns] = max(ns_age.get(ns, 0), age)
-                except Exception:
-                    pass
+        # ── Load secrets_domain from db_manager ──────────────────────────────
+        clusters = db_manager.get_all_clusters()
+        if not clusters:
+            return {
+                "rotation_score": 0, "total_secrets": 0, "rotated_secrets": 0,
+                "needs_rotation": 0, "overdue_rotation": 0, "secrets_status": [],
+                "rotation_policy": "Secrets should be rotated every 90 days.",
+                "last_scan": datetime.now().isoformat(),
+                "recommendation": "No cluster data available yet.",
+            }
+
+        cluster_name = cluster_id or clusters[0]["cluster_name"]
+        metrics = db_manager.get_latest_metrics(cluster_name) or {}
+        sd = metrics.get("secrets_domain") or {}
+        all_items = sd.get("items") or []
+
+        # Pods domain for counting pods-per-namespace
+        pod_ns_count: dict = {}
+        pods_domain = metrics.get("pods") or {}
+        if isinstance(pods_domain, str):
+            import json
+            pods_domain = json.loads(pods_domain)
+        for pod in pods_domain.get("items", []):
+            ns = pod.get("namespace", "default")
+            pod_ns_count[ns] = pod_ns_count.get(ns, 0) + 1
+
+        # ── Skip types that are auto-managed by Kubernetes ────────────────────
+        SKIP_TYPES = {
+            "kubernetes.io/service-account-token",
+            "kubernetes.io/dockercfg",
+            "bootstrap.kubernetes.io/token",
+        }
+        SKIP_PREFIXES = (
+            "default-token-", "default-dockercfg-",
+            "builder-token-", "builder-dockercfg-",
+            "deployer-token-", "deployer-dockercfg-",
+            "sh.helm.release.",
+        )
+
+        def _age(created_str: str) -> int:
+            if not created_str:
+                return 0
+            try:
+                dt = datetime.fromisoformat(created_str.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                return max(0, (datetime.now(timezone.utc) - dt).days)
+            except Exception:
+                return 0
 
         secrets_status = []
         rotation_summary = {"rotated": 0, "needs_rotation": 0, "overdue": 0}
 
-        for ns, age_days in sorted(ns_age.items()):
+        for s in all_items:
+            name   = s.get("name", "unknown")
+            ns     = s.get("namespace", "default")
+            stype  = s.get("type", "Opaque") or "Opaque"
+            keys   = s.get("data_keys") or []
+            kcount = s.get("key_count") or len(keys)
+            created = s.get("created") or ""
+            is_ref  = s.get("is_referenced", True)
+
+            # Skip auto-managed secrets
+            if stype in SKIP_TYPES or any(name.startswith(p) for p in SKIP_PREFIXES):
+                continue
+
+            age_days = _age(created)
+
+            # Rotation status based on age
             if age_days > 180:
                 status   = "overdue"
-                rotation_summary["overdue"] += 1
                 severity = "high"
+                rotation_summary["overdue"] += 1
             elif age_days > 90:
                 status   = "needs_rotation"
-                rotation_summary["needs_rotation"] += 1
                 severity = "medium"
+                rotation_summary["needs_rotation"] += 1
             else:
                 status   = "rotated"
-                rotation_summary["rotated"] += 1
                 severity = "low"
+                rotation_summary["rotated"] += 1
+
+            # Bump severity if unreferenced (orphaned secret still holds old creds)
+            if not is_ref and status == "rotated":
+                severity = "medium"
+
+            if status == "rotated":
+                recommendation = "Secret is within rotation window"
+            else:
+                recommendation = (
+                    f"Rotate immediately — {age_days}d old (policy: 90d)"
+                    if status == "overdue"
+                    else f"Schedule rotation — {age_days}d old (policy: 90d)"
+                )
 
             secrets_status.append({
-                "secret_name":     f"{ns}-credentials",
+                "secret_name":     name,
                 "namespace":       ns,
+                "type":            stype,
+                "key_count":       kcount,
+                "is_referenced":   is_ref,
                 "age_days":        age_days,
-                "last_rotated":    (datetime.now() - timedelta(days=age_days)).isoformat(),
+                "last_rotated":    (datetime.now(timezone.utc) - timedelta(days=age_days)).isoformat(),
                 "status":          status,
                 "severity":        severity,
                 "rotation_policy": "90 days",
-                "used_by_pods":    sum(1 for p in pods if p.get("namespace") == ns),
-                "recommendation":  f"Rotate secret (age {age_days}d)" if status != "rotated" else "Secret is current",
+                "used_by_pods":    pod_ns_count.get(ns, 0),
+                "recommendation":  recommendation,
             })
 
+        # Sort: overdue first, then by age descending
+        secrets_status.sort(key=lambda x: (
+            0 if x["status"] == "overdue" else
+            1 if x["status"] == "needs_rotation" else 2,
+            -x["age_days"]
+        ))
+
         total_secrets  = len(secrets_status)
-        rotation_score = round((rotation_summary["rotated"] / max(total_secrets, 1)) * 100, 1)
+        rotation_score = round(
+            (rotation_summary["rotated"] / max(total_secrets, 1)) * 100, 1
+        )
 
         return {
             "rotation_score":   rotation_score,
@@ -2045,7 +2127,7 @@ async def get_secret_rotation(cluster_id: Optional[str] = None):
             "rotated_secrets":  rotation_summary["rotated"],
             "needs_rotation":   rotation_summary["needs_rotation"],
             "overdue_rotation": rotation_summary["overdue"],
-            "secrets_status":   sorted(secrets_status, key=lambda x: -x["age_days"]),
+            "secrets_status":   secrets_status,
             "rotation_policy":  "Secrets should be rotated every 90 days.",
             "last_scan":        datetime.now().isoformat(),
         }
@@ -2058,29 +2140,105 @@ async def get_secret_rotation(cluster_id: Optional[str] = None):
 @router.get("/secrets-security/certificates")
 async def get_certificate_management(cluster_id: Optional[str] = None):
     """
-    Certificate management — one TLS cert per namespace.
-    Age derived from oldest pod creation (proxy for cert issuance age).
+    Certificate management — reads real kubernetes.io/tls secrets from secrets_domain
+    collected by the agent, computes expiry from issuance date + typical validity window,
+    and surfaces metadata for the frontend dashboard.
     """
+    from datetime import timezone
+    # TLS certificate validity assumptions (days) by name pattern
+    CERT_VALIDITY_MAP = [
+        (["le-prod", "letsencrypt", "le-"], 90),    # Let's Encrypt: 90 days
+        (["vault", "ca-cert"], 365 * 5),             # Long-lived CA certs: 5 years
+        (["ibm-", "xforce-devops-"], 365),            # IBM / cluster certs: 1 year
+        (["rabbitmq", "packageserver", "kubeapps"], 365),
+    ]
+    DEFAULT_VALIDITY_DAYS = 365  # assume 1-year validity for unknown certs
+
+    def _cert_validity(name: str) -> int:
+        n = name.lower()
+        for patterns, days in CERT_VALIDITY_MAP:
+            if any(p in n for p in patterns):
+                return days
+        return DEFAULT_VALIDITY_DAYS
+
+    def _infer_issuer(name: str, namespace: str, data_keys: list) -> str:
+        n = name.lower()
+        if "le-prod" in n or "letsencrypt" in n:
+            return "Let's Encrypt"
+        if "vault" in n or "vault" in namespace:
+            return "HashiCorp Vault CA"
+        if "ibm-" in n or "xforce-devops" in n:
+            return "IBM Cloud Certificate Manager"
+        if "rabbitmq" in n:
+            return "RabbitMQ Operator CA"
+        if "ca.crt" in data_keys:
+            return "Cluster CA (with ca.crt)"
+        return "Kubernetes CA"
+
+    def _cert_type(name: str, data_keys: list) -> str:
+        n = name.lower()
+        if "ca-cert" in n or "ca_cert" in n:
+            return "CA"
+        if "ingress" in n:
+            return "Ingress TLS"
+        if "ca.crt" in data_keys:
+            return "Chain TLS"
+        return "TLS"
+
     try:
-        pods = await fetch_pods_data()
+        from database.db import db_manager
+        clusters = db_manager.get_all_clusters()
+        metrics: dict = {}
+        if clusters:
+            metrics = db_manager.get_latest_metrics(clusters[0]["cluster_name"]) or {}
 
-        ns_age: dict = {}
-        for pod in pods:
-            ns      = pod.get("namespace", "default")
-            created = pod.get("created") or pod.get("start_time")
-            if created:
-                try:
-                    dt  = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                    age = (datetime.now(dt.tzinfo) - dt).days
-                    ns_age[ns] = max(ns_age.get(ns, 0), age)
-                except Exception:
-                    pass
+        cluster_name = clusters[0]["cluster_name"] if clusters else "xforce-devops"
 
+        # Pull real TLS secrets from agent-collected secrets_domain
+        secrets_raw = metrics.get("secrets_domain") or {}
+        if isinstance(secrets_raw, str):
+            import json as _json
+            secrets_raw = _json.loads(secrets_raw)
+        all_secrets = secrets_raw.get("items", [])
+        tls_secrets = [s for s in all_secrets if s.get("type") == "kubernetes.io/tls"]
+
+        # Count pods per namespace for "used_by_services"
+        pods = []
+        pods_raw = metrics.get("pods") or {}
+        if isinstance(pods_raw, str):
+            import json as _json
+            pods_raw = _json.loads(pods_raw)
+        pods = pods_raw.get("items", []) if isinstance(pods_raw, dict) else []
+        pod_ns_count: dict = {}
+        for p in pods:
+            ns = p.get("namespace", "default")
+            pod_ns_count[ns] = pod_ns_count.get(ns, 0) + 1
+
+        now = datetime.now(timezone.utc)
         certificates = []
         expiry_summary = {"valid": 0, "expiring_soon": 0, "expired": 0}
 
-        for ns, age_days in sorted(ns_age.items()):
-            days_until_expiry = 365 - age_days
+        for s in tls_secrets:
+            name      = s.get("name", "unknown")
+            ns        = s.get("namespace", "default")
+            created   = s.get("created") or ""
+            data_keys = s.get("data_keys") or []
+            is_ref    = s.get("is_referenced", False)
+
+            # Parse issuance date
+            issued_dt = None
+            age_days  = 0
+            if created:
+                try:
+                    issued_dt = datetime.fromisoformat(created.replace("Z", "+00:00"))
+                    age_days  = (now - issued_dt).days
+                except Exception:
+                    pass
+
+            validity_days     = _cert_validity(name)
+            days_until_expiry = validity_days - age_days
+            issued_iso  = issued_dt.isoformat() if issued_dt else now.isoformat()
+            expiry_iso  = (issued_dt + timedelta(days=validity_days)).isoformat() if issued_dt else (now + timedelta(days=validity_days)).isoformat()
 
             if days_until_expiry < 0:
                 status   = "expired"
@@ -2095,36 +2253,58 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
                 severity = "low"
                 expiry_summary["valid"] += 1
 
+            if status == "expired":
+                recommendation = f"Certificate expired {abs(days_until_expiry)}d ago — renew immediately"
+            elif status == "expiring_soon":
+                recommendation = f"Expires in {days_until_expiry}d — schedule renewal now"
+            elif not is_ref:
+                recommendation = "Certificate not referenced by any workload — consider cleanup"
+            else:
+                recommendation = "Certificate is valid and in use"
+
             certificates.append({
-                "name":              f"{ns}-tls",
+                "name":              name,
                 "namespace":         ns,
-                "type":              "TLS",
-                "issuer":            "Kubernetes CA",
+                "type":              _cert_type(name, data_keys),
+                "issuer":            _infer_issuer(name, ns, data_keys),
                 "subject":           f"*.{ns}.svc.cluster.local",
-                "issued_date":       (datetime.now() - timedelta(days=age_days)).isoformat(),
-                "expiry_date":       (datetime.now() + timedelta(days=days_until_expiry)).isoformat(),
+                "issued_date":       issued_iso,
+                "expiry_date":       expiry_iso,
                 "days_until_expiry": days_until_expiry,
+                "age_days":          age_days,
                 "status":            status,
                 "severity":          severity,
-                "auto_renewal":      True,
-                "used_by_services":  sum(1 for p in pods if p.get("namespace") == ns),
-                "recommendation":    "Renew immediately" if status == "expired" else
-                                     "Monitor expiration" if status == "expiring_soon" else
-                                     "Certificate is valid",
+                "auto_renewal":      "packageserver" in name or "rabbitmq.com" in name,
+                "is_referenced":     is_ref,
+                "data_keys":         data_keys,
+                "used_by_services":  pod_ns_count.get(ns, 0),
+                "recommendation":    recommendation,
             })
+
+        # Sort: expired first, then expiring_soon, then by days_until_expiry ascending
+        certificates.sort(key=lambda x: (
+            0 if x["status"] == "expired" else
+            1 if x["status"] == "expiring_soon" else 2,
+            x["days_until_expiry"]
+        ))
 
         total_certs = len(certificates)
         cert_score  = round((expiry_summary["valid"] / max(total_certs, 1)) * 100, 1)
 
         return {
+            "cluster_name":         cluster_name,
             "certificate_score":    cert_score,
             "total_certificates":   total_certs,
             "valid_certificates":   expiry_summary["valid"],
             "expiring_soon":        expiry_summary["expiring_soon"],
             "expired_certificates": expiry_summary["expired"],
-            "certificates":         sorted(certificates, key=lambda x: x["days_until_expiry"]),
-            "recommendation":       "Enable auto-renewal for all certificates.",
-            "last_scan":            datetime.now().isoformat(),
+            "certificates":         certificates,
+            "recommendation":       (
+                "Critical: Some certificates have expired — renew immediately."
+                if expiry_summary["expired"] > 0
+                else "Enable auto-renewal for all certificates."
+            ),
+            "last_scan":            now.isoformat(),
         }
 
     except Exception as e:
@@ -2135,35 +2315,71 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
 @router.get("/secrets-security/credential-audit")
 async def get_credential_audit(cluster_id: Optional[str] = None):
     """
-    Credential audit — real service account list with age derived from pod timestamps.
+    Credential audit — uses real service_accounts domain data (creation timestamps,
+    automount flag) stored by the agent, enriched with pod-usage counts.
+    Falls back gracefully to pod-derived age when service_accounts data is absent.
     """
     try:
-        pods = await fetch_pods_data()
+        from database.db import db_manager
+        clusters = db_manager.get_all_clusters()
+        metrics: dict = {}
+        if clusters:
+            metrics = db_manager.get_latest_metrics(clusters[0]["cluster_name"]) or {}
 
-        sa_info: dict = defaultdict(lambda: {"namespace": "", "pods": 0, "age_days": 0})
+        # ── 1. Pull real service-account list from agent domain ───────────────
+        sa_domain = metrics.get("service_accounts") or []
+        # sa_domain is a list of dicts:
+        #   { name, namespace, secrets, automount, labels, created }
 
+        # ── 2. Build pod-usage index from pods domain ─────────────────────────
+        pods_domain = metrics.get("pods") or {}
+        if isinstance(pods_domain, str):
+            import json
+            pods_domain = json.loads(pods_domain)
+        pods = pods_domain.get("items", []) if isinstance(pods_domain, dict) else []
+
+        # Map "namespace/sa_name" -> pod count
+        pod_usage: dict = defaultdict(int)
         for pod in pods:
-            ns      = pod.get("namespace", "default")
-            sa      = pod.get("service_account", "default")
-            key     = f"{ns}/{sa}"
-            sa_info[key]["namespace"] = ns
-            sa_info[key]["pods"] += 1
-            created = pod.get("created") or pod.get("start_time")
-            if created:
-                try:
-                    dt  = datetime.fromisoformat(created.replace("Z", "+00:00"))
-                    age = (datetime.now(dt.tzinfo) - dt).days
-                    sa_info[key]["age_days"] = max(sa_info[key]["age_days"], age)
-                except Exception:
-                    pass
+            ns = pod.get("namespace", "default")
+            sa = pod.get("service_account") or "default"
+            pod_usage[f"{ns}/{sa}"] += 1
 
+        # ── 3. Build credentials list ─────────────────────────────────────────
         credentials = []
         audit_findings = []
         risk_summary = {"high": 0, "medium": 0, "low": 0}
 
-        for sa_key, info in sorted(sa_info.items(), key=lambda x: -x[1]["age_days"]):
-            ns, sa_name = sa_key.split("/", 1)
-            age_days    = info["age_days"]
+        def _age_from_ts(ts: str) -> int:
+            """Return age in days from an ISO timestamp, or 0 on any error."""
+            if not ts:
+                return 0
+            try:
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                return max(0, (datetime.now(dt.tzinfo) - dt).days)
+            except Exception:
+                return 0
+
+        def _permissions_for_sa(sa_name: str, ns: str, automount) -> list:
+            base = ["get pods", "list pods"]
+            if automount is True:
+                base.append("automount-token")
+            if sa_name in ("default", "admin", "cluster-admin"):
+                base.append("admin" if sa_name != "cluster-admin" else "cluster-admin")
+            return base
+
+        processed_keys: set = set()
+
+        # Process real SA records first
+        for sa in sa_domain:
+            sa_name  = sa.get("name", "unknown")
+            ns       = sa.get("namespace", "default")
+            created  = sa.get("created", "")
+            automount = sa.get("automount")
+            age_days = _age_from_ts(created)
+            key      = f"{ns}/{sa_name}"
+            processed_keys.add(key)
+            pods_count = pod_usage.get(key, 0)
 
             if age_days > 180:
                 risk_level = "high"
@@ -2178,19 +2394,80 @@ async def get_credential_audit(cluster_id: Optional[str] = None):
                 risk_summary["low"] += 1
                 finding    = "Token within rotation window"
 
+            # Automount=True with high-age is an escalated risk
+            if automount is True and age_days > 90 and risk_level == "medium":
+                risk_level = "high"
+                risk_summary["medium"] -= 1
+                risk_summary["high"] += 1
+                finding = f"Automount enabled + token age > 90d ({age_days}d)"
+
+            created_iso = created if created else (datetime.now() - timedelta(days=age_days)).isoformat()
             cred = {
-                "id":                  f"cred-{sa_key.replace('/', '-')}",
+                "id":                  f"cred-{key.replace('/', '-')}",
                 "name":                f"{sa_name}@{ns}",
+                "namespace":           ns,
+                "type":                "Service Account Token",
+                "created_date":        created_iso,
+                "last_used":           (datetime.now() - timedelta(days=max(0, age_days - 1))).isoformat(),
+                "days_since_last_use": age_days,
+                "access_count":        max(pods_count * 100, sa.get("secrets", 0) * 10),
+                "risk_level":          risk_level,
+                "used_by_pods":        pods_count,
+                "automount":           automount,
+                "permissions":         _permissions_for_sa(sa_name, ns, automount),
+                "recommendation":      (
+                    "Rotate token and review RBAC bindings" if risk_level == "high" else
+                    "Schedule rotation within 30 days"      if risk_level == "medium" else
+                    "Token is current"
+                ),
+            }
+            credentials.append(cred)
+
+            if risk_level == "high":
+                audit_findings.append({
+                    "credential_id":  cred["id"],
+                    "finding":        finding,
+                    "severity":       "high",
+                    "recommendation": "Review RBAC bindings and rotate or delete this service account token",
+                })
+
+        # ── 4. Fallback: pods that reference SAs not in the SA domain ─────────
+        for pod in pods:
+            ns  = pod.get("namespace", "default")
+            sa  = pod.get("service_account") or "default"
+            key = f"{ns}/{sa}"
+            if key in processed_keys:
+                continue
+            processed_keys.add(key)
+            created  = pod.get("created") or pod.get("start_time") or ""
+            age_days = _age_from_ts(created)
+            if age_days > 180:
+                risk_level = "high"; risk_summary["high"] += 1
+                finding    = f"Service account token age > 180d ({age_days}d)"
+            elif age_days > 90:
+                risk_level = "medium"; risk_summary["medium"] += 1
+                finding    = f"Service account token age > 90d ({age_days}d)"
+            else:
+                risk_level = "low"; risk_summary["low"] += 1
+                finding    = "Token within rotation window"
+
+            cred = {
+                "id":                  f"cred-{key.replace('/', '-')}",
+                "name":                f"{sa}@{ns}",
                 "namespace":           ns,
                 "type":                "Service Account Token",
                 "created_date":        (datetime.now() - timedelta(days=age_days)).isoformat(),
                 "last_used":           (datetime.now() - timedelta(days=max(0, age_days - 1))).isoformat(),
                 "days_since_last_use": age_days,
-                "access_count":        info["pods"] * 100,
+                "access_count":        pod_usage.get(key, 1) * 100,
                 "risk_level":          risk_level,
-                "used_by_pods":        info["pods"],
-                "permissions":         ["get pods", "list pods"],
-                "recommendation":      "Rotate token" if risk_level != "low" else "Token is current",
+                "used_by_pods":        pod_usage.get(key, 1),
+                "permissions":         _permissions_for_sa(sa, ns, None),
+                "recommendation":      (
+                    "Rotate token and review RBAC bindings" if risk_level == "high" else
+                    "Schedule rotation within 30 days"      if risk_level == "medium" else
+                    "Token is current"
+                ),
             }
             credentials.append(cred)
 
@@ -2201,6 +2478,10 @@ async def get_credential_audit(cluster_id: Optional[str] = None):
                     "severity":       "high",
                     "recommendation": "Review and rotate if no longer needed",
                 })
+
+        # Sort by risk (high first), then age desc
+        risk_order = {"high": 0, "medium": 1, "low": 2}
+        credentials.sort(key=lambda c: (risk_order.get(c["risk_level"], 9), -c["days_since_last_use"]))
 
         total_creds = len(credentials)
         audit_score = round((risk_summary["low"] / max(total_creds, 1)) * 100, 1)
@@ -2214,10 +2495,10 @@ async def get_credential_audit(cluster_id: Optional[str] = None):
             "credentials":       credentials,
             "audit_findings":    audit_findings,
             "recommendations": [
-                "Rotate service account tokens > 90 days old",
-                "Implement credential rotation policy",
-                "Monitor credential access patterns",
-                "Apply principle of least privilege",
+                "Rotate service account tokens older than 90 days",
+                "Disable automount for service accounts that don't need API access",
+                "Apply principle of least privilege to all service account RBAC bindings",
+                "Remove unused service accounts from non-system namespaces",
             ],
             "last_scan": datetime.now().isoformat(),
         }

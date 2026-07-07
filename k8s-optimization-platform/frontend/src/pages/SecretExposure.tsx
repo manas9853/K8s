@@ -7,42 +7,86 @@ import {
   TableContainer, TableHead, TableRow
 } from '@mui/material';
 import {
-  Lock as LockIcon, Warning as WarningIcon, VpnKey as KeyIcon,
+  VpnKey as KeyIcon,
   Refresh as RotateIcon, ArrowForward as ArrowIcon, Error as ErrorIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 
-const SEV_COLOR: Record<string, string> = { critical: '#f87171', high: '#f59e0b', medium: '#60a5fa', low: '#4ade80' };
-const SEV_BG:    Record<string, string> = { critical: '#2d1515',  high: '#2d200a',  medium: '#0d1f3c',  low: '#0d2d1a' };
+interface SecretExposureItem {
+  id: string;
+  pod_name: string;
+  container_name: string;
+  namespace: string;
+  severity: string;
+  secret_type: string;
+  exposure_type: string;
+  env_var_count: number;
+  detected_at: string;
+  recommendation: string;
+}
+
+interface SecretExposureResponse {
+  exposure_score: number;
+  total_exposures: number;
+  critical_exposures: number;
+  high_exposures: number;
+  medium_exposures: number;
+  exposed_secrets: SecretExposureItem[];
+  containers_scanned: number;
+  recommendation?: string;
+  last_scan?: string;
+}
+
+const SEV_COLOR: Record<string, string> = { critical: '#ef5350', high: '#ef5350', medium: '#ffa726', low: '#42a5f5' };
+const SEV_BG: Record<string, string> = { critical: 'rgba(239, 83, 80, 0.16)', high: 'rgba(239, 83, 80, 0.16)', medium: 'rgba(255, 167, 38, 0.16)', low: 'rgba(66, 165, 245, 0.16)' };
 
 const SecretExposure: React.FC = () => {
   const { clusterParam } = useActiveCluster();
   const navigate = useNavigate();
-  const [data, setData] = useState<any>(null);
+  const [data, setData] = useState<SecretExposureResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`${API_BASE_URL}/v1/security/secrets-security/exposure${clusterParam}`)
-      .then(r => r.json()).then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-    const i = setInterval(() => {
-      fetch(`${API_BASE_URL}/v1/security/secrets-security/exposure${clusterParam}`)
-        .then(r => r.json()).then(d => setData(d)).catch(() => {});
-    }, 120000);
-    return () => clearInterval(i);
+    let mounted = true;
+
+    const fetchData = async (showLoader = false) => {
+      if (showLoader) setLoading(true);
+      try {
+        const response = await fetch(`${API_BASE_URL}/v1/security/secrets-security/exposure${clusterParam}`);
+        if (!response.ok) throw new Error('Failed to load secret exposure data');
+        const result: SecretExposureResponse = await response.json();
+        if (!mounted) return;
+        setData(result);
+        setError(null);
+      } catch (err) {
+        if (!mounted) return;
+        setError(err instanceof Error ? err.message : 'Failed to load secret exposure data');
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    fetchData(true);
+    const intervalId = setInterval(() => fetchData(false), 120000);
+
+    return () => {
+      mounted = false;
+      clearInterval(intervalId);
+    };
   }, [clusterParam]);
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}><CircularProgress /></Box>;
-  if (!data) return <Alert severity="error">Failed to load secret exposure data</Alert>;
+  if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
+  if (!data) return <Box p={3}><Alert severity="error">Failed to load secret exposure data</Alert></Box>;
 
-  const secrets: any[] = Array.isArray(data.exposed_secrets ?? data.secrets) ? (data.exposed_secrets ?? data.secrets) : [];
-  const criticals = secrets.filter((s: any) => (s.risk_level ?? s.severity ?? '').toLowerCase() === 'critical');
+  const secrets = Array.isArray(data.exposed_secrets) ? data.exposed_secrets : [];
 
   const STAT_ROWS = [
-    { label: 'Total Exposed',    count: data.total_exposures ?? secrets.length,          color: '#f87171', bg: '#2d1515' },
-    { label: 'High Severity',    count: data.high_exposures ?? 0,                         color: '#f59e0b', bg: '#2d200a' },
-    { label: 'Medium Severity',  count: data.medium_exposures ?? 0,                       color: '#60a5fa', bg: '#0d1f3c' },
-    { label: 'Containers Scanned', count: data.containers_scanned ?? 0,                   color: '#4ade80', bg: '#0d2d1a' },
+    { label: 'Exposure Score', count: data.exposure_score ?? 'N/A', color: '#90caf9', bg: '#1e2433' },
+    { label: 'Total Exposed', count: data.total_exposures ?? secrets.length, color: '#ef5350', bg: '#1e2433' },
+    { label: 'High Severity', count: data.high_exposures ?? 0, color: '#ffa726', bg: '#1e2433' },
+    { label: 'Containers Scanned', count: data.containers_scanned ?? 0, color: '#90caf9', bg: '#1e2433' },
   ];
 
   return (
@@ -72,16 +116,16 @@ const SecretExposure: React.FC = () => {
       </Grid>
 
       {/* CRITICAL SECRETS SPOTLIGHT */}
-      {secrets.filter(s => (s.severity ?? '').toLowerCase() === 'high').length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #f87171', bgcolor: '#2d1515' }}>
+      {secrets.filter((s) => (s.severity ?? '').toLowerCase() === 'high').length > 0 && (
+        <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #2a3245', bgcolor: '#1e2433' }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <ErrorIcon sx={{ color: '#f87171' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#f87171' }}>High-Severity Exposures</Typography>
+            <ErrorIcon sx={{ color: '#ef5350' }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>High-Severity Exposures</Typography>
             <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>Immediate rotation required</Typography>
           </Box>
           <Stack spacing={1.5}>
-            {secrets.filter(s => (s.severity ?? '').toLowerCase() === 'high').slice(0, 4).map((s: any, i: number) => (
-              <Box key={i} sx={{ p: 2, borderRadius: 1.5, bgcolor: '#1a1010', border: '1px solid #f8717140',
+            {secrets.filter((s) => (s.severity ?? '').toLowerCase() === 'high').slice(0, 4).map((s) => (
+              <Box key={s.id} sx={{ p: 2, borderRadius: 1.5, bgcolor: '#131d2e', border: '1px solid #2a3245',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 1 }}>
                 <Box>
                   <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
@@ -90,13 +134,13 @@ const SecretExposure: React.FC = () => {
                   <Typography variant="caption" sx={{ color: '#8892a4' }}>
                     {s.namespace} · {s.secret_type} · {s.exposure_type}
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#f87171', display: 'block', mt: 0.5 }}>
+                  <Typography variant="body2" sx={{ color: '#90caf9', display: 'block', mt: 0.5 }}>
                     {s.env_var_count} env vars detected
                   </Typography>
                 </Box>
                 <Button size="small" variant="contained" startIcon={<RotateIcon />}
                   onClick={() => navigate('/secret-rotation')}
-                  sx={{ fontSize: 11, bgcolor: '#f87171', '&:hover': { bgcolor: '#ef4444' } }}>
+                  sx={{ fontSize: 11, bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
                   Rotate Secrets
                 </Button>
               </Box>
@@ -115,7 +159,27 @@ const SecretExposure: React.FC = () => {
           </Button>
         </Box>
         {secrets.length === 0 ? (
-          <Box p={3}><Alert severity="success">No secret exposure issues found.</Alert></Box>
+          <Box p={3}>
+            <Paper
+              elevation={0}
+              sx={{
+                maxWidth: 480,
+                mx: 'auto',
+                textAlign: 'center',
+                p: 6,
+                border: '1px solid #2a3245',
+                borderRadius: 2,
+                bgcolor: '#131d2e',
+              }}
+            >
+              <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ color: '#4ade80' }}>
+                No secret exposure issues found
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.7 }}>
+                {data.recommendation ?? 'The latest cluster scan did not find any workloads with likely secret exposure patterns.'}
+              </Typography>
+            </Paper>
+          </Box>
         ) : (
           <TableContainer>
             <Table size="small">
@@ -127,10 +191,10 @@ const SecretExposure: React.FC = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {secrets.slice(0, 50).map((s: any, i: number) => {
+                {secrets.slice(0, 50).map((s) => {
                   const sev = (s.severity ?? 'low').toLowerCase();
                   return (
-                    <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
+                    <TableRow key={s.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
                       <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>{s.pod_name ?? '—'}</TableCell>
                       <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.container_name ?? '—'}</TableCell>
                       <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.namespace ?? '—'}</TableCell>
