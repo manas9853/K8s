@@ -37,8 +37,8 @@ interface SecretExposureResponse {
   last_scan?: string;
 }
 
-const SEV_COLOR: Record<string, string> = { critical: '#ef5350', high: '#ef5350', medium: '#ffa726', low: '#42a5f5' };
-const SEV_BG: Record<string, string> = { critical: 'rgba(239, 83, 80, 0.16)', high: 'rgba(239, 83, 80, 0.16)', medium: 'rgba(255, 167, 38, 0.16)', low: 'rgba(66, 165, 245, 0.16)' };
+const SEV_COLOR: Record<string, string> = { critical: '#ef5350', high: '#ef5350', medium: '#ffa726', low: '#90caf9' };
+const SEV_BG: Record<string, string> = { critical: '#131d2e', high: '#131d2e', medium: '#131d2e', low: '#131d2e' };
 
 const SecretExposure: React.FC = () => {
   const { clusterParam } = useActiveCluster();
@@ -172,7 +172,7 @@ const SecretExposure: React.FC = () => {
                 bgcolor: '#131d2e',
               }}
             >
-              <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ color: '#4ade80' }}>
+              <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ color: '#e8eaf0' }}>
                 No secret exposure issues found
               </Typography>
               <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.7 }}>
@@ -185,8 +185,8 @@ const SecretExposure: React.FC = () => {
             <Table size="small">
               <TableHead>
                 <TableRow sx={{ bgcolor: '#131d2e' }}>
-                  {['Pod', 'Container', 'Namespace', 'Severity', 'Type', 'Env Vars', 'Recommendation'].map(h => (
-                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{h}</TableCell>
+                  {['Pod', 'Container', 'Namespace', 'Severity', 'Type', 'Env Vars', 'Recommendation'].map((h) => (
+                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245', bgcolor: '#131d2e' }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
@@ -195,17 +195,17 @@ const SecretExposure: React.FC = () => {
                   const sev = (s.severity ?? 'low').toLowerCase();
                   return (
                     <TableRow key={s.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>{s.pod_name ?? '—'}</TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.container_name ?? '—'}</TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.namespace ?? '—'}</TableCell>
+                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>{s.pod_name ?? 'N/A'}</TableCell>
+                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.container_name ?? 'N/A'}</TableCell>
+                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.namespace ?? 'N/A'}</TableCell>
                       <TableCell sx={{ borderColor: '#2a3245' }}>
                         <Chip label={sev.toUpperCase()} size="small"
                           sx={{ bgcolor: SEV_BG[sev], color: SEV_COLOR[sev], fontWeight: 'bold', fontSize: 10 }} />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.secret_type ?? '—'}</TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>{s.env_var_count ?? '—'}</TableCell>
+                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{s.secret_type ?? 'N/A'}</TableCell>
+                      <TableCell sx={{ fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>{s.env_var_count ?? 'N/A'}</TableCell>
                       <TableCell sx={{ fontSize: 11, color: '#60a5fa', borderColor: '#2a3245', maxWidth: 200 }}>
-                        {(s.recommendation ?? '—').substring(0, 40)}
+                        {(s.recommendation ?? 'N/A').substring(0, 40)}
                       </TableCell>
                     </TableRow>
                   );
