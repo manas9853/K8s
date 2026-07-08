@@ -97,25 +97,19 @@ class ClusterHealth(BaseModel):
 def _resolve_org_id(x_clerk_user_id: Optional[str]) -> Optional[str]:
     """
     Given a Clerk user ID from the request header, return the org_id that
-    should be used to filter clusters, or None to indicate 'show all'
-    (reserved for admin users).
+    should be used to filter clusters.
 
     Returns:
-        None   — caller is an admin or no header provided (show all clusters)
-        str    — the org_id the caller belongs to (show only their clusters)
+        None   — caller is unknown / no header provided
+        str    — the org_id the caller belongs to
     """
     if not x_clerk_user_id:
-        # No identity header — legacy / unauthenticated callers see nothing scoped
         return None
     user = next(
         (u for u in USER_REGISTRY.values() if u["clerk_user_id"] == x_clerk_user_id),
         None,
     )
     if user is None:
-        # Unknown user — treat as default org (will show 'default' clusters only)
-        return "default"
-    if user.get("role") == "admin":
-        # Admins see everything
         return None
     return user.get("org_id", "default")
 
@@ -144,65 +138,15 @@ async def list_clusters(
 
     # PRIORITY 1: Agent-registered clusters (org-scoped)
     try:
-        if org_id is None:
-            agent_clusters = db_manager.get_all_clusters()
-        else:
+        if org_id is not None:
             agent_clusters = db_manager.get_clusters_by_org(org_id)
-        if agent_clusters:
-            logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={org_id or 'all'})")
-            clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
+            if agent_clusters:
+                logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={org_id})")
+                clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
+            else:
+                logging.info(f"No agent-registered clusters found for org={org_id}")
     except Exception as e:
         logging.warning(f"DB lookup failed: {e}")
-
-    # PRIORITY 2: Direct K8s connection
-    if not clusters and _k8s_available() and k8s_client is not None:
-        logging.info("No agent clusters, trying direct K8s connection")
-        try:
-            clusters = _get_k8s_direct_cluster()
-        except Exception as e:
-            logging.error(f"Error getting K8s direct cluster: {e}")
-
-    # PRIORITY 3: Dummy data — always return something so the UI renders
-    if not clusters:
-        logging.info("No real clusters — returning dummy cluster data for UI")
-        from utils.dummy_data import get_dummy_data
-        from utils.cluster_registry import get_clusters as _get_reg_clusters
-        # Build dummy ClusterInfo list from the cluster registry
-        reg_clusters = _get_reg_clusters()
-        if not reg_clusters:
-            # Last resort: synthesise one demo cluster so the page isn't empty
-            reg_clusters = [{
-                "id": "demo-cluster",
-                "name": "demo-cluster",
-                "environment": "development",
-                "region": "us-east-1",
-                "provider": "aws",
-                "version": "1.28.0",
-            }]
-        for rc in reg_clusters:
-            from utils.dummy_data import _build_health, _seed_rand
-            h = _build_health(rc)
-            rng = _seed_rand(rc["id"], "cluster")
-            clusters.append(ClusterInfo(
-                id=rc["id"],
-                name=rc["name"],
-                environment=rc.get("environment", "development"),
-                region=rc.get("region", "unknown"),
-                provider=rc.get("provider", "unknown"),
-                version=rc.get("version", "1.28.0"),
-                status="healthy" if h["health_score"] >= 90 else ("warning" if h["health_score"] >= 70 else "critical"),
-                nodes=rng.randint(3, 8),
-                pods=rng.randint(40, 150),
-                namespaces=rng.randint(5, 12),
-                cpu_capacity=f"{rng.randint(16, 64)} cores",
-                memory_capacity=f"{rng.randint(64, 256)} GB",
-                cpu_usage=f"{h['cpu_efficiency']:.1f}%",
-                memory_usage=f"{h['memory_efficiency']:.1f}%",
-                health_score=h["health_score"],
-                monthly_cost=round(rng.uniform(800, 4000), 2),
-                potential_savings=round(rng.uniform(100, 600), 2),
-                last_updated=datetime.utcnow(),
-            ))
 
     # Apply filters
     if environment:
