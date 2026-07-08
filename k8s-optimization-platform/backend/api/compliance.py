@@ -161,11 +161,11 @@ class CISExceptionRequest(BaseModel):
 
 
 _FIXABLE_CIS_CONTROLS = {
-    "4.2.3": {"command": "restart_deployment", "reason": "run as root requires workload rollout after spec fix"},
-    "4.4.1": {"command": "restart_deployment", "reason": "resource limit changes require workload rollout after spec fix"},
-    "4.4.2": {"command": "restart_deployment", "reason": "resource limit changes require workload rollout after spec fix"},
-    "4.5.2": {"command": "restart_deployment", "reason": "probe changes require workload rollout after spec fix"},
-    "4.5.3": {"command": "restart_deployment", "reason": "probe changes require workload rollout after spec fix"},
+    "4.2.3": {"command": "patch_deployment_security_context", "reason": "set runAsNonRoot and non-root UID directly on the deployment spec"},
+    "4.4.1": {"command": "patch_deployment_resources", "reason": "set CPU limits directly on the deployment spec"},
+    "4.4.2": {"command": "patch_deployment_resources", "reason": "set memory limits directly on the deployment spec"},
+    "4.5.2": {"command": "patch_deployment_probes", "reason": "add liveness probes directly on the deployment spec"},
+    "4.5.3": {"command": "patch_deployment_probes", "reason": "add readiness probes directly on the deployment spec"},
 }
 
 
@@ -209,16 +209,26 @@ def _build_cis_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dict
             continue
 
         containers = pod.get("containers", []) or []
-        if control_id == "4.2.3" and any(c.get("run_as_root") for c in containers):
-            return {"namespace": namespace, "name": owner_name}
-        if control_id == "4.4.1" and any(not c.get("cpu_limit") for c in containers):
-            return {"namespace": namespace, "name": owner_name}
-        if control_id == "4.4.2" and any(not c.get("memory_limit_mb") for c in containers):
-            return {"namespace": namespace, "name": owner_name}
-        if control_id == "4.5.2" and any(not c.get("has_liveness") for c in containers):
-            return {"namespace": namespace, "name": owner_name}
-        if control_id == "4.5.3" and any(not c.get("has_readiness") for c in containers):
-            return {"namespace": namespace, "name": owner_name}
+        for container in containers:
+            base = {
+                "namespace": namespace,
+                "name": owner_name,
+                "container_name": container.get("name"),
+            }
+            if control_id == "4.2.3" and container.get("run_as_root"):
+                return {**base, "run_as_non_root": True, "run_as_user": 1000}
+            if control_id == "4.4.1" and not container.get("cpu_limit"):
+                return {**base, "cpu_limit": "500m"}
+            if control_id == "4.4.2" and not container.get("memory_limit_mb"):
+                return {**base, "memory_limit": "512Mi"}
+            if control_id == "4.5.2" and not container.get("has_liveness"):
+                ports = container.get("ports") or []
+                probe_port = ports[0].get("container_port") if ports else 8080
+                return {**base, "set_liveness": True, "probe_port": probe_port}
+            if control_id == "4.5.3" and not container.get("has_readiness"):
+                ports = container.get("ports") or []
+                probe_port = ports[0].get("container_port") if ports else 8080
+                return {**base, "set_readiness": True, "probe_port": probe_port}
 
     return None
 
@@ -713,7 +723,7 @@ async def fix_cis_benchmark_control(control_id: str, cluster: Optional[str] = Qu
             "command": fix_def["command"],
             "command_id": command_id,
             "target": params,
-            "note": "This queues a safe rollout-style action only. You should still update the workload spec to permanently remediate the CIS finding.",
+            "note": "This queues a direct workload spec patch in the cluster through the agent.",
         }
     except HTTPException:
         raise

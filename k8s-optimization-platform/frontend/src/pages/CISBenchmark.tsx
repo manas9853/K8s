@@ -88,7 +88,7 @@ const CISBenchmarkInner: React.FC = () => {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.detail || 'Failed to queue fix');
-      setActionMessage(`Fix queued for ${control.control_id}. Command ${result.command_id} will be executed by the cluster agent.`);
+      setActionMessage(`Direct spec patch queued for ${control.control_id}. Command ${result.command_id} will be executed by the cluster agent.`);
       await fetchData();
     } catch (err) {
       setActionMessage(err instanceof Error ? err.message : 'Failed to queue fix');

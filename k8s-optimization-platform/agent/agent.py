@@ -2063,6 +2063,71 @@ class ClusterAgent:
                 body={"spec": {"template": {"spec": {"containers": [container_entry]}}}})
             return {"patched": resources}
 
+        if command == "patch_deployment_security_context":
+            deployment = self.apps.read_namespaced_deployment(name=name, namespace=ns)
+            containers = deployment.spec.template.spec.containers or []
+            target = params.get("container_name")
+            patch_containers = []
+            for c in containers:
+                if target and c.name != target:
+                    continue
+                security_context = {}
+                if params.get("run_as_non_root") is not None:
+                    security_context["runAsNonRoot"] = bool(params.get("run_as_non_root"))
+                if params.get("run_as_user") is not None:
+                    security_context["runAsUser"] = int(params.get("run_as_user"))
+                if params.get("allow_privilege_escalation") is not None:
+                    security_context["allowPrivilegeEscalation"] = bool(params.get("allow_privilege_escalation"))
+                if params.get("read_only_root_filesystem") is not None:
+                    security_context["readOnlyRootFilesystem"] = bool(params.get("read_only_root_filesystem"))
+                patch_entry: Dict[str, Any] = {"name": c.name, "securityContext": security_context}
+                patch_containers.append(patch_entry)
+            if not patch_containers:
+                raise ValueError(f"No matching deployment container found for {name}")
+            self.apps.patch_namespaced_deployment(
+                name=name, namespace=ns,
+                body={"spec": {"template": {"spec": {"containers": patch_containers}}}})
+            return {"patched_containers": [c["name"] for c in patch_containers]}
+
+        if command == "patch_deployment_probes":
+            deployment = self.apps.read_namespaced_deployment(name=name, namespace=ns)
+            containers = deployment.spec.template.spec.containers or []
+            target = params.get("container_name")
+            port = int(params.get("probe_port") or 8080)
+            patch_containers = []
+            for c in containers:
+                if target and c.name != target:
+                    continue
+                patch_entry: Dict[str, Any] = {"name": c.name}
+                if params.get("set_liveness"):
+                    patch_entry["livenessProbe"] = {
+                        "httpGet": {"path": "/", "port": port},
+                        "initialDelaySeconds": 15,
+                        "periodSeconds": 20,
+                    }
+                if params.get("set_readiness"):
+                    patch_entry["readinessProbe"] = {
+                        "httpGet": {"path": "/", "port": port},
+                        "initialDelaySeconds": 5,
+                        "periodSeconds": 10,
+                    }
+                patch_containers.append(patch_entry)
+            if not patch_containers:
+                raise ValueError(f"No matching deployment container found for {name}")
+            self.apps.patch_namespaced_deployment(
+                name=name, namespace=ns,
+                body={"spec": {"template": {"spec": {"containers": patch_containers}}}})
+            return {"patched_containers": [c["name"] for c in patch_containers], "probe_port": port}
+
+        if command == "patch_deployment_service_account":
+            service_account_name = params.get("service_account_name")
+            if not service_account_name:
+                raise ValueError("service_account_name is required")
+            self.apps.patch_namespaced_deployment(
+                name=name, namespace=ns,
+                body={"spec": {"template": {"spec": {"serviceAccountName": service_account_name}}}})
+            return {"serviceAccountName": service_account_name}
+
         if command == "scale_statefulset":
             replicas = int(params["replicas"])
             self.apps.patch_namespaced_stateful_set(
