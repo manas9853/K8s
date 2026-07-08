@@ -233,6 +233,95 @@ def _build_cis_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dict
     return None
 
 
+def _soc2_failed_detail(ctx: Dict) -> List[Dict[str, Any]]:
+    tc = ctx.get("total_containers", 0)
+    tp = ctx.get("total_pods", 0)
+    findings = []
+    items = [
+        ("CC6.1", "CC6 — Security", "Prevent privileged, root, and privilege-escalating containers", "critical",
+         ctx["privileged_count"] + ctx["root_count"] + ctx["priv_esc_count"],
+         "Set privileged=false, runAsNonRoot=true, and allowPrivilegeEscalation=false"),
+        ("CC7.1", "CC7 — Availability", "Require liveness and readiness probes", "medium",
+         ctx["no_liveness_count"] + ctx["no_readiness_count"],
+         "Add livenessProbe and readinessProbe to affected containers"),
+        ("CC8.1", "CC8 — Processing Integrity", "Require CPU and memory limits", "medium",
+         ctx["no_cpu_limit_count"] + ctx["no_mem_limit_count"],
+         "Add resources.limits.cpu and resources.limits.memory"),
+        ("CC9.1", "CC9 — Confidentiality", "Enforce non-root and read-only root filesystems", "high",
+         (tc - ctx["readonly_fs_count"]) + ctx["root_count"],
+         "Set runAsNonRoot=true and readOnlyRootFilesystem=true"),
+        ("P1.1", "P1-P8 — Privacy", "Avoid default service accounts", "high",
+         ctx["default_sa_pods"],
+         "Create and assign dedicated service accounts per workload"),
+    ]
+    for control_id, criterion, title, severity, affected, remediation in items:
+        if affected > 0:
+            findings.append({
+                "control_id": control_id,
+                "criterion": criterion,
+                "title": title,
+                "severity": severity,
+                "description": f"{affected} resource(s) currently fail this SOC 2 expectation",
+                "remediation": remediation,
+                "affected_resources": affected,
+            })
+    return findings
+
+
+def _annotate_soc2_failed_controls(cluster_name: str, failed_detail: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from database.db import db_manager
+
+    exceptions = db_manager.list_cis_control_exceptions(cluster_name)
+    exception_map = {item["control_id"]: item for item in exceptions if item.get("status") == "accepted"}
+
+    annotated = []
+    for item in failed_detail:
+        control_id = item["control_id"]
+        control = dict(item)
+        control["auto_fix_supported"] = control_id in {"CC6.1", "CC7.1", "CC8.1", "CC9.1"}
+        control["exception"] = exception_map.get(control_id)
+        annotated.append(control)
+    return annotated
+
+
+def _build_soc2_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dict[str, Any]]:
+    pods = ctx.get("pods", []) or []
+
+    for pod in pods:
+        namespace = pod.get("namespace") or "default"
+        owner_name = pod.get("owner_name") or pod.get("workload_name") or pod.get("deployment")
+        owner_kind = (pod.get("owner_kind") or "").lower()
+        if owner_kind and owner_kind != "deployment":
+            continue
+        if not owner_name:
+            continue
+
+        containers = pod.get("containers", []) or []
+        for container in containers:
+            base = {
+                "namespace": namespace,
+                "name": owner_name,
+                "container_name": container.get("name"),
+            }
+            if control_id == "CC6.1" and (container.get("run_as_root") or container.get("allow_privilege_escalation")):
+                return {**base, "run_as_non_root": True, "run_as_user": 1000, "allow_privilege_escalation": False}
+            if control_id == "CC7.1" and (not container.get("has_liveness") or not container.get("has_readiness")):
+                ports = container.get("ports") or []
+                probe_port = ports[0].get("container_port") if ports else 8080
+                return {**base, "set_liveness": not container.get("has_liveness"), "set_readiness": not container.get("has_readiness"), "probe_port": probe_port}
+            if control_id == "CC8.1" and (not container.get("cpu_limit") or not container.get("memory_limit_mb")):
+                params = dict(base)
+                if not container.get("cpu_limit"):
+                    params["cpu_limit"] = "500m"
+                if not container.get("memory_limit_mb"):
+                    params["memory_limit"] = "512Mi"
+                return params
+            if control_id == "CC9.1" and (container.get("run_as_root") or not container.get("read_only_root_fs")):
+                return {**base, "run_as_non_root": True, "run_as_user": 1000, "read_only_root_filesystem": True}
+
+    return None
+
+
 def _cis_sections(ctx: Dict) -> List[Dict]:
     """
     CIS Kubernetes Benchmark v1.8 — 5 sections, mapped to real signals.
@@ -779,6 +868,9 @@ async def get_soc2_compliance(cluster: Optional[str] = Query(None)):
         total_passed   = sum(c["passed"] for c in criteria)
         overall_score  = round((total_passed / max(total_controls, 1)) * 100, 1)
 
+        cluster_name = await _resolve_cluster_name(cluster)
+        failed_detail = _annotate_soc2_failed_controls(cluster_name, _soc2_failed_detail(ctx))
+
         return {
             "overall_score": overall_score,
             "grade": "Pass" if overall_score >= 80 else "Needs Improvement",
@@ -786,9 +878,12 @@ async def get_soc2_compliance(cluster: Optional[str] = Query(None)):
             "passed_controls": total_passed,
             "failed_controls": total_controls - total_passed,
             "trust_service_criteria": criteria,
+            "failed_controls_detail": failed_detail,
             "audit_period": "Last 12 months",
             "next_audit": (datetime.now() + timedelta(days=90)).isoformat(),
-            "cluster_name": ctx["cluster_name"],
+            "cluster_name": cluster_name,
+            "total_pods_scanned": ctx["total_pods"],
+            "total_containers_scanned": ctx["total_containers"],
             "last_scan": datetime.now().isoformat(),
         }
 
@@ -796,6 +891,76 @@ async def get_soc2_compliance(cluster: Optional[str] = Query(None)):
         raise
     except Exception as e:
         logger.error(f"Error in SOC 2: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/soc2/exception")
+async def create_soc2_exception(request: CISExceptionRequest, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        exception = db_manager.upsert_cis_control_exception(
+            cluster_name=cluster_name,
+            control_id=request.control_id,
+            title=request.title,
+            justification=request.justification,
+            owner=request.owner,
+            review_date=request.review_date,
+        )
+        if not exception:
+            raise HTTPException(status_code=500, detail="Failed to save SOC 2 exception")
+        return exception
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating SOC 2 exception: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+_FIXABLE_SOC2_CONTROLS = {
+    "CC6.1": {"command": "patch_deployment_security_context"},
+    "CC7.1": {"command": "patch_deployment_probes"},
+    "CC8.1": {"command": "patch_deployment_resources"},
+    "CC9.1": {"command": "patch_deployment_security_context"},
+}
+
+
+@router.post("/soc2/fix/{control_id}")
+async def fix_soc2_control(control_id: str, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        fix_def = _FIXABLE_SOC2_CONTROLS.get(control_id)
+        if not fix_def:
+            raise HTTPException(status_code=400, detail="Automatic fix is not supported for this SOC 2 control")
+
+        ctx = await _fetch_security_context()
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        params = _build_soc2_fix_params(ctx, control_id)
+        if not params:
+            raise HTTPException(status_code=400, detail="No eligible deployment target found for this control")
+
+        command_id = db_manager.enqueue_command(cluster_name, fix_def["command"], params)
+        if not command_id:
+            raise HTTPException(status_code=500, detail="Failed to enqueue SOC 2 fix action")
+
+        return {
+            "status": "queued",
+            "control_id": control_id,
+            "cluster_name": cluster_name,
+            "command": fix_def["command"],
+            "command_id": command_id,
+            "target": params,
+            "note": "This queues a direct workload spec patch in the cluster through the agent.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fixing SOC 2 control {control_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
