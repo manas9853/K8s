@@ -322,6 +322,102 @@ def _build_soc2_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dic
     return None
 
 
+def _pci_failed_detail(ctx: Dict) -> List[Dict[str, Any]]:
+    tc = ctx.get("total_containers", 0)
+    findings = []
+    items = [
+        ("PCI-1", "1 — Network Isolation", "Prevent host network namespace sharing", "high",
+         ctx["host_network_count"],
+         "Set hostNetwork=false for affected workloads"),
+        ("PCI-2", "2 — Default Credentials", "Avoid default service accounts", "high",
+         ctx["default_sa_pods"],
+         "Create and assign dedicated service accounts"),
+        ("PCI-3", "3 — Data Protection (FS)", "Use read-only root filesystems", "medium",
+         tc - ctx["readonly_fs_count"],
+         "Set readOnlyRootFilesystem=true"),
+        ("PCI-7", "7 — Access Control", "Do not run containers as root", "high",
+         ctx["root_count"],
+         "Set runAsNonRoot=true and runAsUser to a non-root UID"),
+        ("PCI-10", "10 — Monitoring (Probes)", "Require liveness probes", "medium",
+         ctx["no_liveness_count"],
+         "Add livenessProbe to affected containers"),
+        ("PCI-11", "11 — Privilege Escalation Test", "Disallow privilege escalation", "high",
+         ctx["priv_esc_count"],
+         "Set allowPrivilegeEscalation=false"),
+        ("PCI-12", "12 — Resource Policy", "Require CPU and memory limits", "medium",
+         ctx["no_cpu_limit_count"] + ctx["no_mem_limit_count"],
+         "Add resources.limits.cpu and resources.limits.memory"),
+    ]
+    for control_id, requirement, title, severity, affected, remediation in items:
+        if affected > 0:
+            findings.append({
+                "control_id": control_id,
+                "requirement": requirement,
+                "title": title,
+                "severity": severity,
+                "description": f"{affected} resource(s) currently fail this PCI DSS expectation",
+                "remediation": remediation,
+                "affected_resources": affected,
+            })
+    return findings
+
+
+def _annotate_pci_failed_controls(cluster_name: str, failed_detail: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from database.db import db_manager
+
+    exceptions = db_manager.list_cis_control_exceptions(cluster_name)
+    exception_map = {item["control_id"]: item for item in exceptions if item.get("status") == "accepted"}
+
+    annotated = []
+    for item in failed_detail:
+        control_id = item["control_id"]
+        control = dict(item)
+        control["auto_fix_supported"] = control_id in {"PCI-3", "PCI-7", "PCI-10", "PCI-11", "PCI-12"}
+        control["exception"] = exception_map.get(control_id)
+        annotated.append(control)
+    return annotated
+
+
+def _build_pci_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dict[str, Any]]:
+    pods = ctx.get("pods", []) or []
+
+    for pod in pods:
+        namespace = pod.get("namespace") or "default"
+        owner_name = pod.get("owner_name") or pod.get("workload_name") or pod.get("deployment")
+        owner_kind = (pod.get("owner_kind") or "").lower()
+        if owner_kind and owner_kind != "deployment":
+            continue
+        if not owner_name:
+            continue
+
+        containers = pod.get("containers", []) or []
+        for container in containers:
+            base = {
+                "namespace": namespace,
+                "name": owner_name,
+                "container_name": container.get("name"),
+            }
+            if control_id == "PCI-3" and not container.get("read_only_root_fs"):
+                return {**base, "read_only_root_filesystem": True}
+            if control_id == "PCI-7" and container.get("run_as_root"):
+                return {**base, "run_as_non_root": True, "run_as_user": 1000}
+            if control_id == "PCI-10" and not container.get("has_liveness"):
+                ports = container.get("ports") or []
+                probe_port = ports[0].get("container_port") if ports else 8080
+                return {**base, "set_liveness": True, "probe_port": probe_port}
+            if control_id == "PCI-11" and container.get("allow_privilege_escalation"):
+                return {**base, "allow_privilege_escalation": False}
+            if control_id == "PCI-12" and (not container.get("cpu_limit") or not container.get("memory_limit_mb")):
+                params = dict(base)
+                if not container.get("cpu_limit"):
+                    params["cpu_limit"] = "500m"
+                if not container.get("memory_limit_mb"):
+                    params["memory_limit"] = "512Mi"
+                return params
+
+    return None
+
+
 def _cis_sections(ctx: Dict) -> List[Dict]:
     """
     CIS Kubernetes Benchmark v1.8 — 5 sections, mapped to real signals.
@@ -1010,6 +1106,9 @@ async def get_pci_dss_compliance(cluster: Optional[str] = Query(None)):
         total_passed   = sum(r["passed"] for r in requirements)
         overall_score  = round((total_passed / max(total_controls, 1)) * 100, 1)
 
+        cluster_name = await _resolve_cluster_name(cluster)
+        failed_detail = _annotate_pci_failed_controls(cluster_name, _pci_failed_detail(ctx))
+
         return {
             "overall_score": overall_score,
             "compliance_status": "Compliant" if overall_score >= 85 else "Non-Compliant",
@@ -1018,7 +1117,10 @@ async def get_pci_dss_compliance(cluster: Optional[str] = Query(None)):
             "passed_controls": total_passed,
             "failed_controls": total_controls - total_passed,
             "requirements": requirements,
-            "cluster_name": ctx["cluster_name"],
+            "failed_controls_detail": failed_detail,
+            "cluster_name": cluster_name,
+            "total_pods_scanned": ctx["total_pods"],
+            "total_containers_scanned": ctx["total_containers"],
             "last_assessment": datetime.now().isoformat(),
             "next_assessment": (datetime.now() + timedelta(days=90)).isoformat(),
             "last_scan": datetime.now().isoformat(),
@@ -1028,6 +1130,77 @@ async def get_pci_dss_compliance(cluster: Optional[str] = Query(None)):
         raise
     except Exception as e:
         logger.error(f"Error in PCI DSS: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/pci-dss/exception")
+async def create_pci_exception(request: CISExceptionRequest, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        exception = db_manager.upsert_cis_control_exception(
+            cluster_name=cluster_name,
+            control_id=request.control_id,
+            title=request.title,
+            justification=request.justification,
+            owner=request.owner,
+            review_date=request.review_date,
+        )
+        if not exception:
+            raise HTTPException(status_code=500, detail="Failed to save PCI DSS exception")
+        return exception
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating PCI DSS exception: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+_FIXABLE_PCI_CONTROLS = {
+    "PCI-3": {"command": "patch_deployment_security_context"},
+    "PCI-7": {"command": "patch_deployment_security_context"},
+    "PCI-10": {"command": "patch_deployment_probes"},
+    "PCI-11": {"command": "patch_deployment_security_context"},
+    "PCI-12": {"command": "patch_deployment_resources"},
+}
+
+
+@router.post("/pci-dss/fix/{control_id}")
+async def fix_pci_control(control_id: str, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        fix_def = _FIXABLE_PCI_CONTROLS.get(control_id)
+        if not fix_def:
+            raise HTTPException(status_code=400, detail="Automatic fix is not supported for this PCI DSS control")
+
+        ctx = await _fetch_security_context()
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        params = _build_pci_fix_params(ctx, control_id)
+        if not params:
+            raise HTTPException(status_code=400, detail="No eligible deployment target found for this control")
+
+        command_id = db_manager.enqueue_command(cluster_name, fix_def["command"], params)
+        if not command_id:
+            raise HTTPException(status_code=500, detail="Failed to enqueue PCI DSS fix action")
+
+        return {
+            "status": "queued",
+            "control_id": control_id,
+            "cluster_name": cluster_name,
+            "command": fix_def["command"],
+            "command_id": command_id,
+            "target": params,
+            "note": "This queues a direct workload spec patch in the cluster through the agent.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fixing PCI DSS control {control_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
