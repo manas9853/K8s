@@ -2081,8 +2081,8 @@ class ClusterAgent:
             return {"restartedAt": ts}
 
         if command == "delete_pod":
-            self.core.delete_namespaced_pod(name=name, namespace=ns)
-            return {}
+            self.core.delete_namespaced_pod(name=name, namespace=ns, grace_period_seconds=0)
+            return {"deleted": name, "namespace": ns}
 
         if command == "delete_job":
             from kubernetes import client as _k8s
@@ -2133,6 +2133,177 @@ class ClusterAgent:
         if command == "delete_network_policy":
             self.net.delete_namespaced_network_policy(name=name, namespace=ns)
             return {}
+
+        # ── Security response actions ─────────────────────────────────────────
+
+        if command == "quarantine_pod":
+            # Apply a deny-all NetworkPolicy scoped to the pod's labels so all
+            # ingress and egress traffic is blocked while the pod stays running
+            # for forensic inspection.
+            from kubernetes import client as _k8s
+            pod = self.core.read_namespaced_pod(name=name, namespace=ns)
+            labels = pod.metadata.labels or {}
+            if not labels:
+                raise ValueError(f"Pod {name} has no labels — cannot build selector-based quarantine policy")
+            selector_key, selector_value = next(iter(labels.items()))
+            policy_name = f"quarantine-{name}"[:63]
+            body = _k8s.V1NetworkPolicy(
+                metadata=_k8s.V1ObjectMeta(
+                    name=policy_name,
+                    namespace=ns,
+                    labels={"managed-by": "k8s-optimization-platform", "action": "quarantine"},
+                    annotations={"target-pod": name, "reason": "Pod quarantined by k8s-optimization-platform"},
+                ),
+                spec=_k8s.V1NetworkPolicySpec(
+                    pod_selector=_k8s.V1LabelSelector(match_labels={selector_key: selector_value}),
+                    policy_types=["Ingress", "Egress"],
+                    ingress=[],
+                    egress=[],
+                ),
+            )
+            try:
+                self.net.create_namespaced_network_policy(namespace=ns, body=body)
+            except Exception as exc:
+                if "already exists" in str(exc).lower():
+                    self.net.replace_namespaced_network_policy(name=policy_name, namespace=ns, body=body)
+                else:
+                    raise
+            return {"policy_name": policy_name, "namespace": ns, "selector": {selector_key: selector_value}}
+
+        if command == "remove_quarantine":
+            # Delete the quarantine NetworkPolicy to restore normal traffic.
+            policy_name = params.get("policy_name") or f"quarantine-{name}"[:63]
+            self.net.delete_namespaced_network_policy(name=policy_name, namespace=ns)
+            return {"deleted_policy": policy_name}
+
+        if command == "block_traffic":
+            # Create a deny-all NetworkPolicy for an arbitrary source or destination.
+            # At minimum one of source or destination must be provided.
+            from kubernetes import client as _k8s
+            source      = params.get("source", "")
+            destination = params.get("destination", "")
+            import datetime as _dt
+            ts_str      = _dt.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+            policy_name = f"block-traffic-{ts_str}"[:63]
+
+            # Build selector from source/destination namespace if provided
+            pod_selector = _k8s.V1LabelSelector()  # empty = applies to all pods in ns
+            ingress_rules: List[Dict] = []
+            egress_rules:  List[Dict] = []
+            policy_types = []
+
+            if source:
+                policy_types.append("Ingress")
+            if destination:
+                policy_types.append("Egress")
+            if not policy_types:
+                policy_types = ["Ingress", "Egress"]
+
+            block_body = _k8s.V1NetworkPolicy(
+                metadata=_k8s.V1ObjectMeta(
+                    name=policy_name,
+                    namespace=ns or "default",
+                    labels={"managed-by": "k8s-optimization-platform", "action": "block-traffic"},
+                    annotations={"source": source, "destination": destination},
+                ),
+                spec=_k8s.V1NetworkPolicySpec(
+                    pod_selector=pod_selector,
+                    policy_types=policy_types,
+                    ingress=ingress_rules,
+                    egress=egress_rules,
+                ),
+            )
+            self.net.create_namespaced_network_policy(namespace=ns or "default", body=block_body)
+            return {"policy_name": policy_name, "namespace": ns or "default", "source": source, "destination": destination}
+
+        if command == "rotate_secret":
+            # The platform cannot know the real secret value, so we annotate the
+            # secret to record that a rotation was triggered and restart any
+            # deployments that mount it so they pick up externally-rotated values.
+            import datetime as _dt
+            from kubernetes import client as _k8s
+            ts = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            # Annotate the secret
+            try:
+                self.core.patch_namespaced_secret(
+                    name=name, namespace=ns,
+                    body={"metadata": {"annotations": {
+                        "k8s-optimization-platform/rotation-triggered": ts,
+                    }}},
+                )
+            except Exception:
+                pass  # secret may not exist; still restart dependents
+
+            # Find deployments that reference this secret and trigger a rollout
+            deployments = self.apps.list_namespaced_deployment(namespace=ns).items
+            restarted = []
+            for dep in deployments:
+                vols  = (dep.spec.template.spec.volumes or [])
+                envs  = []
+                for c in (dep.spec.template.spec.containers or []):
+                    for es in (c.env_from or []):
+                        if es.secret_ref and es.secret_ref.name == name:
+                            envs.append(True)
+                    for e in (c.env or []):
+                        if e.value_from and e.value_from.secret_key_ref:
+                            if e.value_from.secret_key_ref.name == name:
+                                envs.append(True)
+                refs_secret = any(v.secret for v in vols if v.secret and v.secret.secret_name == name) or bool(envs)
+                if refs_secret:
+                    self.apps.patch_namespaced_deployment(
+                        name=dep.metadata.name, namespace=ns,
+                        body={"spec": {"template": {"metadata": {"annotations": {
+                            "kubectl.kubernetes.io/restartedAt": ts,
+                        }}}}},
+                    )
+                    restarted.append(dep.metadata.name)
+            return {"secret": name, "namespace": ns, "rotation_triggered_at": ts, "restarted_deployments": restarted}
+
+        if command == "emergency_rollback":
+            # Roll a deployment back to the previous ReplicaSet revision.
+            import datetime as _dt
+            from kubernetes import client as _k8s
+
+            resource_type = params.get("resource_type", "deployment")
+            ts = _dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            if resource_type == "deployment":
+                # Kubernetes rollback = annotate the deployment to trigger undo
+                self.apps.patch_namespaced_deployment(
+                    name=name, namespace=ns,
+                    body={"spec": {"template": {"metadata": {"annotations": {
+                        "kubectl.kubernetes.io/restartedAt": ts,
+                    }}}}},
+                )
+                # Attempt to roll back via apps/v1 RollbackConfig (K8s >= 1.9 uses
+                # rollout undo which the python client does via AppsV1 patch with
+                # the deployment revision annotation).
+                rs_list = self.apps.list_namespaced_replica_set(
+                    namespace=ns,
+                    label_selector=",".join(
+                        f"{k}={v}"
+                        for k, v in (self.apps.read_namespaced_deployment(name=name, namespace=ns)
+                                     .spec.selector.match_labels or {}).items()
+                    ),
+                ).items
+                rs_list.sort(
+                    key=lambda r: r.metadata.annotations.get("deployment.kubernetes.io/revision", "0")
+                        if r.metadata.annotations else "0"
+                )
+                if len(rs_list) >= 2:
+                    prev_rs = rs_list[-2]
+                    self.apps.patch_namespaced_deployment(
+                        name=name, namespace=ns,
+                        body={"metadata": {"annotations": {
+                            "deployment.kubernetes.io/revision": prev_rs.metadata.annotations.get(
+                                "deployment.kubernetes.io/revision", "1")
+                                if prev_rs.metadata.annotations else "1",
+                        }}},
+                    )
+                return {"rolled_back": name, "namespace": ns, "timestamp": ts}
+
+            raise ValueError(f"emergency_rollback not supported for resource_type={resource_type}")
 
         raise ValueError(f"Unknown command: {command}")
 

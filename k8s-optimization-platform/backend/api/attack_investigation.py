@@ -13,6 +13,32 @@ import logging
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+from database.db import db_manager
+
+
+def _resolve_cluster(cluster: Optional[str]) -> str:
+    if cluster:
+        return cluster
+    clusters = db_manager.get_all_clusters()
+    if not clusters:
+        raise HTTPException(status_code=503, detail="No registered clusters")
+    return clusters[0]["cluster_name"]
+
+
+def _enqueue(cluster: Optional[str], command: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    cluster_name = _resolve_cluster(cluster)
+    cmd_id = db_manager.enqueue_command(cluster_name, command, params)
+    if not cmd_id:
+        raise HTTPException(status_code=500, detail="Failed to enqueue command")
+    logger.info("Enqueued attack investigation command %s id=%d cluster=%s params=%s", command, cmd_id, cluster_name, params)
+    return {
+        "command_id": cmd_id,
+        "cluster_name": cluster_name,
+        "status": "pending",
+        "poll_url": f"/api/agents/commands/{cmd_id}",
+    }
+
+
 
 # ============================================================================
 # SHARED DATA FETCHER
@@ -1437,22 +1463,32 @@ async def get_quarantine_status(cluster: Optional[str] = Query(None)):
             "total_quarantined": 0,
             "available_targets": [p["pod_name"] for p in ctx.get("critical_pods", [])[:5]],
             "cluster_name": ctx.get("cluster_name", "xforce-devops"),
-            "note": "No resources quarantined. Quarantine requires kubectl access.",
+            "note": "No quarantine history is stored yet for this cluster.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/response/quarantine")
-async def quarantine_resource(resource: Dict[str, Any]):
+async def quarantine_resource(resource: Dict[str, Any], cluster: Optional[str] = Query(None)):
+    namespace = resource.get("namespace") or "default"
+    name = resource.get("name")
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    queued = _enqueue(cluster or resource.get("cluster"), "quarantine_pod", {
+        "namespace": namespace,
+        "name": name,
+    })
     return {
         "action": "quarantine",
         "resource_type": resource.get("type"),
-        "resource_name": resource.get("name"),
-        "namespace": resource.get("namespace"),
-        "status": "queued",
-        "message": "Quarantine action queued — requires cluster kubectl access",
-        "actions_taken": ["Alert generated", "Action logged"],
+        "resource_name": name,
+        "namespace": namespace,
+        "status": queued["status"],
+        "message": "Quarantine command sent to in-cluster agent",
+        "actions_taken": ["Command enqueued", "Agent will create deny-all NetworkPolicy"],
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        **queued,
     }
 
 
@@ -1465,61 +1501,100 @@ async def get_kill_pod_status(cluster: Optional[str] = Query(None)):
             "total_killed": 0,
             "available_targets": [p["pod_name"] for p in ctx.get("critical_pods", [])[:5]],
             "cluster_name": ctx.get("cluster_name", "xforce-devops"),
-            "note": "No pods killed. Kill action requires kubectl access.",
+            "note": "No killed pod history is stored yet for this cluster.",
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/response/kill-pod")
-async def kill_pod(pod_data: Dict[str, Any]):
+async def kill_pod(pod_data: Dict[str, Any], cluster: Optional[str] = Query(None)):
+    name = pod_data.get("name")
+    namespace = pod_data.get("namespace") or "default"
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    queued = _enqueue(cluster or pod_data.get("cluster"), "delete_pod", {
+        "namespace": namespace,
+        "name": name,
+    })
     return {
         "action": "kill_pod",
-        "pod_name": pod_data.get("name"),
-        "namespace": pod_data.get("namespace"),
-        "status": "queued",
-        "message": "Kill action queued — requires cluster kubectl access",
-        "actions_taken": ["Alert generated", "Action logged"],
+        "pod_name": name,
+        "namespace": namespace,
+        "status": queued["status"],
+        "message": "Kill pod command sent to in-cluster agent",
+        "actions_taken": ["Command enqueued", "Agent will delete pod in cluster"],
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        **queued,
     }
 
 
 @router.post("/response/block-traffic")
-async def block_traffic(traffic_data: Dict[str, Any]):
+async def block_traffic(traffic_data: Dict[str, Any], cluster: Optional[str] = Query(None)):
+    namespace = traffic_data.get("namespace") or "default"
+    queued = _enqueue(cluster or traffic_data.get("cluster"), "block_traffic", {
+        "namespace": namespace,
+        "name": traffic_data.get("name") or "traffic-block",
+        "source": traffic_data.get("source"),
+        "destination": traffic_data.get("destination"),
+    })
     return {
         "action": "block_traffic",
         "source": traffic_data.get("source"),
         "destination": traffic_data.get("destination"),
-        "status": "queued",
-        "message": "Traffic block queued — requires cluster network policy access",
-        "actions_taken": ["Alert generated", "Action logged"],
+        "status": queued["status"],
+        "message": "Block traffic command sent to in-cluster agent",
+        "actions_taken": ["Command enqueued", "Agent will create NetworkPolicy in cluster"],
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        **queued,
     }
 
 
 @router.post("/response/rotate-secrets")
-async def rotate_secrets(secret_data: Dict[str, Any]):
+async def rotate_secrets(secret_data: Dict[str, Any], cluster: Optional[str] = Query(None)):
+    name = secret_data.get("name")
+    namespace = secret_data.get("namespace") or "default"
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    queued = _enqueue(cluster or secret_data.get("cluster"), "rotate_secret", {
+        "namespace": namespace,
+        "name": name,
+    })
     return {
         "action": "rotate_secrets",
-        "secret_name": secret_data.get("name"),
-        "namespace": secret_data.get("namespace"),
-        "status": "queued",
-        "message": "Secret rotation queued — requires cluster secret access",
-        "actions_taken": ["Alert generated", "Action logged"],
+        "secret_name": name,
+        "namespace": namespace,
+        "status": queued["status"],
+        "message": "Rotate secret command sent to in-cluster agent",
+        "actions_taken": ["Command enqueued", "Agent will mark secret and restart dependent deployments"],
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        **queued,
     }
 
 
 @router.post("/response/emergency-rollback")
-async def emergency_rollback(rollback_data: Dict[str, Any]):
+async def emergency_rollback(rollback_data: Dict[str, Any], cluster: Optional[str] = Query(None)):
+    name = rollback_data.get("name")
+    namespace = rollback_data.get("namespace") or "default"
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+
+    queued = _enqueue(cluster or rollback_data.get("cluster"), "emergency_rollback", {
+        "namespace": namespace,
+        "name": name,
+        "resource_type": rollback_data.get("type") or "deployment",
+    })
     return {
         "action": "emergency_rollback",
         "resource_type": rollback_data.get("type"),
-        "resource_name": rollback_data.get("name"),
-        "namespace": rollback_data.get("namespace"),
-        "status": "queued",
-        "message": "Rollback action queued — requires cluster kubectl access",
-        "actions_taken": ["Alert generated", "Action logged"],
+        "resource_name": name,
+        "namespace": namespace,
+        "status": queued["status"],
+        "message": "Emergency rollback command sent to in-cluster agent",
+        "actions_taken": ["Command enqueued", "Agent will execute rollback logic in cluster"],
         "timestamp": datetime.utcnow().isoformat() + "Z",
+        **queued,
     }
 
 # Made with Bob
