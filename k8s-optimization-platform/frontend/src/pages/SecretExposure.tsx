@@ -98,7 +98,7 @@ function buildWhyExposed(secret: SecretExposureItem) {
 const ExposureRow: React.FC<{ secret: SecretExposureItem }> = ({ secret }) => {
   const [open, setOpen] = useState(false);
   const severity = (secret.severity || 'low').toLowerCase();
-  const reasons = buildWhyExposed(secret);
+  const reasons = useMemo(() => buildWhyExposed(secret), [secret]);
 
   return (
     <>
@@ -300,43 +300,47 @@ const SecretExposureInner: React.FC = () => {
             </Typography>
           </Box>
           <Stack spacing={1.5}>
-            {highOrCritical.slice(0, 4).map((secret) => (
-              <Box
-                key={secret.id}
-                sx={{
-                  p: 2,
-                  borderRadius: 1.5,
-                  bgcolor: '#131d2e',
-                  border: '1px solid #2a3245',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'flex-start',
-                  flexWrap: 'wrap',
-                  gap: 1,
-                }}
-              >
-                <Box>
-                  <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
-                    {secret.pod_name} / {secret.container_name}
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', mt: 0.5, lineHeight: 1.7 }}>
-                    {buildWhyExposed(secret)[0]} {buildWhyExposed(secret)[1] || ''}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>
-                    {secret.namespace} · {secret.secret_type} · detected {formatTimestamp(secret.detected_at)}
-                  </Typography>
-                </Box>
-                <Button
-                  size="small"
-                  variant="contained"
-                  startIcon={<RotateIcon />}
-                  onClick={() => navigate('/secret-rotation')}
-                  sx={{ fontSize: 11, bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
+            {highOrCritical.slice(0, 4).map((secret) => {
+              const reasons = buildWhyExposed(secret);
+
+              return (
+                <Box
+                  key={secret.id}
+                  sx={{
+                    p: 2,
+                    borderRadius: 1.5,
+                    bgcolor: '#131d2e',
+                    border: '1px solid #2a3245',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    flexWrap: 'wrap',
+                    gap: 1,
+                  }}
                 >
-                  Rotate Secrets
-                </Button>
-              </Box>
-            ))}
+                  <Box>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                      {secret.pod_name} / {secret.container_name}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#c8d0dc', mt: 0.5, lineHeight: 1.7 }}>
+                      {reasons.slice(0, 2).join(' ')}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                      {secret.namespace} · {secret.secret_type} · detected {formatTimestamp(secret.detected_at)}
+                    </Typography>
+                  </Box>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    startIcon={<RotateIcon />}
+                    onClick={() => navigate('/secret-rotation')}
+                    sx={{ fontSize: 11, bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
+                  >
+                    Rotate Secrets
+                  </Button>
+                </Box>
+              );
+            })}
           </Stack>
         </Paper>
       )}
@@ -348,7 +352,7 @@ const SecretExposureInner: React.FC = () => {
               All Exposed Secrets ({secrets.length})
             </Typography>
             <Typography variant="caption" sx={{ color: '#8892a4' }}>
-              Expand a row to see the real detection reason and backend remediation steps.
+              Expand a row to see the real detection reason, backend recommendation, and remediation steps generated from the live scan.
             </Typography>
           </Box>
           <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/secret-rotation')} sx={{ color: '#60a5fa' }}>

@@ -8,6 +8,7 @@ from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
+from pydantic import BaseModel
 
 from celery_app import celery_app  # noqa: E402
 from tasks.compliance_tasks import run_compliance_scan as _run_scan_task  # noqa: E402
@@ -150,6 +151,77 @@ def _grade(score: float) -> str:
 # CIS Benchmark — derive from real container security flags
 # Controls are mapped to actual observable signals in agent data.
 # ============================================================================
+
+class CISExceptionRequest(BaseModel):
+    control_id: str
+    title: str
+    justification: str
+    owner: str
+    review_date: str
+
+
+_FIXABLE_CIS_CONTROLS = {
+    "4.2.3": {"command": "restart_deployment", "reason": "run as root requires workload rollout after spec fix"},
+    "4.4.1": {"command": "restart_deployment", "reason": "resource limit changes require workload rollout after spec fix"},
+    "4.4.2": {"command": "restart_deployment", "reason": "resource limit changes require workload rollout after spec fix"},
+    "4.5.2": {"command": "restart_deployment", "reason": "probe changes require workload rollout after spec fix"},
+    "4.5.3": {"command": "restart_deployment", "reason": "probe changes require workload rollout after spec fix"},
+}
+
+
+async def _resolve_cluster_name(cluster: Optional[str]) -> str:
+    from database.db import db_manager
+
+    if cluster:
+        return cluster
+    clusters = db_manager.get_all_clusters()
+    if not clusters:
+        raise HTTPException(status_code=503, detail="No cluster data available")
+    return clusters[0]["cluster_name"]
+
+
+def _annotate_cis_failed_controls(cluster_name: str, failed_detail: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from database.db import db_manager
+
+    exceptions = db_manager.list_cis_control_exceptions(cluster_name)
+    exception_map = {item["control_id"]: item for item in exceptions if item.get("status") == "accepted"}
+
+    annotated = []
+    for item in failed_detail:
+        control_id = item["control_id"]
+        control = dict(item)
+        control["auto_fix_supported"] = control_id in _FIXABLE_CIS_CONTROLS
+        control["exception"] = exception_map.get(control_id)
+        annotated.append(control)
+    return annotated
+
+
+def _build_cis_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dict[str, Any]]:
+    pods = ctx.get("pods", []) or []
+
+    for pod in pods:
+        namespace = pod.get("namespace") or "default"
+        owner_name = pod.get("owner_name") or pod.get("workload_name") or pod.get("deployment")
+        owner_kind = (pod.get("owner_kind") or "").lower()
+        if owner_kind and owner_kind != "deployment":
+            continue
+        if not owner_name:
+            continue
+
+        containers = pod.get("containers", []) or []
+        if control_id == "4.2.3" and any(c.get("run_as_root") for c in containers):
+            return {"namespace": namespace, "name": owner_name}
+        if control_id == "4.4.1" and any(not c.get("cpu_limit") for c in containers):
+            return {"namespace": namespace, "name": owner_name}
+        if control_id == "4.4.2" and any(not c.get("memory_limit_mb") for c in containers):
+            return {"namespace": namespace, "name": owner_name}
+        if control_id == "4.5.2" and any(not c.get("has_liveness") for c in containers):
+            return {"namespace": namespace, "name": owner_name}
+        if control_id == "4.5.3" and any(not c.get("has_readiness") for c in containers):
+            return {"namespace": namespace, "name": owner_name}
+
+    return None
+
 
 def _cis_sections(ctx: Dict) -> List[Dict]:
     """
@@ -558,8 +630,9 @@ async def get_cis_benchmark(cluster: Optional[str] = Query(None)):
         if not ctx:
             raise HTTPException(status_code=503, detail="No cluster data available")
 
+        cluster_name = await _resolve_cluster_name(cluster)
         sections = _cis_sections(ctx)
-        failed_detail = _cis_failed_detail(ctx)
+        failed_detail = _annotate_cis_failed_controls(cluster_name, _cis_failed_detail(ctx))
 
         total_controls = sum(s["controls"] for s in sections)
         total_passed   = sum(s["passed"] for s in sections)
@@ -574,7 +647,7 @@ async def get_cis_benchmark(cluster: Optional[str] = Query(None)):
             "sections": sections,
             "failed_controls_detail": failed_detail,
             "benchmark_version": "CIS Kubernetes Benchmark v1.8",
-            "cluster_name": ctx["cluster_name"],
+            "cluster_name": cluster_name,
             "total_pods_scanned": ctx["total_pods"],
             "total_containers_scanned": ctx["total_containers"],
             "last_scan": datetime.now().isoformat(),
@@ -584,6 +657,68 @@ async def get_cis_benchmark(cluster: Optional[str] = Query(None)):
         raise
     except Exception as e:
         logger.error(f"Error in CIS benchmark: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cis-benchmark/exception")
+async def create_cis_benchmark_exception(request: CISExceptionRequest, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        exception = db_manager.upsert_cis_control_exception(
+            cluster_name=cluster_name,
+            control_id=request.control_id,
+            title=request.title,
+            justification=request.justification,
+            owner=request.owner,
+            review_date=request.review_date,
+        )
+        if not exception:
+            raise HTTPException(status_code=500, detail="Failed to save CIS exception")
+        return exception
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating CIS exception: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/cis-benchmark/fix/{control_id}")
+async def fix_cis_benchmark_control(control_id: str, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        fix_def = _FIXABLE_CIS_CONTROLS.get(control_id)
+        if not fix_def:
+            raise HTTPException(status_code=400, detail="Automatic fix is not supported for this CIS control")
+
+        ctx = await _fetch_security_context()
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        params = _build_cis_fix_params(ctx, control_id)
+        if not params:
+            raise HTTPException(status_code=400, detail="No eligible deployment target found for this control")
+
+        command_id = db_manager.enqueue_command(cluster_name, fix_def["command"], params)
+        if not command_id:
+            raise HTTPException(status_code=500, detail="Failed to enqueue CIS fix action")
+
+        return {
+            "status": "queued",
+            "control_id": control_id,
+            "cluster_name": cluster_name,
+            "command": fix_def["command"],
+            "command_id": command_id,
+            "target": params,
+            "note": "This queues a safe rollout-style action only. You should still update the workload spec to permanently remediate the CIS finding.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fixing CIS control {control_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

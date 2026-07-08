@@ -145,6 +145,26 @@ class DatabaseManager:
                 ON agent_commands(cluster_name, status)
             """)
 
+            # ── cis_control_exceptions ─────────────────────────────────────────
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cis_control_exceptions (
+                    id BIGSERIAL PRIMARY KEY,
+                    cluster_name TEXT NOT NULL,
+                    control_id TEXT NOT NULL,
+                    title TEXT,
+                    justification TEXT NOT NULL,
+                    owner TEXT NOT NULL,
+                    review_date TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'accepted',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cis_control_exceptions_cluster_control
+                ON cis_control_exceptions(cluster_name, control_id, status)
+            """)
+
             conn.commit()
             logger.info("Schema init/migration complete")
 
@@ -485,6 +505,49 @@ class DatabaseManager:
                 return d
         except Exception as e:
             logger.error(f"get_command error: {e}")
+            return None
+
+    def list_cis_control_exceptions(self, cluster_name: str) -> List[Dict[str, Any]]:
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT id, cluster_name, control_id, title, justification, owner, review_date, status, created_at, updated_at
+                    FROM cis_control_exceptions
+                    WHERE cluster_name = %s
+                    ORDER BY updated_at DESC
+                """, (cluster_name,))
+                return [dict(r) for r in cur.fetchall()]
+        except Exception as e:
+            logger.error(f"list_cis_control_exceptions error: {e}")
+            return []
+
+    def upsert_cis_control_exception(self, cluster_name: str, control_id: str, title: str,
+                                     justification: str, owner: str, review_date: str) -> Optional[Dict[str, Any]]:
+        try:
+            now = datetime.utcnow().isoformat()
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    UPDATE cis_control_exceptions
+                    SET title = %s, justification = %s, owner = %s, review_date = %s,
+                        status = 'accepted', updated_at = %s
+                    WHERE cluster_name = %s AND control_id = %s AND status = 'accepted'
+                    RETURNING id, cluster_name, control_id, title, justification, owner, review_date, status, created_at, updated_at
+                """, (title, justification, owner, review_date, now, cluster_name, control_id))
+                row = cur.fetchone()
+                if not row:
+                    cur.execute("""
+                        INSERT INTO cis_control_exceptions
+                        (cluster_name, control_id, title, justification, owner, review_date, status, created_at, updated_at)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'accepted', %s, %s)
+                        RETURNING id, cluster_name, control_id, title, justification, owner, review_date, status, created_at, updated_at
+                    """, (cluster_name, control_id, title, justification, owner, review_date, now, now))
+                    row = cur.fetchone()
+                conn.commit()
+                return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"upsert_cis_control_exception error: {e}")
             return None
 
     def close(self):
