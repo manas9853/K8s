@@ -74,11 +74,12 @@ const ClusterOnboarding: React.FC = () => {
 
     try {
       const response = await axios.post(
-        `${API_BASE_URL}/api/tokens/generate`,
+        `${API_BASE_URL}/tokens/generate`,
         {
           name: clusterName,
           description: clusterDescription,
-          expires_in_days: 365
+          expires_in_days: 365,
+          org_id: 'xforce-devops'
         },
         {
           headers: {

@@ -365,6 +365,20 @@ async def approve_or_reject_user(
     return _to_response(user)
 
 
+@router.delete("/{user_id}", status_code=204)
+async def delete_user(user_id: str):
+    """Delete a user record entirely."""
+    user = USER_REGISTRY.get(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user.get("email") == "upadhyaymanas3@gmail.com":
+        raise HTTPException(status_code=400, detail="Primary admin user cannot be deleted")
+    with _get_conn() as conn:
+        conn.execute("DELETE FROM platform_users WHERE id = ?", (user_id,))
+    logger.info(f"User {user_id} ({user['email']}) deleted")
+    return None
+
+
 @router.patch("/{user_id}", response_model=UserResponse)
 async def update_user(
     user_id: str,

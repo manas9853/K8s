@@ -220,7 +220,17 @@ const UserManagement: React.FC = () => {
       setToast({ msg: `User ${newStatus} successfully`, severity: 'success' });
       fetchUsers();
     } catch (e: any) {
-      setToast({ msg: `Failed to update user status`, severity: 'error' });
+      setToast({ msg: e.response?.data?.detail || 'Failed to update user status', severity: 'error' });
+    }
+  };
+
+  const callDelete = async (id: string) => {
+    try {
+      await axios.delete(`${API_BASE}/api/v1/users/${id}`);
+      setToast({ msg: 'User deleted successfully', severity: 'success' });
+      fetchUsers();
+    } catch (e: any) {
+      setToast({ msg: e.response?.data?.detail || 'Failed to delete user', severity: 'error' });
     }
   };
 
@@ -428,6 +438,13 @@ const UserManagement: React.FC = () => {
                           <Tooltip title="Re-activate">
                             <IconButton size="small" color="success" onClick={() => callApprove(u.id, 'approved')}>
                               <ApproveIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {u.email !== 'upadhyaymanas3@gmail.com' && (
+                          <Tooltip title="Delete user">
+                            <IconButton size="small" color="error" onClick={() => callDelete(u.id)}>
+                              <SuspendIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
                         )}
