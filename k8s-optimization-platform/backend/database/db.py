@@ -84,6 +84,11 @@ class DatabaseManager:
                     metadata       JSONB
                 )
             """)
+            # Idempotent: add org_id column if it doesn't exist yet
+            cur.execute("""
+                ALTER TABLE agent_clusters
+                ADD COLUMN IF NOT EXISTS org_id TEXT NOT NULL DEFAULT 'default'
+            """)
 
             # ── agent_metrics — base columns ──────────────────────────────────
             cur.execute("""
@@ -178,8 +183,8 @@ class DatabaseManager:
                 cur.execute("""
                     INSERT INTO agent_clusters
                         (cluster_name, environment, cloud_provider, region, version,
-                         registered_at, last_seen, status, metadata)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                         registered_at, last_seen, status, metadata, org_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (cluster_name) DO UPDATE SET
                         environment    = EXCLUDED.environment,
                         cloud_provider = EXCLUDED.cloud_provider,
@@ -187,7 +192,8 @@ class DatabaseManager:
                         version        = EXCLUDED.version,
                         last_seen      = EXCLUDED.last_seen,
                         status         = EXCLUDED.status,
-                        metadata       = EXCLUDED.metadata
+                        metadata       = EXCLUDED.metadata,
+                        org_id         = EXCLUDED.org_id
                 """, (
                     cluster_data["cluster_name"],
                     cluster_data.get("environment", "unknown"),
@@ -198,6 +204,7 @@ class DatabaseManager:
                     now,
                     cluster_data.get("status", "active"),
                     json.dumps(cluster_data.get("metadata", {})),
+                    cluster_data.get("org_id", "default"),
                 ))
                 conn.commit()
             logger.info(f"Cluster registered: {cluster_data['cluster_name']}")
@@ -243,6 +250,22 @@ class DatabaseManager:
                 return [dict(r) for r in cur.fetchall()]
         except Exception as e:
             logger.error(f"Error getting all clusters: {e}")
+            return []
+
+    def get_clusters_by_org(self, org_id: str) -> List[Dict[str, Any]]:
+        """Return only clusters belonging to org_id. 'default' returns all (backward-compat)."""
+        if org_id == "default":
+            return self.get_all_clusters()
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT * FROM agent_clusters WHERE org_id = %s ORDER BY last_seen DESC",
+                    (org_id,),
+                )
+                return [dict(r) for r in cur.fetchall()]
+        except Exception as e:
+            logger.error(f"Error getting clusters by org: {e}")
             return []
 
     def delete_cluster(self, cluster_name: str) -> bool:

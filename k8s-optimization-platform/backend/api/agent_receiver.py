@@ -10,6 +10,7 @@ from datetime import datetime
 import logging
 
 from database.db import db_manager
+from api.tokens import get_token_org
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,7 @@ async def register_cluster(
         cluster_name = registration.cluster_name
         resolved_provider = registration.provider or registration.cloud_provider or "unknown"
         resolved_cluster_id = registration.cluster_id or cluster_name
+        org_id = get_token_org(token)
 
         success = db_manager.register_cluster({
             "cluster_name":   cluster_name,
@@ -98,6 +100,7 @@ async def register_cluster(
             "version":        registration.version,
             "agent_version":  registration.agent_version,
             "status":         "active",
+            "org_id":         org_id,
         })
 
         if not success:

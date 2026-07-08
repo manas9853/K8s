@@ -7,7 +7,7 @@
  * approves, or "approved" / "rejected" / "suspended".
  */
 import { useState, useEffect, useCallback } from 'react';
-import { useUser } from '@clerk/clerk-react';
+import { useUser, useOrganization } from '@clerk/clerk-react';
 import axios from 'axios';
 
 export type PlatformStatus = 'unregistered' | 'pending' | 'approved' | 'rejected' | 'suspended';
@@ -27,6 +27,7 @@ export interface PlatformUser {
   approved_at: string | null;
   approved_by: string | null;
   notes: string | null;
+  org_id: string;
 }
 
 const API_BASE = process.env.REACT_APP_API_URL || '';
@@ -41,6 +42,7 @@ interface UserStoreResult {
 
 export function useUserStore(): UserStoreResult {
   const { user: clerkUser, isLoaded } = useUser();
+  const { organization } = useOrganization();
   const [platformStatus, setPlatformStatus] = useState<PlatformStatus>('unregistered');
   const [platformUser, setPlatformUser] = useState<PlatformUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,6 +59,13 @@ export function useUserStore(): UserStoreResult {
     setError(null);
 
     try {
+      // org_id is the Clerk organization ID when orgs are enabled,
+      // otherwise falls back to a value in publicMetadata, then 'default'.
+      const org_id: string =
+        organization?.id ??
+        (clerkUser.publicMetadata?.org_id as string) ??
+        'default';
+
       const regRes = await axios.post(`${API_BASE}/api/v1/users/register`, {
         clerk_user_id: clerkUser.id,
         username: clerkUser.username ?? clerkUser.id,
@@ -64,6 +73,7 @@ export function useUserStore(): UserStoreResult {
         full_name: clerkUser.fullName ?? '',
         requested_role: (clerkUser.publicMetadata?.requested_role as string) ?? 'viewer',
         requested_teams: (clerkUser.publicMetadata?.requested_teams as string[]) ?? [],
+        org_id,
       });
 
       const pu: PlatformUser = regRes.data;

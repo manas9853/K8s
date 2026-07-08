@@ -2,7 +2,7 @@
 Clusters API - Multi-cluster management endpoints
 Feature 1: Unified Multi-Cluster Dashboard
 """
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Header
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from datetime import datetime
@@ -10,6 +10,9 @@ import logging
 
 # Import database manager for agent clusters
 from database.db import db_manager
+
+# Import user registry for org-scoped filtering
+from api.user_management import USER_REGISTRY
 
 # Import Kubernetes client
 try:
@@ -89,13 +92,42 @@ class ClusterHealth(BaseModel):
     recommendations: List[str]
 
 
+# ── Org-scoping helper ──────────────────────────────────────────────────────────
+
+def _resolve_org_id(x_clerk_user_id: Optional[str]) -> Optional[str]:
+    """
+    Given a Clerk user ID from the request header, return the org_id that
+    should be used to filter clusters, or None to indicate 'show all'
+    (reserved for admin users).
+
+    Returns:
+        None   — caller is an admin or no header provided (show all clusters)
+        str    — the org_id the caller belongs to (show only their clusters)
+    """
+    if not x_clerk_user_id:
+        # No identity header — legacy / unauthenticated callers see nothing scoped
+        return None
+    user = next(
+        (u for u in USER_REGISTRY.values() if u["clerk_user_id"] == x_clerk_user_id),
+        None,
+    )
+    if user is None:
+        # Unknown user — treat as default org (will show 'default' clusters only)
+        return "default"
+    if user.get("role") == "admin":
+        # Admins see everything
+        return None
+    return user.get("org_id", "default")
+
+
 # Endpoints
 
 @router.get("", response_model=List[ClusterInfo])
 async def list_clusters(
     environment: Optional[str] = Query(None),
     provider: Optional[str] = Query(None),
-    min_health_score: Optional[float] = Query(None)
+    min_health_score: Optional[float] = Query(None),
+    x_clerk_user_id: Optional[str] = Header(None, alias="X-Clerk-User-Id"),
 ):
     """
     List all Kubernetes clusters with filtering.
@@ -103,14 +135,21 @@ async def list_clusters(
     1. Agent-registered clusters (from database)
     2. Direct K8s connection (if configured)
     3. Dummy data (always — so the frontend is never empty)
+
+    Org isolation: results are scoped to the caller's org unless they are admin.
+    Pass X-Clerk-User-Id header to enable scoping.
     """
+    org_id = _resolve_org_id(x_clerk_user_id)
     clusters = []
 
-    # PRIORITY 1: Agent-registered clusters
+    # PRIORITY 1: Agent-registered clusters (org-scoped)
     try:
-        agent_clusters = db_manager.get_all_clusters()
+        if org_id is None:
+            agent_clusters = db_manager.get_all_clusters()
+        else:
+            agent_clusters = db_manager.get_clusters_by_org(org_id)
         if agent_clusters:
-            logging.info(f"Found {len(agent_clusters)} agent-registered clusters")
+            logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={org_id or 'all'})")
             clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
     except Exception as e:
         logging.warning(f"DB lookup failed: {e}")

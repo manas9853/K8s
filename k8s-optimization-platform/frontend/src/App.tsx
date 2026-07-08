@@ -9,6 +9,8 @@ import ErrorBoundary from './components/ErrorBoundary';
 
 // ── Eagerly loaded (tiny, always needed) ─────────────────────────────────────
 import Login from './pages/Login';
+import SignUpPage from './pages/SignUp';
+import Onboarding from './pages/Onboarding';
 
 // ── Code-split pages (loaded on demand) ──────────────────────────────────────
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -259,8 +261,10 @@ function App() {
     <AuthProvider>
       <ClusterProvider>
         <Routes>
-          {/* Public route - Login */}
+          {/* Public routes */}
           <Route path="/login" element={<Login />} />
+          <Route path="/sign-up" element={<SignUpPage />} />
+          <Route path="/onboarding" element={<Onboarding />} />
 
           {/* Protected routes - All other pages */}
           <Route path="/*" element={

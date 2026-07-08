@@ -418,6 +418,97 @@ def _build_pci_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dict
     return None
 
 
+def _iso_failed_detail(ctx: Dict) -> List[Dict[str, Any]]:
+    tc = ctx.get("total_containers", 0)
+    findings = []
+    items = [
+        ("A.6", "A.6 Security Organization", "Avoid default service accounts", "high",
+         ctx["default_sa_pods"],
+         "Create and assign dedicated service accounts per workload"),
+        ("A.8", "A.8 Asset Management", "Require CPU limits for managed workloads", "medium",
+         ctx["no_cpu_limit_count"],
+         "Add resources.limits.cpu to affected containers"),
+        ("A.9", "A.9 Access Control", "Prevent root and privileged containers", "critical",
+         ctx["root_count"] + ctx["privileged_count"] + ctx["priv_esc_count"],
+         "Set runAsNonRoot=true, privileged=false, and allowPrivilegeEscalation=false"),
+        ("A.10", "A.10 Cryptography", "Use read-only root filesystems", "medium",
+         tc - ctx["readonly_fs_count"],
+         "Set readOnlyRootFilesystem=true"),
+        ("A.12", "A.12 Operations Security", "Require liveness and readiness probes", "medium",
+         ctx["no_liveness_count"] + ctx["no_readiness_count"],
+         "Add livenessProbe and readinessProbe to affected containers"),
+        ("A.13", "A.13 Communications Security", "Prevent host network namespace sharing", "high",
+         ctx["host_network_count"],
+         "Set hostNetwork=false for affected workloads"),
+        ("A.14", "A.14 System Development", "Disallow privilege escalation", "high",
+         ctx["priv_esc_count"],
+         "Set allowPrivilegeEscalation=false"),
+    ]
+    for control_id, domain, title, severity, affected, remediation in items:
+        if affected > 0:
+            findings.append({
+                "control_id": control_id,
+                "domain": domain,
+                "title": title,
+                "severity": severity,
+                "description": f"{affected} resource(s) currently fail this ISO 27001 expectation",
+                "remediation": remediation,
+                "affected_resources": affected,
+            })
+    return findings
+
+
+def _annotate_iso_failed_controls(cluster_name: str, failed_detail: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    from database.db import db_manager
+
+    exceptions = db_manager.list_cis_control_exceptions(cluster_name)
+    exception_map = {item["control_id"]: item for item in exceptions if item.get("status") == "accepted"}
+
+    annotated = []
+    for item in failed_detail:
+        control_id = item["control_id"]
+        control = dict(item)
+        control["auto_fix_supported"] = control_id in {"A.8", "A.9", "A.10", "A.12", "A.14"}
+        control["exception"] = exception_map.get(control_id)
+        annotated.append(control)
+    return annotated
+
+
+def _build_iso_fix_params(ctx: Dict[str, Any], control_id: str) -> Optional[Dict[str, Any]]:
+    pods = ctx.get("pods", []) or []
+
+    for pod in pods:
+        namespace = pod.get("namespace") or "default"
+        owner_name = pod.get("owner_name") or pod.get("workload_name") or pod.get("deployment")
+        owner_kind = (pod.get("owner_kind") or "").lower()
+        if owner_kind and owner_kind != "deployment":
+            continue
+        if not owner_name:
+            continue
+
+        containers = pod.get("containers", []) or []
+        for container in containers:
+            base = {
+                "namespace": namespace,
+                "name": owner_name,
+                "container_name": container.get("name"),
+            }
+            if control_id == "A.8" and not container.get("cpu_limit"):
+                return {**base, "cpu_limit": "500m"}
+            if control_id == "A.9" and (container.get("run_as_root") or container.get("allow_privilege_escalation")):
+                return {**base, "run_as_non_root": True, "run_as_user": 1000, "allow_privilege_escalation": False}
+            if control_id == "A.10" and not container.get("read_only_root_fs"):
+                return {**base, "read_only_root_filesystem": True}
+            if control_id == "A.12" and (not container.get("has_liveness") or not container.get("has_readiness")):
+                ports = container.get("ports") or []
+                probe_port = ports[0].get("container_port") if ports else 8080
+                return {**base, "set_liveness": not container.get("has_liveness"), "set_readiness": not container.get("has_readiness"), "probe_port": probe_port}
+            if control_id == "A.14" and container.get("allow_privilege_escalation"):
+                return {**base, "allow_privilege_escalation": False}
+
+    return None
+
+
 def _cis_sections(ctx: Dict) -> List[Dict]:
     """
     CIS Kubernetes Benchmark v1.8 — 5 sections, mapped to real signals.
@@ -1233,8 +1324,11 @@ async def get_iso27001_compliance(cluster: Optional[str] = Query(None)):
         ]
 
         total_controls = sum(d["controls"] for d in domains)
-        total_passed   = sum(d["passed"] for d in domains)
-        overall_score  = round((total_passed / max(total_controls, 1)) * 100, 1)
+        total_passed = sum(d["passed"] for d in domains)
+        overall_score = round((total_passed / max(total_controls, 1)) * 100, 1)
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        failed_detail = _annotate_iso_failed_controls(cluster_name, _iso_failed_detail(ctx))
 
         return {
             "overall_score": overall_score,
@@ -1243,7 +1337,10 @@ async def get_iso27001_compliance(cluster: Optional[str] = Query(None)):
             "passed_controls": total_passed,
             "failed_controls": total_controls - total_passed,
             "domains": domains,
-            "cluster_name": ctx["cluster_name"],
+            "failed_controls_detail": failed_detail,
+            "cluster_name": cluster_name,
+            "total_pods_scanned": ctx["total_pods"],
+            "total_containers_scanned": ctx["total_containers"],
             "certification_date": (datetime.now() - timedelta(days=180)).isoformat(),
             "next_audit": (datetime.now() + timedelta(days=185)).isoformat(),
             "last_scan": datetime.now().isoformat(),
@@ -1253,6 +1350,77 @@ async def get_iso27001_compliance(cluster: Optional[str] = Query(None)):
         raise
     except Exception as e:
         logger.error(f"Error in ISO 27001: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/iso27001/exception")
+async def create_iso_exception(request: CISExceptionRequest, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        exception = db_manager.upsert_cis_control_exception(
+            cluster_name=cluster_name,
+            control_id=request.control_id,
+            title=request.title,
+            justification=request.justification,
+            owner=request.owner,
+            review_date=request.review_date,
+        )
+        if not exception:
+            raise HTTPException(status_code=500, detail="Failed to save ISO 27001 exception")
+        return exception
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error creating ISO 27001 exception: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+_FIXABLE_ISO_CONTROLS = {
+    "A.8": {"command": "patch_deployment_resources"},
+    "A.9": {"command": "patch_deployment_security_context"},
+    "A.10": {"command": "patch_deployment_security_context"},
+    "A.12": {"command": "patch_deployment_probes"},
+    "A.14": {"command": "patch_deployment_security_context"},
+}
+
+
+@router.post("/iso27001/fix/{control_id}")
+async def fix_iso_control(control_id: str, cluster: Optional[str] = Query(None)):
+    try:
+        from database.db import db_manager
+
+        fix_def = _FIXABLE_ISO_CONTROLS.get(control_id)
+        if not fix_def:
+            raise HTTPException(status_code=400, detail="Automatic fix is not supported for this ISO 27001 control")
+
+        ctx = await _fetch_security_context()
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        cluster_name = await _resolve_cluster_name(cluster)
+        params = _build_iso_fix_params(ctx, control_id)
+        if not params:
+            raise HTTPException(status_code=400, detail="No eligible deployment target found for this control")
+
+        command_id = db_manager.enqueue_command(cluster_name, fix_def["command"], params)
+        if not command_id:
+            raise HTTPException(status_code=500, detail="Failed to enqueue ISO 27001 fix action")
+
+        return {
+            "status": "queued",
+            "control_id": control_id,
+            "cluster_name": cluster_name,
+            "command": fix_def["command"],
+            "command_id": command_id,
+            "target": params,
+            "note": "This queues a direct workload spec patch in the cluster through the agent.",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fixing ISO 27001 control {control_id}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

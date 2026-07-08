@@ -24,6 +24,7 @@ import React, {
   useState,
   ReactNode,
 } from 'react';
+import { useUser } from '@clerk/clerk-react';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
 import {
   setClusters,
@@ -103,6 +104,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
   children,
 }) => {
   const dispatch = useAppDispatch();
+  const { user: clerkUser } = useUser();
   const { clusters, activeClusterId, loading, error } = useAppSelector(
     (s) => s.cluster
   );
@@ -121,7 +123,11 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
   const fetchClusters = useCallback(async () => {
     dispatch(fetchStart());
     try {
-      const res = await fetch(`${API_BASE}/api/clusters`);
+      const headers: Record<string, string> = {};
+      if (clerkUser?.id) {
+        headers['X-Clerk-User-Id'] = clerkUser.id;
+      }
+      const res = await fetch(`${API_BASE}/api/clusters`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: ClusterInfo[] = await res.json();
       dispatch(setClusters(data));
@@ -129,7 +135,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
       dispatch(fetchError(err?.message ?? 'Failed to load clusters'));
       // Fallback: keep existing clusters list intact – don't wipe the UI
     }
-  }, [dispatch]);
+  }, [dispatch, clerkUser?.id]);
 
   // Initial fetch on mount
   useEffect(() => {

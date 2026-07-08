@@ -26,6 +26,7 @@ class TokenCreate(BaseModel):
     name: str
     description: Optional[str] = None
     expires_in_days: Optional[int] = 365  # Default 1 year
+    org_id: str = "default"
 
 
 class TokenResponse(BaseModel):
@@ -48,6 +49,7 @@ class TokenInfo(BaseModel):
     last_used: Optional[str]
     usage_count: int
     status: str
+    org_id: str = "default"
 
 
 def verify_admin_token(authorization: str = Header(None)) -> bool:
@@ -69,6 +71,15 @@ def verify_admin_token(authorization: str = Header(None)) -> bool:
 def hash_token(token: str) -> str:
     """Hash token for storage"""
     return hashlib.sha256(token.encode()).hexdigest()
+
+
+def get_token_org(token: str) -> str:
+    """Return the org_id associated with a bearer token, or 'default' if unknown."""
+    token_hash = hash_token(token)
+    info = tokens_db.get(token_hash)
+    if info and info.get("status") == "active":
+        return info.get("org_id", "default")
+    return "default"
 
 
 @router.post("/generate", response_model=TokenResponse)
@@ -100,7 +111,8 @@ async def generate_token(
         "expires_at": expires_at.isoformat() if expires_at else None,
         "last_used": None,
         "usage_count": 0,
-        "status": "active"
+        "status": "active",
+        "org_id": token_create.org_id or "default",
     }
     
     return TokenResponse(
@@ -199,7 +211,8 @@ async def verify_token(authorization: str = Header(None)):
         "status": "valid",
         "token_hash": token_hash,
         "name": token_info["name"],
-        "expires_at": token_info["expires_at"]
+        "expires_at": token_info["expires_at"],
+        "org_id": token_info.get("org_id", "default"),
     }
 
 

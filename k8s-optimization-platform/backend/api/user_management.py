@@ -56,9 +56,15 @@ def _init_users_table():
                 registered_at TEXT NOT NULL,
                 approved_at TEXT,
                 approved_by TEXT,
-                notes TEXT
+                notes TEXT,
+                org_id TEXT NOT NULL DEFAULT 'default'
             )
         """)
+        # Idempotent: add org_id column to existing tables
+        try:
+            conn.execute("ALTER TABLE platform_users ADD COLUMN org_id TEXT NOT NULL DEFAULT 'default'")
+        except Exception:
+            pass  # column already exists
         # Remove legacy seed admin if it still exists in the DB
         conn.execute("DELETE FROM platform_users WHERE id = 'seed_admin_001'")
 
@@ -110,8 +116,8 @@ class USER_REGISTRY:
                 INSERT OR REPLACE INTO platform_users
                   (id, clerk_user_id, username, email, full_name, role, teams,
                    status, mfa_enabled, last_login, registered_at, approved_at,
-                   approved_by, notes)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   approved_by, notes, org_id)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """, (
                 user["id"], user["clerk_user_id"], user["username"],
                 user["email"], user.get("full_name", ""),
@@ -119,7 +125,7 @@ class USER_REGISTRY:
                 user["status"], int(user.get("mfa_enabled", False)),
                 user.get("last_login"), user["registered_at"],
                 user.get("approved_at"), user.get("approved_by"),
-                user.get("notes"),
+                user.get("notes"), user.get("org_id", "default"),
             ))
 
     @staticmethod
@@ -143,6 +149,7 @@ class UserRegistrationRequest(BaseModel):
     full_name: str = ""
     requested_role: str = "viewer"
     requested_teams: List[str] = []
+    org_id: str = "default"
 
 
 class UserApprovalRequest(BaseModel):
@@ -174,6 +181,7 @@ class UserResponse(BaseModel):
     approved_at: Optional[str]
     approved_by: Optional[str]
     notes: Optional[str]
+    org_id: str = "default"
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +204,7 @@ def _to_response(u: dict) -> UserResponse:
         approved_at=u.get("approved_at"),
         approved_by=u.get("approved_by"),
         notes=u.get("notes"),
+        org_id=u.get("org_id", "default"),
     )
 
 
@@ -213,12 +222,17 @@ async def register_user(req: UserRegistrationRequest):
     If the user already exists (re-registration after logout) we return the
     existing record so the frontend can show the current status.
     """
-    # Return existing record if already registered
+    # Return existing record if already registered.
+    # Exception: if the stored org_id is still 'default' and the caller provides
+    # a real org_id (onboarding step), patch it before returning.
     existing = next(
         (u for u in USER_REGISTRY.values() if u["clerk_user_id"] == req.clerk_user_id),
         None,
     )
     if existing:
+        if existing.get("org_id", "default") == "default" and req.org_id and req.org_id != "default":
+            USER_REGISTRY.update(existing["id"], {"org_id": req.org_id})
+            existing = USER_REGISTRY.get(existing["id"])
         return _to_response(existing)
 
     # Validate requested role & teams
@@ -246,6 +260,7 @@ async def register_user(req: UserRegistrationRequest):
         "approved_at": now if is_first_user else None,
         "approved_by": "system" if is_first_user else None,
         "notes": "Auto-approved: first user" if is_first_user else None,
+        "org_id": req.org_id or "default",
     }
     USER_REGISTRY.save(user)
     if is_first_user:
@@ -274,6 +289,7 @@ async def get_user_status(clerk_user_id: str):
         "status": user["status"],
         "role": user["role"],
         "teams": user.get("teams", []),
+        "org_id": user.get("org_id", "default"),
     }
 
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { SignIn, useAuth } from '@clerk/clerk-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 
 /* ── Design tokens — Dark K8s terminal theme ── */
 const C = {
@@ -683,7 +683,7 @@ const Login: React.FC = () => {
             {/* Clerk SignIn widget — form only, all chrome stripped via elements + global CSS */}
             <SignIn
               routing="virtual"
-              signUpUrl="/login"
+              signUpUrl="/sign-up"
               forceRedirectUrl="/"
               appearance={{
                 variables: {
@@ -775,12 +775,12 @@ const Login: React.FC = () => {
             }}>
               <p style={{ margin: '0 0 12px', fontSize: '13px', color: C.textSecondary }}>
                 Don't have an account?{' '}
-                <a
-                  href="/sign-up"
+                <Link
+                  to="/sign-up"
                   style={{ color: C.cyan, fontWeight: 700, textDecoration: 'none', fontFamily: "'JetBrains Mono',monospace" }}
                 >
                   Sign up
-                </a>
+                </Link>
               </p>
               <div style={{
                 display: 'inline-flex', alignItems: 'center', gap: '5px',
