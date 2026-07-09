@@ -13,6 +13,7 @@ import {
   Cancel as RejectIcon,
   Edit as EditIcon,
   Block as SuspendIcon,
+  Delete as DeleteIcon,
   PersonAdd as PendingIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
@@ -479,9 +480,9 @@ const UserManagement: React.FC = () => {
                           </Tooltip>
                         )}
                         {u.email !== 'upadhyaymanas3@gmail.com' && (
-                          <Tooltip title="Delete user">
+                          <Tooltip title="Delete user permanently">
                             <IconButton size="small" color="error" onClick={() => callDelete(u.id)}>
-                              <SuspendIcon fontSize="small" />
+                              <DeleteIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
                         )}

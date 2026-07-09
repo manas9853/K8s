@@ -26,6 +26,7 @@ import {
   CheckCircle as CheckCircleIcon,
   HourglassTop as HourglassIcon,
   Block as BlockIcon,
+  Delete as DeleteIcon,
   VerifiedUser as VerifiedUserIcon,
   PersonSearch as PersonSearchIcon,
 } from '@mui/icons-material';
@@ -44,12 +45,14 @@ interface PlatformUser {
   registered_at: string;
   approved_at: string | null;
   approved_by: string | null;
+  org_id: string;
 }
 
 interface AccessReviewRow {
   user_id: string;
   user: string;
   email: string;
+  org_id: string;
   role: string;
   teams: string[];
   platform_status: 'approved' | 'pending' | 'rejected' | 'suspended';
@@ -88,6 +91,7 @@ const TeamAccessReviews: React.FC = () => {
         user_id: u.id,
         user: u.username,
         email: u.email,
+        org_id: u.org_id || 'unset',
         role: u.role,
         teams: u.teams,
         platform_status: u.status,
@@ -112,6 +116,17 @@ const TeamAccessReviews: React.FC = () => {
       fetchData();
     } catch {
       setToast({ msg: `Failed to revoke access for ${username}`, severity: 'error' });
+    }
+  }, [fetchData]);
+
+  const handleDeleteUser = useCallback(async (userId: string, username: string, email: string) => {
+    if (email === 'upadhyaymanas3@gmail.com') return;
+    try {
+      await axios.delete(`${API_BASE}/api/v1/users/${userId}`);
+      setToast({ msg: `User "${username}" deleted permanently`, severity: 'success' });
+      fetchData();
+    } catch (e: any) {
+      setToast({ msg: e.response?.data?.detail || `Failed to delete ${username}`, severity: 'error' });
     }
   }, [fetchData]);
 
@@ -225,6 +240,7 @@ const TeamAccessReviews: React.FC = () => {
               <TableRow>
                 <TableCell>User</TableCell>
                 <TableCell>Email</TableCell>
+                <TableCell>Org ID</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Teams</TableCell>
                 <TableCell>Last Review / Registered</TableCell>
@@ -242,6 +258,15 @@ const TeamAccessReviews: React.FC = () => {
                     </Typography>
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.78rem' }}>{row.email}</TableCell>
+                  <TableCell>
+                    <Chip
+                      label={row.org_id || 'unset'}
+                      size="small"
+                      variant="outlined"
+                      color={row.org_id && row.org_id !== 'default' ? 'primary' : 'default'}
+                      sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+                    />
+                  </TableCell>
                   <TableCell>
                     <Chip label={row.role} size="small" variant="outlined"
                       color={row.role === 'admin' ? 'error' : row.role === 'editor' ? 'warning' : 'default'}
@@ -278,24 +303,37 @@ const TeamAccessReviews: React.FC = () => {
                     />
                   </TableCell>
                   <TableCell align="center">
-                    {row.access_status === 'Approved' && (
-                      <Tooltip title="Revoke access">
-                        <Button
-                          size="small"
-                          variant="outlined"
-                          color="error"
-                          onClick={() => handleRevokeAccess(row.user_id, row.user)}
-                        >
-                          Revoke
-                        </Button>
-                      </Tooltip>
-                    )}
-                    {row.access_status === 'Pending' && (
-                      <Chip label="Awaiting admin" size="small" color="warning" variant="outlined" />
-                    )}
-                    {row.access_status === 'Revoked' && (
-                      <Chip label="Revoked" size="small" color="error" variant="outlined" />
-                    )}
+                    <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center', alignItems: 'center' }}>
+                      {row.access_status === 'Approved' && (
+                        <Tooltip title="Revoke access">
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="error"
+                            onClick={() => handleRevokeAccess(row.user_id, row.user)}
+                          >
+                            Revoke
+                          </Button>
+                        </Tooltip>
+                      )}
+                      {row.access_status === 'Pending' && (
+                        <Chip label="Awaiting admin" size="small" color="warning" variant="outlined" />
+                      )}
+                      {row.access_status === 'Revoked' && (
+                        <Chip label="Revoked" size="small" color="error" variant="outlined" />
+                      )}
+                      {row.email !== 'upadhyaymanas3@gmail.com' && (
+                        <Tooltip title="Delete user permanently">
+                          <IconButton
+                            size="small"
+                            color="error"
+                            onClick={() => handleDeleteUser(row.user_id, row.user, row.email)}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
                   </TableCell>
                 </TableRow>
               ))}
