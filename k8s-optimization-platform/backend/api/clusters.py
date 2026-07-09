@@ -142,6 +142,12 @@ async def list_clusters(
     # PRIORITY 1: Agent-registered clusters (org-scoped)
     try:
         agent_clusters = db_manager.get_clusters_by_org(effective_org)
+        # If the org-specific query returns nothing, fall back to all clusters.
+        # This handles the case where cluster org_id="default" but user org_id
+        # is something specific (e.g. "xforce-devops").
+        if not agent_clusters and effective_org != "default":
+            logging.info(f"No clusters for org={effective_org}, falling back to all clusters")
+            agent_clusters = db_manager.get_all_clusters()
         if agent_clusters:
             logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={effective_org})")
             clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
