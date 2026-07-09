@@ -133,7 +133,8 @@ const RootCauseInner: React.FC = () => {
   const [issues, setIssues] = useState<ResourceIssue[]>([]);
   const [loading, setLoading] = useState(true);
   const [fixLoading, setFixLoading] = useState<string | null>(null);
-  const [toast, setToast] = useState<{ open: boolean; msg: string; sev: 'success' | 'error' }>({
+  const [fixedIssues, setFixedIssues] = useState<Set<string>>(new Set());
+  const [toast, setToast] = useState<{ open: boolean; msg: string; sev: 'success' | 'error' | 'info' }>({
     open: false, msg: '', sev: 'success',
   });
 
@@ -157,7 +158,7 @@ const RootCauseInner: React.FC = () => {
     }
   };
 
-  // Fix action — enqueues a patch_deployment/daemonset_resources agent command
+  // Fix action — enqueues agent command, polls until done/failed, removes from list on success
   const handleFix = async (issue: ResourceIssue) => {
     const key = issue.resource_name;
     setFixLoading(key);
@@ -180,17 +181,56 @@ const RootCauseInner: React.FC = () => {
         }),
       });
       const body = await res.json().catch(() => ({}));
-      if (res.ok) {
-        setToast({ open: true, msg: body.message ?? `Fix queued for ${issue.resource_name}`, sev: 'success' });
-      } else {
+      if (!res.ok) {
         setToast({ open: true, msg: body?.detail ?? `Fix failed (HTTP ${res.status})`, sev: 'error' });
+        return;
       }
+
+      const cmdId = body.command_id;
+      setToast({ open: true, msg: `⏳ Fix queued — waiting for agent…`, sev: 'info' });
+
+      // Poll until done / failed (max 90s, every 2.5s)
+      const deadline = Date.now() + 90_000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2500));
+        const poll = await fetch(`${API_BASE_URL}/agents/commands/${cmdId}`).catch(() => null);
+        if (!poll) continue;
+        const status = await poll.json().catch(() => ({}));
+
+        if (status.status === 'done') {
+          // Remove this issue from the displayed list
+          setFixedIssues(prev => new Set(prev).add(key));
+          setToast({
+            open: true,
+            msg: `✅ Fixed: ${issue.issue_type} on ${issue.resource_name} — resource limits applied to ${body.workload_kind}/${body.workload_name}`,
+            sev: 'success',
+          });
+          return;
+        }
+
+        if (status.status === 'failed') {
+          const errMsg = status.result?.error ?? 'Command failed';
+          // Extract just the K8s message if it's a verbose HTTP error
+          const k8sMatch = errMsg.match(/"message":"([^"]+)"/);
+          setToast({
+            open: true,
+            msg: `❌ Fix failed: ${k8sMatch ? k8sMatch[1] : errMsg.slice(0, 120)}`,
+            sev: 'error',
+          });
+          return;
+        }
+      }
+      // Timed out
+      setToast({ open: true, msg: `⏱ Fix timed out — check Command Center for status (cmd #${cmdId})`, sev: 'error' });
     } catch (e: any) {
       setToast({ open: true, msg: e?.message ?? 'Network error', sev: 'error' });
     } finally {
       setFixLoading(null);
     }
   };
+
+  // Filter out issues that have been successfully fixed this session
+  const visibleIssues = issues.filter(i => !fixedIssues.has(i.resource_name));
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -233,8 +273,8 @@ const RootCauseInner: React.FC = () => {
               <KpiCard label="Affected Resources" value={analysis.root_causes.reduce((s, r) => s + r.count, 0)} accent="#3b82f6" />
             </Grid>
             <Grid item xs={6} sm={3}>
-              <KpiCard label="Issues Identified" value={issues.length} accent="#a371f7"
-                sub={`${issues.filter(i => i.risk_level === 'critical').length} critical`} />
+              <KpiCard label="Issues Identified" value={visibleIssues.length} accent="#a371f7"
+                sub={`${visibleIssues.filter(i => i.risk_level === 'critical').length} critical · ${fixedIssues.size > 0 ? `${fixedIssues.size} fixed ✓` : 'none fixed yet'}`} />
             </Grid>
           </Grid>
 
@@ -416,10 +456,14 @@ const RootCauseInner: React.FC = () => {
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
             <BuildIcon sx={{ color: '#d29922', fontSize: 20 }} />
             <Typography sx={{ color: DK.text, fontWeight: 600 }}>
-              Detailed Issues — {issues.length} resources need attention
+              Detailed Issues — {visibleIssues.length} resources need attention
+              {fixedIssues.size > 0 && (
+                <Chip label={`${fixedIssues.size} fixed ✓`} size="small"
+                  sx={{ ml: 1.5, bgcolor: '#3fb95022', color: '#3fb950', border: '1px solid #3fb95044', fontWeight: 600, fontSize: '0.68rem' }} />
+              )}
             </Typography>
           </Box>
-          {issues.map((issue, i) => (
+          {visibleIssues.map((issue, i) => (
             <Accordion key={i} disableGutters
               sx={{
                 bgcolor: DK.surface2, border: `1px solid ${DK.border}`, mb: 1,
@@ -494,7 +538,17 @@ const RootCauseInner: React.FC = () => {
               </AccordionDetails>
             </Accordion>
           ))}
-          {issues.length === 0 && (
+          {visibleIssues.length === 0 && issues.length > 0 && (
+            <Box sx={{ bgcolor: '#3fb95011', border: '1px solid #3fb95033', borderRadius: 2, p: 3, textAlign: 'center' }}>
+              <Typography sx={{ color: '#3fb950', fontWeight: 600, fontSize: '0.95rem' }}>
+                ✅ All {fixedIssues.size} issues fixed this session!
+              </Typography>
+              <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mt: 0.5 }}>
+                Resource limits applied to the cluster. Refresh the page to fetch updated data.
+              </Typography>
+            </Box>
+          )}
+          {issues.length === 0 && fixedIssues.size === 0 && (
             <Typography sx={{ color: DK.muted, textAlign: 'center', py: 5, fontSize: '0.85rem' }}>
               No individual resource issues detected
             </Typography>
@@ -502,11 +556,21 @@ const RootCauseInner: React.FC = () => {
         </CardContent>
       </Card>
 
-      {/* Toast */}
-      <Snackbar open={toast.open} autoHideDuration={4000} onClose={() => setToast(t => ({ ...t, open: false }))}
+      {/* Toast — longer for success, shorter for info */}
+      <Snackbar
+        open={toast.open}
+        autoHideDuration={toast.sev === 'success' ? 8000 : toast.sev === 'info' ? 60000 : 6000}
+        onClose={() => setToast(t => ({ ...t, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-        <Alert severity={toast.sev} onClose={() => setToast(t => ({ ...t, open: false }))}
-          sx={{ bgcolor: toast.sev === 'success' ? '#238636' : '#b62324', color: '#fff', '& .MuiAlert-icon': { color: '#fff' } }}>
+        <Alert
+          severity={toast.sev === 'info' ? 'info' : toast.sev}
+          onClose={() => setToast(t => ({ ...t, open: false }))}
+          sx={{
+            bgcolor: toast.sev === 'success' ? '#238636' : toast.sev === 'info' ? '#1f3a5f' : '#b62324',
+            color: '#fff',
+            '& .MuiAlert-icon': { color: '#fff' },
+            maxWidth: 480,
+          }}>
           {toast.msg}
         </Alert>
       </Snackbar>
