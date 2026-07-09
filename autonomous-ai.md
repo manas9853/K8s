@@ -127,27 +127,38 @@ after their prerequisite is done.
 
 ---
 
-### STEP 5 — Sub-Task 3 · Frontend: OptimizationAdvisor + IncidentInvestigator
+### STEP 5 — Sub-Task 3 · Frontend: OptimizationAdvisor + IncidentInvestigator ✅ DONE
 *(parallel after Step 3)*
 
-**What to build:**
-- OptimizationAdvisor: ROI-sorted fix cards, Quick Wins section, savings calculator sidebar, Apply → agent command → poll → toast
-- IncidentInvestigator: severity-banded incident feed cards, type icons, confidence % bar, timeline bar, Apply → agent command
-
-**Files:** `AICopilot/OptimizationAdvisor.tsx` · `AICopilot/IncidentInvestigator.tsx`
-
-**Done when:** Both pages show real pod names with dark theme. Apply button triggers a real agent command and shows a live polling spinner followed by a success/fail toast.
+**Completed:** ✅
+- **OptimizationAdvisor**: flat `<Table>` replaced with dark fix cards; left-border color = impact severity
+- Quick Wins section — filters `effort=low && impact≠low`, gold border highlight
+- Savings Calculator sidebar — live-updates as checkboxes are ticked, shows `$X/mo` per rec + grand total
+- Batch select via `<Checkbox>` per card + "Apply Selected (N)" button applies all checked fixes sequentially
+- Individual Apply → `POST /v1/root-cause/fix` → polls agent every 2.5 s → ✅ card fades, toast shows result
+- `API_BASE_URL + clusterParam` — `axios` removed, `activeClusterName` in subtitle
+- **IncidentInvestigator**: `<Accordion>` replaced with expandable incident feed cards
+- `TypeIcon` (MemoryIcon/RestartAltIcon/WarningAmberIcon) and severity left-border per incident
+- `ConfidenceBar` — smooth SVG-free fill bar with % label, green/yellow/red by threshold
+- Timeline dot (red=active, green=resolved) + timestamp on every card header row
+- Click row header → `<Collapse>` shows root cause box, affected pod chips, recommendations list
+- Apply → `POST /v1/root-cause/fix` → polls agent → ✅ icon replaces play button on success
+- `API_BASE_URL + clusterParam`, TypeScript: 0 errors
 
 ---
 
-### STEP 6 — Sub-Task 4 · Frontend: SecurityAdvisor
+### STEP 6 — Sub-Task 4 · Frontend: SecurityAdvisor ✅ DONE
 *(parallel after Step 3)*
 
-**What to build:** Dark theme upgrade, SVG circular security score ring (replaces LinearProgress), severity group badges CRITICAL/HIGH/MEDIUM, "Fix All Critical" bulk button, Apply Fix → agent command → poll → toast.
-
-**File:** `AICopilot/SecurityAdvisor.tsx`
-
-**Done when:** Security score shows as a circular ring. Apply Fix reaches the real cluster agent and shows result toast.
+**Completed:** ✅
+- **SVG `<ScoreRing>`** — pure circular ring drawn with `stroke-dasharray`, animates on load; green ≥80, yellow ≥60, red <60
+- **`<SevBadge>`** components — CRITICAL / HIGH / MEDIUM / LOW each in tinted colour box (replaces plain number cards)
+- **`<ComplianceChip>`** — maps "Compliant"→green, "Partial"/"Needs Review"→yellow, else red; works for any backend key
+- **"Fix All Critical"** red button in header — only visible when unfixed criticals > 0; iterates sequentially, disables while in-flight
+- Issues **grouped by severity** with section header (dot + label + count chip): Critical → High → Medium → Low
+- `<IssueCard>` with `<Collapse>` — CVE badges (red BugReportIcon), affected resource chips, remediation in dark box
+- Individual **Apply Fix** → `POST /v1/root-cause/fix` → polls agent every 2.5 s → card fades to 0.5 opacity on success
+- `API_BASE_URL + clusterParam`, `axios` removed, TypeScript: 0 errors
 
 ---
 
