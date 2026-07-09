@@ -118,6 +118,7 @@ const Dashboard: React.FC = () => {
       let failedPods = 0;
 
       // Cost constants — matches backend _calculate_costs()
+      // Use node capacity (not requested) to avoid inflated cost when over-committed
       const CPU_COST_PER_CORE_HOUR = 0.04;
       const MEMORY_COST_PER_GB_HOUR = 0.005;
       const HOURS_PER_MONTH = 730;
@@ -134,20 +135,27 @@ const Dashboard: React.FC = () => {
 
         const nodeItems: unknown[] = nodesData.items ?? [];
         totalNodes += nodesData.count ?? nodeItems.length;
-        totalPods += podsData.total ?? (podsData.items ?? []).length;
+        // Use running+pending+failed+succeeded for accurate total
+        const running = podsData.running ?? 0;
+        const pending = podsData.pending ?? 0;
+        const failed = podsData.failed ?? 0;
+        const succeeded = podsData.succeeded ?? 0;
+        const podTotal = podsData.total ?? ((running + pending + failed + succeeded) || (podsData.items ?? []).length);
+        totalPods += podTotal;
         totalNamespaces += namespacesData.count ?? 0;
-        runningPods += podsData.running ?? 0;
-        pendingPods += podsData.pending ?? 0;
-        failedPods += podsData.failed ?? 0;
+        runningPods += running;
+        pendingPods += pending;
+        failedPods += failed;
 
         const cpuCap: number = nodesData.cpu_capacity_cores ?? resourcesData.cpu_capacity_cores ?? 0;
         const memCap: number = nodesData.memory_capacity_gb ?? resourcesData.memory_capacity_gb ?? 0;
         const cpuReq: number = resourcesData.cpu_requested_cores ?? 0;
         const memReq: number = resourcesData.memory_requested_gb ?? 0;
 
-        // Health score — same band logic as backend _calculate_health_score()
-        const cpuPct = cpuCap > 0 ? (cpuReq / cpuCap) * 100 : 0;
-        const memPct = memCap > 0 ? (memReq / memCap) * 100 : 0;
+        // Health score — cap utilisation at 100% so over-committed nodes don't
+        // fall into the wrong band (cpu_utilization_percent can exceed 100 in IKS)
+        const cpuPct = cpuCap > 0 ? Math.min((cpuReq / cpuCap) * 100, 100) : 0;
+        const memPct = memCap > 0 ? Math.min((memReq / memCap) * 100, 100) : 0;
         const avgPct = (cpuPct + memPct) / 2;
         let score = 65;
         if (avgPct >= 60 && avgPct <= 80) score = 95;
@@ -156,26 +164,33 @@ const Dashboard: React.FC = () => {
         totalHealthScore += score;
         clustersWithMetrics++;
 
-        const clusterCost = (cpuReq * CPU_COST_PER_CORE_HOUR + memReq * MEMORY_COST_PER_GB_HOUR) * HOURS_PER_MONTH;
+        // Cost based on node capacity — requested can exceed capacity (over-committed)
+        // which would produce misleadingly large numbers
+        const costBasis = Math.min(cpuReq, cpuCap);
+        const memBasis  = Math.min(memReq, memCap);
+        const clusterCost = (costBasis * CPU_COST_PER_CORE_HOUR + memBasis * MEMORY_COST_PER_GB_HOUR) * HOURS_PER_MONTH;
         monthlyCost += clusterCost;
-        potentialSavings += clusterCost * 0.30;
+        // Savings potential: right-size over-committed + unused capacity
+        const overCommitCpu = Math.max(cpuReq - cpuCap, 0);
+        const unusedCpu = Math.max(cpuCap - cpuReq, 0);
+        const unusedMem = Math.max(memCap - memReq, 0);
+        potentialSavings += (overCommitCpu * 0.5 + unusedCpu * 0.3 + unusedMem * 0.3 * MEMORY_COST_PER_GB_HOUR) * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH;
       }
 
       const totalClusters = targetClusters.length;
 
-      setSummary(prev => ({
+      setSummary({
         total_clusters: totalClusters,
         total_nodes: totalNodes,
         total_pods: totalPods,
         total_namespaces: totalNamespaces,
-        // Prefer simulation cost if it already loaded a non-zero value, otherwise use computed
-        monthly_cost: (prev?.monthly_cost && prev.monthly_cost > 0) ? prev.monthly_cost : Math.round(monthlyCost * 100) / 100,
-        potential_savings: (prev?.potential_savings && prev.potential_savings > 0) ? prev.potential_savings : Math.round(potentialSavings * 100) / 100,
+        monthly_cost: Math.round(monthlyCost * 100) / 100,
+        potential_savings: Math.round(potentialSavings * 100) / 100,
         resources_optimized: runningPods,
         resources_pending: pendingPods,
         unused_resources: failedPods,
         cluster_health_score: clustersWithMetrics > 0 ? Math.round(totalHealthScore / clustersWithMetrics) : 0,
-      }));
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setSummary(null);
@@ -191,14 +206,10 @@ const Dashboard: React.FC = () => {
       
       if (response.ok) {
         const data = await response.json();
+        // Only store simulation metadata (baseline, savings_realized, last_updated).
+        // Do NOT overwrite monthly_cost / potential_savings — the simulation endpoint
+        // currently returns zeros and would clobber the real values computed above.
         setSimulationMetrics(data);
-        // Only pull cost/savings from simulation — do NOT overwrite cluster/pod
-        // counts which come from real agent metrics fetched in fetchDashboardData.
-        setSummary(prev => prev ? {
-          ...prev,
-          monthly_cost: data.current_monthly_cost > 0 ? data.current_monthly_cost : prev.monthly_cost,
-          potential_savings: data.potential_savings > 0 ? data.potential_savings : prev.potential_savings,
-        } : null);
       }
     } catch (err) {
       console.error('Failed to fetch simulation metrics:', err);

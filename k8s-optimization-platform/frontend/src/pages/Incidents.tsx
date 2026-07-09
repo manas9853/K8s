@@ -1,56 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
-import { useCluster } from '../contexts/ClusterContext';
 import {
-  Box,
-  Paper,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  LinearProgress,
-  Tabs,
-  Tab,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-  Divider,
+  Box, Card, CardContent, Typography, Grid, CircularProgress,
+  Chip, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Accordion, AccordionSummary, AccordionDetails, Tabs, Tab,
+  Button, LinearProgress, List, ListItem, Divider, IconButton,
+  Snackbar, Alert, Tooltip,
 } from '@mui/material';
-import {
-  Refresh as RefreshIcon,
-  Error as ErrorIcon,
-  Warning as WarningIcon,
-  RestartAlt as RestartIcon,
-  Speed as ThrottlingIcon,
-  RemoveCircle as EvictionIcon,
-  Memory as MemoryIcon,
-  TrendingUp as TrendingUpIcon,
-  CheckCircle as CheckCircleIcon,
-  ExpandMore as ExpandMoreIcon,
-  Lightbulb as LightbulbIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
-import { PieChart, Pie, Cell, BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import FlashOnIcon from '@mui/icons-material/FlashOn';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import MemoryIcon from '@mui/icons-material/Memory';
+import RestartAltIcon from '@mui/icons-material/RestartAlt';
+import SpeedIcon from '@mui/icons-material/Speed';
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import PatternIcon from '@mui/icons-material/Pattern';
+import TimelineIcon from '@mui/icons-material/Timeline';
+import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Incident {
   incident_id: string;
@@ -62,7 +36,7 @@ interface Incident {
   timestamp: string;
   count: number;
   message: string;
-  resource_correlation: any;
+  resource_correlation: Record<string, any>;
 }
 
 interface Correlation {
@@ -73,7 +47,7 @@ interface Correlation {
   cluster: string;
   root_cause: string;
   confidence: number;
-  correlated_metrics: any;
+  correlated_metrics: Record<string, any>;
   recommendation: string;
   estimated_fix_time: string;
   priority: string;
@@ -89,582 +63,497 @@ interface Pattern {
   prevention_steps: string[];
 }
 
-const Incidents: React.FC = () => {
-  const navigate = useNavigate();
+interface Summary {
+  total_incidents: number;
+  by_type: Record<string, number>;
+  by_severity: Record<string, number>;
+  top_affected_pods: { pod: string; count: number }[];
+  total_oomkills: number;
+  total_restarts: number;
+  total_throttling_events: number;
+}
+
+// ─── Design tokens ─────────────────────────────────────────────────────────
+
+const DK = {
+  bg: '#0d1117',
+  surface: '#161b22',
+  surface2: '#1c2128',
+  border: '#30363d',
+  text: '#e6edf3',
+  muted: '#8b949e',
+};
+
+const SEV: Record<string, string> = {
+  critical: '#f85149',
+  high:     '#d29922',
+  medium:   '#3b82f6',
+  low:      '#3fb950',
+};
+
+const TYPE_COLOR: Record<string, string> = {
+  oomkill:   '#f85149',
+  restart:   '#d29922',
+  throttling:'#3b82f6',
+  eviction:  '#a371f7',
+};
+
+const PIE_COLORS = ['#f85149', '#d29922', '#3b82f6', '#a371f7', '#3fb950', '#58a6ff'];
+
+// ─── Reusable mini-components ──────────────────────────────────────────────
+
+const SevChip: React.FC<{ value: string }> = ({ value }) => {
+  const c = SEV[value] ?? DK.muted;
+  return (
+    <Chip label={value} size="small" sx={{
+      bgcolor: `${c}22`, color: c, border: `1px solid ${c}44`,
+      fontWeight: 700, fontSize: '0.7rem', textTransform: 'uppercase',
+    }} />
+  );
+};
+
+const SevIcon: React.FC<{ value: string; size?: number }> = ({ value, size = 18 }) => {
+  const sx = { fontSize: size, color: SEV[value] ?? DK.muted };
+  if (value === 'critical') return <ErrorOutlineIcon sx={sx} />;
+  if (value === 'high')     return <WarningAmberIcon sx={sx} />;
+  if (value === 'medium')   return <InfoOutlinedIcon sx={sx} />;
+  return <CheckCircleOutlineIcon sx={sx} />;
+};
+
+const TypeIcon: React.FC<{ type: string }> = ({ type }) => {
+  const sx = { fontSize: 18, color: TYPE_COLOR[type] ?? DK.muted };
+  if (type === 'oomkill')   return <MemoryIcon sx={sx} />;
+  if (type === 'restart')   return <RestartAltIcon sx={sx} />;
+  if (type === 'throttling')return <SpeedIcon sx={sx} />;
+  return <DeleteSweepIcon sx={sx} />;
+};
+
+const KpiCard: React.FC<{ label: string; value: string | number; accent?: string; sub?: string }> = ({ label, value, accent, sub }) => (
+  <Card sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2 }}>
+    <CardContent sx={{ p: '16px !important' }}>
+      <Typography sx={{ color: DK.muted, fontSize: '0.75rem', mb: 0.5 }}>{label}</Typography>
+      <Typography sx={{ color: accent ?? DK.text, fontSize: '1.8rem', fontWeight: 700, lineHeight: 1 }}>{value}</Typography>
+      {sub && <Typography sx={{ color: DK.muted, fontSize: '0.72rem', mt: 0.5 }}>{sub}</Typography>}
+    </CardContent>
+  </Card>
+);
+
+// ─── Main component ────────────────────────────────────────────────────────
+
+const IncidentsInner: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const { clusters, loading: clustersLoading } = useCluster();
-  const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [incidents, setIncidents]     = useState<Incident[]>([]);
   const [correlations, setCorrelations] = useState<Correlation[]>([]);
-  const [patterns, setPatterns] = useState<Pattern[]>([]);
-  const [summary, setSummary] = useState<any>(null);
-  const [timeline, setTimeline] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [tabValue, setTabValue] = useState(0);
-  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [selectedCorrelation, setSelectedCorrelation] = useState<Correlation | null>(null);
-  const [openDialog, setOpenDialog] = useState(false);
+  const [patterns, setPatterns]       = useState<Pattern[]>([]);
+  const [summary, setSummary]         = useState<Summary | null>(null);
+  const [loading, setLoading]         = useState(true);
+  const [tab, setTab]                 = useState(0);
+  const [fixLoading, setFixLoading]   = useState<string | null>(null);
+  const [fixedIds, setFixedIds]       = useState<Set<string>>(new Set());
+  const [toast, setToast]             = useState<{ open: boolean; msg: string; sev: 'success' | 'error' | 'info' }>({ open: false, msg: '', sev: 'success' });
 
-  useEffect(() => {
-    fetchData();
-  }, [clusterParam]);
+  useEffect(() => { fetchAll(); }, [clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchData = async () => {
+  const fetchAll = async () => {
     setLoading(true);
     try {
-      await Promise.all([
-        fetchIncidents(),
-        fetchCorrelations(),
-        fetchPatterns(),
-        fetchSummary(),
-        fetchTimeline(),
+      const [incR, corR, patR, sumR] = await Promise.all([
+        fetch(`${API_BASE_URL}/v1/incidents/incidents${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/incidents/correlations${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/incidents/patterns${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/incidents/summary${clusterParam}`),
       ]);
+      if (incR.ok) setIncidents(await incR.json());
+      if (corR.ok) setCorrelations(await corR.json());
+      if (patR.ok) setPatterns(await patR.json());
+      if (sumR.ok) setSummary(await sumR.json());
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
+
+  // Fix an incident via the root-cause fix endpoint (enqueues agent command)
+  const handleFix = async (inc: Incident) => {
+    setFixLoading(inc.incident_id);
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/root-cause/fix`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resource_name: inc.pod_name,
+          namespace: inc.namespace,
+          issue_type: inc.type,
+          cpu_request: 0,
+          memory_request_mb: 0,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ open: true, msg: body?.detail ?? `Fix failed (HTTP ${res.status})`, sev: 'error' });
+        return;
+      }
+
+      const cmdId = body.command_id;
+      setToast({ open: true, msg: `⏳ Fix queued — waiting for agent…`, sev: 'info' });
+
+      const deadline = Date.now() + 90_000;
+      while (Date.now() < deadline) {
+        await new Promise(r => setTimeout(r, 2500));
+        const poll = await fetch(`${API_BASE_URL}/agents/commands/${cmdId}`).catch(() => null);
+        if (!poll) continue;
+        const status = await poll.json().catch(() => ({}));
+        if (status.status === 'done') {
+          setFixedIds(prev => new Set(prev).add(inc.incident_id));
+          setToast({ open: true, msg: `✅ Fixed: ${inc.type} on ${inc.pod_name} — patch applied to ${body.workload_kind}/${body.workload_name}`, sev: 'success' });
+          return;
+        }
+        if (status.status === 'failed') {
+          const err = status.result?.error ?? 'Command failed';
+          const k8s = err.match(/"message":"([^"]+)"/);
+          setToast({ open: true, msg: `❌ Fix failed: ${k8s ? k8s[1] : err.slice(0, 120)}`, sev: 'error' });
+          return;
+        }
+      }
+      setToast({ open: true, msg: `⏱ Timed out — check Command Center (cmd #${cmdId})`, sev: 'error' });
+    } catch (e: any) {
+      setToast({ open: true, msg: e?.message ?? 'Network error', sev: 'error' });
     } finally {
-      setLoading(false);
+      setFixLoading(null);
     }
   };
 
-  const fetchIncidents = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/incidents/incidents${clusterParam}`);
-    const data = await response.json();
-    setIncidents(data);
+  const visibleIncidents = incidents.filter(i => !fixedIds.has(i.incident_id));
+
+  if (loading) return (
+    <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <CircularProgress sx={{ color: '#f85149' }} />
+    </Box>
+  );
+
+  const typeChartData = Object.entries(summary?.by_type ?? {}).map(([name, value]) => ({ name: name.toUpperCase(), value }));
+  const sevChartData  = Object.entries(summary?.by_severity ?? {}).map(([name, value]) => ({ name: name.toUpperCase(), value, fill: SEV[name] ?? DK.muted }));
+
+  const tabSx = {
+    color: DK.muted, '&.Mui-selected': { color: DK.text },
+    textTransform: 'none', fontWeight: 600, fontSize: '0.85rem',
   };
-
-  const fetchCorrelations = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/incidents/correlations${clusterParam}`);
-    const data = await response.json();
-    setCorrelations(data);
-  };
-
-  const fetchPatterns = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/incidents/patterns${clusterParam}`);
-    const data = await response.json();
-    setPatterns(data);
-  };
-
-  const fetchSummary = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/incidents/summary${clusterParam}`);
-    const data = await response.json();
-    setSummary(data);
-  };
-
-  const fetchTimeline = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/incidents/timeline${clusterParam}`);
-    const data = await response.json();
-    setTimeline(data);
-  };
-
-  const getIncidentIcon = (type: string) => {
-    switch (type) {
-      case 'oomkill':
-        return <MemoryIcon color="error" />;
-      case 'restart':
-        return <RestartIcon color="warning" />;
-      case 'throttling':
-        return <ThrottlingIcon color="info" />;
-      case 'eviction':
-        return <EvictionIcon color="error" />;
-      default:
-        return <ErrorIcon />;
-    }
-  };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'critical':
-        return 'error';
-      case 'high':
-        return 'error';
-      case 'medium':
-        return 'warning';
-      case 'low':
-        return 'info';
-      default:
-        return 'default';
-    }
-  };
-
-  const incidentTypeData = summary ? Object.entries(summary.by_type || {}).map(([name, value]) => ({
-    name: name.toUpperCase(),
-    value: value as number,
-  })) : [];
-
-  const severityData = summary ? Object.entries(summary.by_severity || {}).map(([name, value]) => ({
-    name: name.toUpperCase(),
-    value: value as number,
-    color: name === 'critical' ? '#d32f2f' : name === 'high' ? '#f57c00' : name === 'medium' ? '#fbc02d' : '#4caf50',
-  })) : [];
-
-  if (clustersLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
-        <LinearProgress sx={{ width: '200px' }} />
-      </Box>
-    );
-  }
-
-  if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Incident and alert data is sourced from registered clusters. Connect a cluster via
-          the Cluster Onboarding page and incident correlations will appear here automatically.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
-  }
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          AI Incident Correlation
-        </Typography>
-        <IconButton onClick={fetchData} disabled={loading}>
-          <RefreshIcon />
-        </IconButton>
+    <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
+      {/* Header */}
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
+        <Box display="flex" alignItems="center" gap={1.5}>
+          <FlashOnIcon sx={{ color: '#f85149', fontSize: 28 }} />
+          <Typography sx={{ color: DK.text, fontSize: '1.5rem', fontWeight: 700 }}>
+            AI Incident Correlation
+          </Typography>
+          {summary && (
+            <Chip label={`${summary.total_incidents} incidents`} size="small"
+              sx={{ bgcolor: '#f8514922', color: '#f85149', border: '1px solid #f8514944', fontWeight: 600 }} />
+          )}
+        </Box>
+        <Tooltip title="Refresh">
+          <IconButton onClick={fetchAll} sx={{ color: DK.muted, '&:hover': { color: DK.text } }}>
+            <RefreshIcon />
+          </IconButton>
+        </Tooltip>
       </Box>
+      <Typography sx={{ color: DK.muted, fontSize: '0.85rem', mb: 3 }}>
+        Real-time incidents from OOM events, crash loops, evictions and throttling on live cluster
+      </Typography>
 
-      {/* Summary Cards */}
+      {/* KPI Row */}
       {summary && (
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Total Incidents
-                </Typography>
-                <Typography variant="h4">{summary.total_incidents}</Typography>
+        <Grid container spacing={2} mb={3}>
+          <Grid item xs={6} sm={3}>
+            <KpiCard label="Total Incidents" value={summary.total_incidents} accent="#f85149" />
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <KpiCard label="OOM Kills" value={summary.total_oomkills} accent="#f85149"
+              sub={`${summary.by_severity?.critical ?? 0} critical`} />
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <KpiCard label="Pod Restarts" value={summary.total_restarts} accent="#d29922" />
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <KpiCard label="Throttling Events" value={summary.total_throttling_events} accent="#3b82f6" />
+          </Grid>
+        </Grid>
+      )}
+
+      {/* Charts */}
+      {summary && (
+        <Grid container spacing={2} mb={2}>
+          <Grid item xs={12} md={5}>
+            <Card sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2 }}>
+              <CardContent sx={{ p: '16px !important' }}>
+                <Typography sx={{ color: DK.text, fontWeight: 600, mb: 1 }}>By Type</Typography>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie data={typeChartData} dataKey="value" nameKey="name" cx="50%" cy="50%"
+                      outerRadius={70} label={({ name, value }) => `${name}: ${value}`} labelLine={false}>
+                      {typeChartData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    </Pie>
+                    <RechartsTooltip contentStyle={{ background: DK.surface2, border: `1px solid ${DK.border}`, color: DK.text, fontSize: '0.78rem' }} />
+                    <Legend wrapperStyle={{ color: DK.muted, fontSize: '0.72rem' }} />
+                  </PieChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </Grid>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  OOMKills
-                </Typography>
-                <Typography variant="h4" color="error.main">
-                  {summary.total_oomkills}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Pod Restarts
-                </Typography>
-                <Typography variant="h4" color="warning.main">
-                  {summary.total_restarts}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Throttling Events
-                </Typography>
-                <Typography variant="h4" color="info.main">
-                  {summary.total_throttling_events}
-                </Typography>
+          <Grid item xs={12} md={7}>
+            <Card sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2 }}>
+              <CardContent sx={{ p: '16px !important' }}>
+                <Typography sx={{ color: DK.text, fontWeight: 600, mb: 1 }}>By Severity</Typography>
+                <ResponsiveContainer width="100%" height={200}>
+                  <BarChart data={sevChartData} barSize={32}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={DK.border} />
+                    <XAxis dataKey="name" tick={{ fill: DK.muted, fontSize: 11 }} axisLine={false} />
+                    <YAxis tick={{ fill: DK.muted, fontSize: 11 }} axisLine={false} />
+                    <RechartsTooltip contentStyle={{ background: DK.surface2, border: `1px solid ${DK.border}`, color: DK.text, fontSize: '0.78rem' }} />
+                    <Bar dataKey="value" radius={[4,4,0,0]}>
+                      {sevChartData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </CardContent>
             </Card>
           </Grid>
         </Grid>
       )}
 
-      {/* Charts */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Incidents by Type
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={incidentTypeData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={(entry) => `${entry.name}: ${entry.value}`}
-                  outerRadius={100}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {incidentTypeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={['#f44336', '#ff9800', '#2196f3', '#9c27b0'][index % 4]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Incidents by Severity
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={severityData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <RechartsTooltip />
-                <Bar dataKey="value" fill="#8884d8">
-                  {severityData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-      </Grid>
-
       {/* Tabs */}
-      <Paper sx={{ mb: 3 }}>
-        <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-          <Tab label="Recent Incidents" />
-          <Tab label="Correlations" />
-          <Tab label="Patterns" />
-          <Tab label="Timeline" />
-        </Tabs>
+      <Card sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2 }}>
+        <Box sx={{ borderBottom: `1px solid ${DK.border}` }}>
+          <Tabs value={tab} onChange={(_, v) => setTab(v)}
+            sx={{ '& .MuiTabs-indicator': { bgcolor: '#f85149' }, px: 1 }}>
+            <Tab label={`Incidents (${visibleIncidents.length})`} sx={tabSx} />
+            <Tab label={`Correlations (${correlations.length})`} sx={tabSx} />
+            <Tab label={`Patterns (${patterns.length})`} sx={tabSx} />
+            <Tab label="Timeline" sx={tabSx} />
+          </Tabs>
+        </Box>
 
-        {/* Tab 0: Recent Incidents */}
-        {tabValue === 0 && (
-          <Box sx={{ p: 2 }}>
-            <TableContainer>
-              <Table>
+        {/* Tab 0 — Incidents */}
+        {tab === 0 && (
+          <Box p={2}>
+            {fixedIds.size > 0 && (
+              <Box sx={{ bgcolor: '#3fb95011', border: '1px solid #3fb95033', borderRadius: 1.5, p: 1.5, mb: 2 }}>
+                <Typography sx={{ color: '#3fb950', fontSize: '0.82rem', fontWeight: 600 }}>
+                  ✅ {fixedIds.size} incident{fixedIds.size > 1 ? 's' : ''} fixed this session
+                </Typography>
+              </Box>
+            )}
+            <TableContainer sx={{ '&::-webkit-scrollbar': { height: 5 }, '&::-webkit-scrollbar-thumb': { bgcolor: DK.border, borderRadius: 3 } }}>
+              <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>Type</TableCell>
-                    <TableCell>Pod</TableCell>
-                    <TableCell>Namespace</TableCell>
-                    <TableCell>Cluster</TableCell>
-                    <TableCell>Severity</TableCell>
-                    <TableCell>Count</TableCell>
-                    <TableCell>Time</TableCell>
-                    <TableCell>Actions</TableCell>
+                    {['Type','Pod','Namespace','Cluster','Severity','Count','Time','Fix'].map(h => (
+                      <TableCell key={h} sx={{ bgcolor: DK.surface2, color: DK.muted, fontWeight: 700, fontSize: '0.72rem', borderBottom: `1px solid ${DK.border}`, whiteSpace: 'nowrap' }}>{h}</TableCell>
+                    ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {incidents.map((incident) => (
-                    <TableRow key={incident.incident_id}>
+                  {visibleIncidents.map(inc => (
+                    <TableRow key={inc.incident_id} hover sx={{ '&:hover': { bgcolor: DK.surface2 }, '& td': { borderBottom: `1px solid ${DK.border}22` } }}>
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                          {getIncidentIcon(incident.type)}
-                          <Typography variant="body2" sx={{ ml: 1 }}>
-                            {incident.type.toUpperCase()}
-                          </Typography>
+                        <Box display="flex" alignItems="center" gap={0.75}>
+                          <TypeIcon type={inc.type} />
+                          <Typography sx={{ color: TYPE_COLOR[inc.type] ?? DK.muted, fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase' }}>{inc.type}</Typography>
                         </Box>
                       </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" noWrap sx={{ maxWidth: 200 }}>
-                          {incident.pod_name}
-                        </Typography>
+                      <TableCell sx={{ color: DK.text, fontFamily: 'monospace', fontSize: '0.75rem', maxWidth: 200 }}>
+                        <Tooltip title={inc.pod_name}><span style={{ display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 180 }}>{inc.pod_name}</span></Tooltip>
                       </TableCell>
-                      <TableCell>{incident.namespace}</TableCell>
-                      <TableCell>{incident.cluster}</TableCell>
+                      <TableCell sx={{ color: DK.muted, fontSize: '0.75rem', fontFamily: 'monospace' }}>{inc.namespace}</TableCell>
+                      <TableCell sx={{ color: DK.muted, fontSize: '0.75rem' }}>{inc.cluster}</TableCell>
+                      <TableCell><SevChip value={inc.severity} /></TableCell>
                       <TableCell>
-                        <Chip
-                          label={incident.severity.toUpperCase()}
-                          color={getSeverityColor(incident.severity) as any}
-                          size="small"
-                        />
+                        <Chip label={inc.count} size="small"
+                          sx={{ bgcolor: `${SEV[inc.severity] ?? DK.muted}22`, color: SEV[inc.severity] ?? DK.muted, border: `1px solid ${SEV[inc.severity] ?? DK.muted}44`, fontWeight: 700, fontSize: '0.7rem' }} />
                       </TableCell>
+                      <TableCell sx={{ color: DK.muted, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{new Date(inc.timestamp).toLocaleString()}</TableCell>
                       <TableCell>
-                        <Chip label={incident.count} size="small" />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="caption">
-                          {new Date(incident.timestamp).toLocaleString()}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            setSelectedIncident(incident);
-                            const corr = correlations.find(c => c.incident_id === incident.incident_id);
-                            setSelectedCorrelation(corr || null);
-                            setOpenDialog(true);
-                          }}
-                        >
-                          View Details
+                        <Button size="small" variant="contained"
+                          disabled={fixLoading === inc.incident_id || inc.namespace === 'multiple'}
+                          onClick={() => handleFix(inc)}
+                          sx={{ bgcolor: '#238636', color: '#fff', fontSize: '0.7rem', px: 1, py: 0.3, textTransform: 'none', fontWeight: 600, minWidth: 48,
+                            '&:hover': { bgcolor: '#2ea043' }, '&.Mui-disabled': { bgcolor: '#21262d', color: DK.muted } }}>
+                          {fixLoading === inc.incident_id ? '…' : 'Fix'}
                         </Button>
                       </TableCell>
                     </TableRow>
                   ))}
+                  {visibleIncidents.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} align="center" sx={{ color: DK.muted, py: 5, borderBottom: 'none' }}>
+                        {incidents.length > 0 ? '✅ All incidents fixed this session!' : 'No incidents detected — cluster looks healthy'}
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
           </Box>
         )}
 
-        {/* Tab 1: Correlations */}
-        {tabValue === 1 && (
-          <Box sx={{ p: 2 }}>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              AI-powered correlation analysis showing root causes and recommendations
-            </Alert>
-            <List>
-              {correlations.map((correlation) => (
-                <Accordion key={correlation.incident_id}>
-                  <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <Box sx={{ flexGrow: 1 }}>
-                        <Typography variant="subtitle1">{correlation.pod_name}</Typography>
-                        <Typography variant="caption" color="textSecondary">
-                          {correlation.root_cause}
-                        </Typography>
-                      </Box>
-                      <Chip
-                        label={`${correlation.confidence}% confidence`}
-                        color={correlation.confidence > 90 ? 'success' : 'warning'}
-                        size="small"
-                        sx={{ mr: 2 }}
-                      />
-                      <Chip
-                        label={correlation.priority.toUpperCase()}
-                        color={correlation.priority === 'critical' ? 'error' : 'warning'}
-                        size="small"
-                      />
+        {/* Tab 1 — Correlations */}
+        {tab === 1 && (
+          <Box p={2}>
+            <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mb: 2 }}>
+              AI-powered correlation analysis — root causes ranked by confidence
+            </Typography>
+            {correlations.map((c, i) => (
+              <Accordion key={i} disableGutters
+                sx={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, mb: 1, borderRadius: '6px !important', '&:before': { display: 'none' }, '& .MuiAccordionSummary-root': { minHeight: 48 } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: DK.muted }} />}>
+                  <Box display="flex" alignItems="center" gap={1.5} width="100%">
+                    <TypeIcon type={c.incident_type} />
+                    <Box flexGrow={1}>
+                      <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.85rem', fontFamily: 'monospace' }}>{c.pod_name}</Typography>
+                      <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{c.root_cause}</Typography>
                     </Box>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Correlated Metrics
-                        </Typography>
-                        <Paper sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-                          <pre style={{ fontSize: '12px', margin: 0, overflow: 'auto' }}>
-                            {JSON.stringify(correlation.correlated_metrics, null, 2)}
-                          </pre>
-                        </Paper>
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="subtitle2" gutterBottom>
-                          Recommendation
-                        </Typography>
-                        <Alert severity="success" icon={<LightbulbIcon />}>
-                          {correlation.recommendation}
-                        </Alert>
-                        <Typography variant="caption" color="textSecondary" sx={{ mt: 1, display: 'block' }}>
-                          Estimated fix time: {correlation.estimated_fix_time}
-                        </Typography>
-                      </Grid>
+                    <Chip label={`${c.confidence}% conf.`} size="small"
+                      sx={{ bgcolor: c.confidence > 90 ? '#3fb95022' : '#d2992222', color: c.confidence > 90 ? '#3fb950' : '#d29922', border: `1px solid ${c.confidence > 90 ? '#3fb95044' : '#d2992244'}`, fontWeight: 700, fontSize: '0.68rem' }} />
+                    <SevChip value={c.priority} />
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails sx={{ bgcolor: DK.bg, borderTop: `1px solid ${DK.border}`, p: 2 }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <Typography sx={{ color: DK.muted, fontSize: '0.72rem', fontWeight: 700, mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Correlated Metrics</Typography>
+                      <Box sx={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 1.5, p: 1.5 }}>
+                        {Object.entries(c.correlated_metrics).map(([k, v]) => (
+                          <Box key={k} display="flex" justifyContent="space-between" mb={0.4}>
+                            <Typography sx={{ color: DK.muted, fontSize: '0.75rem' }}>{k}</Typography>
+                            <Typography sx={{ color: DK.text, fontSize: '0.75rem', fontWeight: 600, fontFamily: 'monospace' }}>{String(v)}</Typography>
+                          </Box>
+                        ))}
+                      </Box>
                     </Grid>
-                  </AccordionDetails>
-                </Accordion>
-              ))}
-            </List>
+                    <Grid item xs={12} md={6}>
+                      <Typography sx={{ color: DK.muted, fontSize: '0.72rem', fontWeight: 700, mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommendation</Typography>
+                      <Box sx={{ bgcolor: '#3fb95011', border: '1px solid #3fb95033', borderRadius: 1.5, p: 1.5 }}>
+                        <Typography sx={{ color: '#3fb950', fontSize: '0.82rem' }}>{c.recommendation}</Typography>
+                      </Box>
+                      <Typography sx={{ color: DK.muted, fontSize: '0.72rem', mt: 1 }}>
+                        Est. fix time: <strong style={{ color: DK.text }}>{c.estimated_fix_time}</strong>
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </AccordionDetails>
+              </Accordion>
+            ))}
+            {correlations.length === 0 && <Typography sx={{ color: DK.muted, py: 4, textAlign: 'center', fontSize: '0.85rem' }}>No correlation data</Typography>}
           </Box>
         )}
 
-        {/* Tab 2: Patterns */}
-        {tabValue === 2 && (
-          <Box sx={{ p: 2 }}>
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              Recurring incident patterns detected across your clusters
-            </Alert>
-            {patterns.map((pattern) => (
-              <Accordion key={pattern.pattern_id}>
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                    <Box sx={{ flexGrow: 1 }}>
-                      <Typography variant="subtitle1">{pattern.description}</Typography>
-                      <Typography variant="caption" color="textSecondary">
-                        {pattern.common_cause}
-                      </Typography>
+        {/* Tab 2 — Patterns */}
+        {tab === 2 && (
+          <Box p={2}>
+            <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mb: 2 }}>
+              Recurring incident patterns detected on live cluster
+            </Typography>
+            {patterns.map((p, i) => (
+              <Accordion key={i} disableGutters
+                sx={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, mb: 1, borderRadius: '6px !important', '&:before': { display: 'none' }, '& .MuiAccordionSummary-root': { minHeight: 48 } }}>
+                <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: DK.muted }} />}>
+                  <Box display="flex" alignItems="center" gap={1.5} width="100%">
+                    <PatternIcon sx={{ color: TYPE_COLOR[p.pattern_type] ?? DK.muted, fontSize: 18 }} />
+                    <Box flexGrow={1}>
+                      <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.85rem' }}>{p.description}</Typography>
+                      <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{p.common_cause}</Typography>
                     </Box>
-                    <Chip
-                      label={`${pattern.frequency} occurrences`}
-                      color="error"
-                      size="small"
-                    />
+                    <Chip label={`${p.frequency}×`} size="small"
+                      sx={{ bgcolor: '#f8514922', color: '#f85149', border: '1px solid #f8514944', fontWeight: 700, fontSize: '0.7rem' }} />
                   </Box>
                 </AccordionSummary>
-                <AccordionDetails>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Affected Pods
-                  </Typography>
-                  <Box sx={{ mb: 2 }}>
-                    {pattern.affected_pods.map((pod, idx) => (
-                      <Chip key={idx} label={pod} size="small" sx={{ mr: 1, mb: 1 }} />
+                <AccordionDetails sx={{ bgcolor: DK.bg, borderTop: `1px solid ${DK.border}`, p: 2 }}>
+                  <Typography sx={{ color: DK.muted, fontSize: '0.72rem', fontWeight: 700, mb: 0.75, textTransform: 'uppercase' }}>Affected Pods</Typography>
+                  <Box mb={1.5} display="flex" flexWrap="wrap" gap={0.75}>
+                    {p.affected_pods.map((pod, idx) => (
+                      <Chip key={idx} label={pod} size="small"
+                        sx={{ bgcolor: DK.surface2, color: DK.muted, border: `1px solid ${DK.border}`, fontSize: '0.7rem', fontFamily: 'monospace' }} />
                     ))}
                   </Box>
-                  <Typography variant="subtitle2" gutterBottom>
-                    Prevention Steps
-                  </Typography>
-                  <List dense>
-                    {pattern.prevention_steps.map((step, idx) => (
-                      <ListItem key={idx}>
-                        <ListItemIcon>
-                          <CheckCircleIcon color="success" fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText primary={step} />
-                      </ListItem>
+                  <Typography sx={{ color: DK.muted, fontSize: '0.72rem', fontWeight: 700, mb: 0.75, textTransform: 'uppercase' }}>Prevention Steps</Typography>
+                  <List disablePadding>
+                    {p.prevention_steps.map((step, idx) => (
+                      <React.Fragment key={idx}>
+                        <ListItem disablePadding sx={{ py: 0.5 }}>
+                          <Box display="flex" gap={1.5} alignItems="flex-start">
+                            <Chip label={`${idx + 1}`} size="small"
+                              sx={{ bgcolor: '#3b82f622', color: '#3b82f6', border: '1px solid #3b82f644', fontWeight: 700, fontSize: '0.65rem', minWidth: 24, height: 20 }} />
+                            <Typography sx={{ color: DK.muted, fontSize: '0.8rem' }}>{step}</Typography>
+                          </Box>
+                        </ListItem>
+                        {idx < p.prevention_steps.length - 1 && <Divider sx={{ borderColor: `${DK.border}55`, my: 0.25 }} />}
+                      </React.Fragment>
                     ))}
                   </List>
                 </AccordionDetails>
               </Accordion>
             ))}
+            {patterns.length === 0 && <Typography sx={{ color: DK.muted, py: 4, textAlign: 'center', fontSize: '0.85rem' }}>No recurring patterns detected</Typography>}
           </Box>
         )}
 
-        {/* Tab 3: Timeline */}
-        {tabValue === 3 && (
-          <Box sx={{ p: 2 }}>
-            <List>
-              {timeline.map((event, idx) => (
-                <React.Fragment key={idx}>
-                  <ListItem alignItems="flex-start">
-                    <ListItemIcon sx={{ mt: 1 }}>
-                      <Box
-                        sx={{
-                          width: 40,
-                          height: 40,
-                          borderRadius: '50%',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          bgcolor: getSeverityColor(event.severity) === 'error' ? 'error.light' :
-                                   getSeverityColor(event.severity) === 'warning' ? 'warning.light' :
-                                   getSeverityColor(event.severity) === 'info' ? 'info.light' : 'success.light',
-                        }}
-                      >
-                        {getIncidentIcon(event.incident_type)}
+        {/* Tab 3 — Timeline */}
+        {tab === 3 && (
+          <Box p={2}>
+            <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mb: 2 }}>
+              Chronological incident timeline — most recent first
+            </Typography>
+            <List disablePadding>
+              {[...incidents].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((inc, i, arr) => (
+                <React.Fragment key={inc.incident_id}>
+                  <ListItem disablePadding sx={{ py: 1.5, alignItems: 'flex-start' }}>
+                    <Box display="flex" gap={2} width="100%">
+                      {/* Timeline dot */}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pt: 0.5 }}>
+                        <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: `${SEV[inc.severity] ?? DK.muted}22`, border: `2px solid ${SEV[inc.severity] ?? DK.muted}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <TypeIcon type={inc.type} />
+                        </Box>
+                        {i < arr.length - 1 && <Box sx={{ width: 2, flexGrow: 1, bgcolor: DK.border, mt: 0.5 }} />}
                       </Box>
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Box>
-                          <Typography variant="subtitle2" component="span">
-                            {event.incident_type.toUpperCase()} - {event.pod_name}
-                          </Typography>
-                          <Chip
-                            label={event.severity.toUpperCase()}
-                            color={getSeverityColor(event.severity) as any}
-                            size="small"
-                            sx={{ ml: 1 }}
-                          />
+                      {/* Content */}
+                      <Box flexGrow={1} pb={i < arr.length - 1 ? 1 : 0}>
+                        <Box display="flex" alignItems="center" gap={1} mb={0.5}>
+                          <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.85rem', textTransform: 'uppercase' }}>{inc.type}</Typography>
+                          <Typography sx={{ color: DK.muted, fontFamily: 'monospace', fontSize: '0.78rem' }}>— {inc.pod_name}</Typography>
+                          <SevChip value={inc.severity} />
                         </Box>
-                      }
-                      secondary={
-                        <Box sx={{ mt: 1 }}>
-                          <Typography variant="caption" color="textSecondary" display="block">
-                            {event.namespace} • {new Date(event.timestamp).toLocaleString()}
-                          </Typography>
-                          <Typography variant="body2" sx={{ mt: 0.5 }}>
-                            {event.message}
-                          </Typography>
-                        </Box>
-                      }
-                    />
+                        <Typography sx={{ color: DK.muted, fontSize: '0.75rem', mb: 0.5 }}>
+                          {inc.namespace} · {new Date(inc.timestamp).toLocaleString()}
+                        </Typography>
+                        <Typography sx={{ color: DK.muted, fontSize: '0.78rem' }}>{inc.message}</Typography>
+                      </Box>
+                    </Box>
                   </ListItem>
-                  {idx < timeline.length - 1 && <Divider variant="inset" component="li" />}
                 </React.Fragment>
               ))}
+              {incidents.length === 0 && <Typography sx={{ color: DK.muted, py: 4, textAlign: 'center', fontSize: '0.85rem' }}>No incidents in timeline</Typography>}
             </List>
           </Box>
         )}
-      </Paper>
+      </Card>
 
-      {/* Incident Details Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
-        <DialogTitle>
-          Incident Details
-          {selectedIncident && (
-            <Chip
-              label={selectedIncident.severity.toUpperCase()}
-              color={getSeverityColor(selectedIncident.severity) as any}
-              size="small"
-              sx={{ ml: 2 }}
-            />
-          )}
-        </DialogTitle>
-        <DialogContent>
-          {selectedIncident && (
-            <Box>
-              <Grid container spacing={2} sx={{ mb: 2 }}>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="textSecondary">Pod</Typography>
-                  <Typography variant="body2">{selectedIncident.pod_name}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="textSecondary">Namespace</Typography>
-                  <Typography variant="body2">{selectedIncident.namespace}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="textSecondary">Cluster</Typography>
-                  <Typography variant="body2">{selectedIncident.cluster}</Typography>
-                </Grid>
-                <Grid item xs={6}>
-                  <Typography variant="caption" color="textSecondary">Occurrences</Typography>
-                  <Typography variant="body2">{selectedIncident.count}</Typography>
-                </Grid>
-              </Grid>
-
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {selectedIncident.message}
-              </Alert>
-
-              {selectedCorrelation && (
-                <Box>
-                  <Typography variant="h6" gutterBottom>
-                    AI Correlation Analysis
-                  </Typography>
-                  <Paper sx={{ p: 2, mb: 2, bgcolor: 'success.light' }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Root Cause ({selectedCorrelation.confidence}% confidence)
-                    </Typography>
-                    <Typography variant="body2">{selectedCorrelation.root_cause}</Typography>
-                  </Paper>
-
-                  <Alert severity="success" icon={<LightbulbIcon />} sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2">Recommendation</Typography>
-                    <Typography variant="body2">{selectedCorrelation.recommendation}</Typography>
-                    <Typography variant="caption" display="block" sx={{ mt: 1 }}>
-                      Estimated fix time: {selectedCorrelation.estimated_fix_time}
-                    </Typography>
-                  </Alert>
-
-                  <Typography variant="subtitle2" gutterBottom>
-                    Correlated Metrics
-                  </Typography>
-                  <Paper sx={{ p: 2, bgcolor: '#f5f5f5' }}>
-                    <pre style={{ fontSize: '12px', margin: 0, overflow: 'auto' }}>
-                      {JSON.stringify(selectedCorrelation.correlated_metrics, null, 2)}
-                    </pre>
-                  </Paper>
-                </Box>
-              )}
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Close</Button>
-          <Button variant="contained" color="primary">
-            Apply Fix
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {loading && <LinearProgress />}
+      {/* Toast */}
+      <Snackbar open={toast.open}
+        autoHideDuration={toast.sev === 'success' ? 8000 : toast.sev === 'info' ? 60000 : 6000}
+        onClose={() => setToast(t => ({ ...t, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <Alert severity={toast.sev === 'info' ? 'info' : toast.sev}
+          onClose={() => setToast(t => ({ ...t, open: false }))}
+          sx={{ bgcolor: toast.sev === 'success' ? '#238636' : toast.sev === 'info' ? '#1f3a5f' : '#b62324', color: '#fff', '& .MuiAlert-icon': { color: '#fff' }, maxWidth: 480 }}>
+          {toast.msg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
 
-export default Incidents;
+const Incidents: React.FC = () => (
+  <ClusterGuard><IncidentsInner /></ClusterGuard>
+);
 
-// Made with Bob
+export default Incidents;
