@@ -80,26 +80,31 @@ const Dashboard: React.FC = () => {
   });
 
   useEffect(() => {
-    // Only compute once clusters have loaded to avoid a zero-count first render
-    if (clustersLoading) return;
     fetchDashboardData();
     fetchSimulationMetrics();
 
     // Poll simulation metrics every 5 seconds for real-time updates
     const interval = setInterval(fetchSimulationMetrics, 5000);
     return () => clearInterval(interval);
-    // clusters ensures re-compute when cluster list loads or changes
     // clusterParam ensures re-fetch when user switches cluster or deletes one
-  }, [filters, clusterParam, clusters, clustersLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters, clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchDashboardData = () => {
+  const fetchDashboardData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const visibleClusters = clusters.filter((cluster) =>
-        activeClusterName === 'All Clusters' ? true : cluster.name === activeClusterName || cluster.id === activeClusterName
-      );
+      // Fetch cluster list directly from the agent receiver endpoint — this
+      // endpoint has no org-scoping gate and always returns registered clusters.
+      const listRes = await fetch(`${API_BASE_URL}/agents/clusters`);
+      if (!listRes.ok) throw new Error(`Failed to fetch clusters: HTTP ${listRes.status}`);
+      const listData = await listRes.json();
+      const allClusters: { cluster_name: string }[] = listData.clusters ?? [];
+
+      // If a specific cluster is selected, filter down to it
+      const targetClusters = activeClusterName === 'All Clusters'
+        ? allClusters
+        : allClusters.filter(c => c.cluster_name === activeClusterName);
 
       let totalNodes = 0;
       let totalPods = 0;
@@ -107,17 +112,50 @@ const Dashboard: React.FC = () => {
       let totalHealthScore = 0;
       let monthlyCost = 0;
       let potentialSavings = 0;
+      let clustersWithMetrics = 0;
 
-      for (const cluster of visibleClusters) {
-        totalNodes += cluster.nodes ?? 0;
-        totalPods += cluster.pods ?? 0;
-        totalNamespaces += cluster.namespaces ?? 0;
-        totalHealthScore += cluster.health_score ?? 0;
-        monthlyCost += cluster.monthly_cost ?? 0;
-        potentialSavings += cluster.potential_savings ?? 0;
+      // Cost constants — matches backend _calculate_costs()
+      const CPU_COST_PER_CORE_HOUR = 0.04;
+      const MEMORY_COST_PER_GB_HOUR = 0.005;
+      const HOURS_PER_MONTH = 730;
+
+      for (const cluster of targetClusters) {
+        const mRes = await fetch(`${API_BASE_URL}/agents/clusters/${encodeURIComponent(cluster.cluster_name)}/metrics`);
+        if (!mRes.ok) continue;
+        const m = await mRes.json();
+
+        const nodesData = m.nodes ?? {};
+        const podsData = m.pods ?? {};
+        const namespacesData = m.namespaces ?? {};
+        const resourcesData = m.resources ?? {};
+
+        const nodeItems: unknown[] = nodesData.items ?? [];
+        totalNodes += nodesData.count ?? nodeItems.length;
+        totalPods += podsData.total ?? 0;
+        totalNamespaces += namespacesData.count ?? 0;
+
+        const cpuCap: number = nodesData.cpu_capacity_cores ?? resourcesData.cpu_capacity_cores ?? 0;
+        const memCap: number = nodesData.memory_capacity_gb ?? resourcesData.memory_capacity_gb ?? 0;
+        const cpuReq: number = resourcesData.cpu_requested_cores ?? 0;
+        const memReq: number = resourcesData.memory_requested_gb ?? 0;
+
+        // Health score — same band logic as backend _calculate_health_score()
+        const cpuPct = cpuCap > 0 ? (cpuReq / cpuCap) * 100 : 0;
+        const memPct = memCap > 0 ? (memReq / memCap) * 100 : 0;
+        const avgPct = (cpuPct + memPct) / 2;
+        let score = 65;
+        if (avgPct >= 60 && avgPct <= 80) score = 95;
+        else if ((avgPct >= 50 && avgPct < 60) || (avgPct > 80 && avgPct <= 85)) score = 85;
+        else if ((avgPct >= 40 && avgPct < 50) || (avgPct > 85 && avgPct <= 90)) score = 75;
+        totalHealthScore += score;
+        clustersWithMetrics++;
+
+        const clusterCost = (cpuReq * CPU_COST_PER_CORE_HOUR + memReq * MEMORY_COST_PER_GB_HOUR) * HOURS_PER_MONTH;
+        monthlyCost += clusterCost;
+        potentialSavings += clusterCost * 0.30;
       }
 
-      const totalClusters = visibleClusters.length;
+      const totalClusters = targetClusters.length;
 
       setSummary({
         total_clusters: totalClusters,
@@ -129,7 +167,7 @@ const Dashboard: React.FC = () => {
         resources_optimized: 0,
         resources_pending: totalPods,
         unused_resources: 0,
-        cluster_health_score: totalClusters > 0 ? Math.round(totalHealthScore / totalClusters) : 0,
+        cluster_health_score: clustersWithMetrics > 0 ? Math.round(totalHealthScore / clustersWithMetrics) : 0,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
