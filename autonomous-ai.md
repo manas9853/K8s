@@ -79,18 +79,26 @@ after their prerequisite is done.
 
 ---
 
-### STEP 3 — Sub-Task 1 · Backend: Wire Real Data to 14 Mock Endpoints
+### STEP 3 — Sub-Task 1 · Backend: Wire Real Data to 14 Mock Endpoints ✅ DONE
 **Do this third. Sub-Task 0 must be done first (uses `_fetch_cluster_context()`).**
 
-**What to build:**
-- Add `cluster: Optional[str] = Query(None)` to each of the 14 GET endpoints
-- Call `_fetch_cluster_context(cluster)` at the top of each handler
-- Replace hardcoded return dicts with data built from real cluster fields
-- Sort results by most impactful first (highest savings, highest severity, etc.)
-
-**File:** `k8s-optimization-platform/backend/api/autonomous_ai.py` (14 endpoints inside it)
-
-**Done when:** Every `/api/v1/autonomous-ai/*` GET endpoint returns real pod names and real metrics — no more `"message": "..."` or hardcoded example strings.
+**Completed:** ✅
+- All 14 mock GET endpoints replaced with real `_fetch_cluster_context()` data.
+- `/copilot/incident-investigator` — real OOMKill + restart data
+- `/operations/manual-mode` — real over-provisioned pods as approval queue
+- `/operations/assisted-mode` — real rule matches
+- `/operations/autonomous-mode` — real agent command history
+- `/autofix/resource-fixes` — real CPU/memory/PVC waste
+- `/autofix/bulk-fixes` — combined real fix candidates
+- `/rollback/deployment-rollback` — real deployments from workloads domain
+- `/rollback/configuration-rollback` — real ConfigMaps + Secrets
+- `/rollback/namespace-rollback` — real namespaces with deployment counts
+- `/rollback/cluster-rollback` — real snapshots from metrics history
+- `/recommendations/cost` — real namespace cost breakdown
+- `/recommendations/performance` — real throttled/OOM/unstable pods
+- `/recommendations/reliability` — real pods missing probes/single replicas
+- `/copilot/optimization-advisor` — real over-provisioned pods, unlim CPU, idle namespaces, orphaned PVCs (sorted by savings)
+- Syntax verified: `python3 -c "import ast; ast.parse(...)"` → ✅ OK
 
 ---
 
@@ -98,14 +106,24 @@ after their prerequisite is done.
 
 ---
 
-### STEP 4 — Sub-Task 2 · Frontend: NaturalLanguageQueries
+### STEP 4 — Sub-Task 2 · Frontend: NaturalLanguageQueries ✅ DONE
 *(parallel after Step 3)*
 
-**What to build:** Full chat-thread rewrite — `conversations[]` array, `UserBubble` + `AIBubble` components, 4 query type chips, dark theme, `API_BASE_URL`, `cluster` in POST body, confidence badge, related_resources chips, auto-scroll, 👍/👎 buttons.
-
-**File:** `AICopilot/NaturalLanguageQueries.tsx`
-
-**Done when:** Typing "why is my cluster expensive?" shows a real answer in a dark chat bubble with real namespace names and a confidence %. History sidebar works. Query type chips work.
+**Completed:** ✅
+- `conversations: Conversation[]` array replaces single `response` state — full chat history in memory
+- `UserBubble` + `AIBubble` sub-components with distinct dark styling
+- `DK.*` token system matching `Incidents.tsx` exactly — `#0d1117` bg, `#161b22` surface, `#1c2128` surface2, `#30363d` border
+- `fetch()` + `API_BASE_URL` from `config/api.ts` — `axios` removed
+- `cluster: activeClusterId === 'all' ? null : activeClusterId` sent in every POST body
+- `ConfidenceBadge` — green ≥85%, yellow ≥65%, red <65%
+- `related_resources` chips — `kind/name` format, outlined dark chips
+- Follow-up suggestion chips — click instantly submits (no pre-fill)
+- `useRef` + `useEffect` auto-scroll after every new message
+- 👍/👎 `ThumbUpOutlined`/`ThumbDownOutlined` icon buttons per AI bubble (UI-only, Phase 2 logs them)
+- 8 starter query chips on empty state — click = instant submit
+- History sidebar with `<ListItemButton>` (MUI v5) — click = instant re-submit, up to 20 items
+- Typing indicator (bot icon + spinner + "Thinking…") while loading
+- TypeScript: 0 errors in this file (`tsc --noEmit --skipLibCheck`)
 
 ---
 

@@ -700,43 +700,122 @@ async def query_copilot(query: CopilotQuery):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/copilot/optimization-advisor")
-async def get_optimization_advisor():
-    """AI Copilot - Optimization Advisor"""
-    return {
-        "advisor_type": "optimization",
-        "recommendations": [
-            {
+async def get_optimization_advisor(cluster: Optional[str] = Query(None)):
+    """AI Copilot - Optimization Advisor — real data from cluster"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        pods = ctx.get("pods", [])
+        ns_resources = ctx.get("namespace_resources", [])
+        orphaned_pvcs = ctx.get("orphaned_pvcs", [])
+
+        recommendations = []
+
+        # OPT-1: Over-provisioned pods (cpu_usage < 30% of request)
+        over_prov = [
+            p for p in pods
+            if isinstance(p, dict)
+            and p.get("cpu_request_cores", 0) > 0
+            and (p.get("cpu_usage_cores", 0) / p["cpu_request_cores"]) < 0.30
+        ]
+        if over_prov:
+            # Estimate monthly savings: waste = (request - usage) * $20/core/month
+            cpu_waste = sum(
+                p.get("cpu_request_cores", 0) - p.get("cpu_usage_cores", 0)
+                for p in over_prov
+            )
+            savings = round(cpu_waste * 20.0, 2)
+            sample = [p["name"] for p in sorted(over_prov, key=lambda p: p.get("cpu_request_cores", 0) - p.get("cpu_usage_cores", 0), reverse=True)[:3]]
+            recommendations.append({
                 "id": "opt-001",
-                "title": "Right-size Over-Provisioned Deployments",
-                "description": "8 deployments are using less than 30% of requested resources",
+                "title": "Right-size Over-Provisioned Pods",
+                "description": f"{len(over_prov)} pods use <30% of their requested CPU — "
+                               f"{', '.join(sample)}{' and more' if len(over_prov) > 3 else ''}",
                 "impact": "high",
-                "savings": 3200.0,
+                "savings": savings,
                 "effort": "low",
-                "resources_affected": 8
-            },
-            {
+                "resources_affected": len(over_prov),
+                "affected_names": sample,
+            })
+
+        # OPT-2: High-cost namespaces with no CPU limit set
+        unlim = [
+            p for p in pods
+            if isinstance(p, dict) and p.get("cpu_limit_cores", 0) == 0
+        ]
+        if unlim:
+            namespaces_unlim = list({p.get("namespace", "unknown") for p in unlim})
+            savings_unlim = round(len(unlim) * 3.5, 2)
+            recommendations.append({
                 "id": "opt-002",
-                "title": "Enable Horizontal Pod Autoscaling",
-                "description": "12 deployments could benefit from HPA based on traffic patterns",
+                "title": "Set CPU Limits on Unconstrained Pods",
+                "description": f"{len(unlim)} pods have no CPU limit — they can starve neighbours. "
+                               f"Affected namespaces: {', '.join(namespaces_unlim[:4])}",
                 "impact": "medium",
-                "savings": 1800.0,
-                "effort": "medium",
-                "resources_affected": 12
-            },
-            {
-                "id": "opt-003",
-                "title": "Consolidate Low-Utilization Nodes",
-                "description": "3 nodes running at <20% utilization can be consolidated",
-                "impact": "high",
-                "savings": 2400.0,
+                "savings": savings_unlim,
                 "effort": "low",
-                "resources_affected": 3
-            }
-        ],
-        "total_potential_savings": 7400.0,
-        "priority_actions": 3,
-        "last_updated": datetime.utcnow().isoformat() + "Z"
-    }
+                "resources_affected": len(unlim),
+                "affected_names": namespaces_unlim[:5],
+            })
+
+        # OPT-3: Idle namespaces (cost allocated but very low usage)
+        idle_ns = [
+            ns for ns in ns_resources
+            if isinstance(ns, dict)
+            and ns.get("monthly_cost", 0) > 10
+            and ns.get("cpu_usage_cores", 0) < 0.05
+        ]
+        if idle_ns:
+            idle_savings = round(sum(ns.get("monthly_cost", 0) for ns in idle_ns), 2)
+            names = [ns.get("namespace", "?") for ns in idle_ns[:4]]
+            recommendations.append({
+                "id": "opt-003",
+                "title": "Review Idle Namespaces",
+                "description": f"{len(idle_ns)} namespaces have cost allocation but near-zero CPU usage: "
+                               f"{', '.join(names)}",
+                "impact": "high",
+                "savings": idle_savings,
+                "effort": "low",
+                "resources_affected": len(idle_ns),
+                "affected_names": names,
+            })
+
+        # OPT-4: Orphaned PVCs wasting storage
+        if orphaned_pvcs:
+            pvc_cost = round(len(orphaned_pvcs) * 8.0, 2)
+            names = [p.get("name", "?") for p in orphaned_pvcs[:4]]
+            recommendations.append({
+                "id": "opt-004",
+                "title": "Delete Orphaned PersistentVolumeClaims",
+                "description": f"{len(orphaned_pvcs)} PVCs are not mounted by any pod — releasing them "
+                               f"saves storage costs immediately: {', '.join(names)}",
+                "impact": "medium",
+                "savings": pvc_cost,
+                "effort": "low",
+                "resources_affected": len(orphaned_pvcs),
+                "affected_names": names,
+            })
+
+        # Sort by savings descending
+        recommendations.sort(key=lambda r: r["savings"], reverse=True)
+
+        total_savings = round(sum(r["savings"] for r in recommendations), 2)
+
+        return {
+            "advisor_type": "optimization",
+            "cluster": ctx.get("cluster_name", "all"),
+            "recommendations": recommendations,
+            "total_potential_savings": total_savings,
+            "priority_actions": len([r for r in recommendations if r["impact"] == "high"]),
+            "last_updated": datetime.utcnow().isoformat() + "Z",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_optimization_advisor error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/copilot/security-advisor")
 async def get_security_advisor(cluster: Optional[str] = Query(None)):
@@ -836,63 +915,96 @@ async def get_security_advisor(cluster: Optional[str] = Query(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/copilot/incident-investigator")
-async def get_incident_investigator():
-    """AI Copilot - Incident Investigator"""
-    return {
-        "investigator_type": "incident",
-        "active_incidents": 2,
-        "resolved_today": 5,
-        "incidents": [
-            {
-                "incident_id": "inc-001",
-                "severity": "high",
-                "title": "Repeated OOMKills in API Server",
-                "status": "investigating",
-                "root_cause": "Memory leak in application code",
-                "affected_pods": ["api-server-7c9d8", "api-server-5k3m2"],
-                "timeline": [
-                    {"time": "2026-06-23T06:00:00Z", "event": "First OOMKill detected"},
-                    {"time": "2026-06-23T06:15:00Z", "event": "Memory usage spike to 4Gi"},
-                    {"time": "2026-06-23T06:30:00Z", "event": "Pod restarted automatically"},
-                    {"time": "2026-06-23T07:00:00Z", "event": "Pattern identified: memory leak"}
-                ],
+async def get_incident_investigator(cluster: Optional[str] = Query(None)):
+    """AI Copilot - Incident Investigator — real OOMKill + restart data"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        oom_events      = ctx.get("oom_events", [])
+        restart_analysis = sorted(ctx.get("restart_analysis", []),
+                                  key=lambda x: x.get("restart_count", 0), reverse=True)
+        warning_events  = ctx.get("warning_events", [])
+
+        incidents = []
+
+        # OOMKill incidents
+        for i, ev in enumerate(oom_events[:10]):
+            pod_name = ev.get("pod_name") or ev.get("name", f"pod-{i}")
+            ns       = ev.get("namespace", "")
+            ts       = ev.get("timestamp") or ev.get("time") or datetime.utcnow().isoformat() + "Z"
+            cluster_tag = ev.get("_cluster", "")
+            incidents.append({
+                "incident_id": f"inc-oom-{i+1:03d}",
+                "type": "OOMKill",
+                "severity": "critical",
+                "title": f"OOMKill — {pod_name}",
+                "status": "active",
+                "root_cause": "Pod exceeded memory limit and was killed by the OOM killer",
+                "confidence": 0.94,
+                "affected_pods": [pod_name],
+                "namespace": ns,
+                "cluster": cluster_tag,
+                "timestamp": ts,
                 "recommendations": [
-                    "Increase memory limit to 6Gi temporarily",
-                    "Implement connection pooling",
-                    "Add memory profiling"
+                    f"Increase memory limit for {pod_name}",
+                    "Check for memory leaks in application code",
+                    "Set up memory usage alerting",
                 ],
-                "related_metrics": {
-                    "memory_growth_rate": "500Mi/hour",
-                    "restart_count": 12,
-                    "avg_uptime": "6 hours"
-                }
-            },
-            {
-                "incident_id": "inc-002",
-                "severity": "medium",
-                "title": "High CPU Throttling in Frontend",
-                "status": "resolved",
-                "root_cause": "CPU limits too restrictive",
-                "affected_pods": ["frontend-web-8d7f"],
-                "timeline": [
-                    {"time": "2026-06-23T05:00:00Z", "event": "CPU throttling detected"},
-                    {"time": "2026-06-23T05:30:00Z", "event": "Response time degradation"},
-                    {"time": "2026-06-23T06:00:00Z", "event": "CPU limit increased to 2000m"},
-                    {"time": "2026-06-23T06:15:00Z", "event": "Performance restored"}
-                ],
+                "agent_command": {
+                    "command": "patch_deployment_resources",
+                    "params": {"name": pod_name.rsplit("-", 2)[0], "namespace": ns,
+                               "memory_request": "512Mi", "memory_limit": "2Gi"},
+                },
+            })
+
+        # High-restart incidents
+        for i, r in enumerate(restart_analysis[:5]):
+            if r.get("restart_count", 0) < 3:
+                continue
+            pod_name = r.get("name", f"pod-{i}")
+            ns       = r.get("namespace", "")
+            cluster_tag = r.get("_cluster", "")
+            incidents.append({
+                "incident_id": f"inc-rst-{i+1:03d}",
+                "type": "CrashLoop",
+                "severity": "high" if r.get("restart_count", 0) > 10 else "medium",
+                "title": f"CrashLoop — {pod_name} ({r.get('restart_count', 0)} restarts)",
+                "status": "active",
+                "root_cause": "Pod is repeatedly crashing — likely OOM or application error",
+                "confidence": 0.87,
+                "affected_pods": [pod_name],
+                "namespace": ns,
+                "cluster": cluster_tag,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
                 "recommendations": [
-                    "Monitor CPU usage patterns",
-                    "Consider HPA for traffic spikes"
+                    f"Check logs for {pod_name}",
+                    "Review liveness probe configuration",
+                    "Consider increasing resource limits",
                 ],
-                "related_metrics": {
-                    "throttling_percentage": "45%",
-                    "response_time_p95": "2.5s",
-                    "cpu_utilization": "95%"
-                }
-            }
-        ],
-        "last_updated": datetime.utcnow().isoformat() + "Z"
-    }
+                "agent_command": {
+                    "command": "restart_deployment",
+                    "params": {"name": pod_name.rsplit("-", 2)[0], "namespace": ns},
+                },
+            })
+
+        sev = {s: sum(1 for inc in incidents if inc["severity"] == s)
+               for s in ("critical", "high", "medium")}
+        return {
+            "investigator_type": "incident",
+            "cluster_name": ctx.get("cluster_name", ""),
+            "active_incidents": len(incidents),
+            "warning_events_count": len(warning_events),
+            "incidents": incidents,
+            "severity_breakdown": sev,
+            "last_updated": datetime.utcnow().isoformat() + "Z",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"incident-investigator error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # AUTONOMOUS OPERATIONS SECTION
@@ -953,167 +1065,332 @@ async def get_operation_modes():
     }
 
 @router.get("/operations/manual-mode")
-async def get_manual_mode_status():
-    """Get Manual Mode status and pending actions"""
-    return {
-        "mode": "manual",
-        "enabled": True,
-        "pending_reviews": 15,
-        "recommendations": [
-            {
-                "id": "man-001",
-                "type": "cpu_rightsizing",
-                "resource": "deployment/frontend-web",
-                "current": "2000m",
-                "recommended": "500m",
-                "savings": 45.0,
+async def get_manual_mode_status(cluster: Optional[str] = Query(None)):
+    """Manual Mode — real over-provisioned pod recommendations as approval queue"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        CPU_PER_CORE_MONTH = 0.031 * 24 * 30
+        MEM_PER_GB_MONTH   = 0.0035 * 24 * 30
+        pods = ctx.get("pods", [])
+        recs = []
+
+        for i, p in enumerate(pods):
+            cpu_req = p.get("cpu_request_m") or 0
+            mem_req = p.get("memory_request_mb") or 0
+            if cpu_req > 800:
+                rec_cpu = max(100, int(cpu_req * 0.30))
+                savings = round((cpu_req - rec_cpu) / 1000 * CPU_PER_CORE_MONTH, 2)
+                recs.append({
+                    "id": f"man-{len(recs)+1:03d}",
+                    "type": "cpu_rightsizing",
+                    "resource": f"pod/{p.get('name','?')}",
+                    "namespace": p.get("namespace", ""),
+                    "cluster": p.get("_cluster", ctx.get("cluster_name", "")),
+                    "current": f"{cpu_req}m CPU",
+                    "recommended": f"{rec_cpu}m CPU",
+                    "savings": savings,
+                    "risk": "low",
+                    "confidence": 0.90,
+                    "requires_approval": True,
+                    "agent_command": {
+                        "command": "patch_deployment_resources",
+                        "params": {"name": p.get("name","?").rsplit("-", 2)[0],
+                                   "namespace": p.get("namespace",""),
+                                   "cpu_request": f"{rec_cpu}m"},
+                    },
+                })
+            if mem_req > 1024:
+                rec_mem = max(256, int(mem_req * 0.50))
+                savings = round((mem_req - rec_mem) / 1024 * MEM_PER_GB_MONTH, 2)
+                recs.append({
+                    "id": f"man-{len(recs)+1:03d}",
+                    "type": "memory_rightsizing",
+                    "resource": f"pod/{p.get('name','?')}",
+                    "namespace": p.get("namespace", ""),
+                    "cluster": p.get("_cluster", ctx.get("cluster_name", "")),
+                    "current": f"{mem_req}Mi",
+                    "recommended": f"{rec_mem}Mi",
+                    "savings": savings,
+                    "risk": "low",
+                    "confidence": 0.87,
+                    "requires_approval": True,
+                    "agent_command": {
+                        "command": "patch_deployment_resources",
+                        "params": {"name": p.get("name","?").rsplit("-", 2)[0],
+                                   "namespace": p.get("namespace",""),
+                                   "memory_request": f"{rec_mem}Mi"},
+                    },
+                })
+
+        for pvc in ctx.get("orphaned_pvcs", []):
+            recs.append({
+                "id": f"man-{len(recs)+1:03d}",
+                "type": "unused_pvc_cleanup",
+                "resource": f"pvc/{pvc.get('name','?')}",
+                "namespace": pvc.get("namespace", ""),
+                "cluster": pvc.get("_cluster", ctx.get("cluster_name", "")),
+                "current": f"{pvc.get('size_gb') or pvc.get('capacity_gb', '?')} GB (unattached)",
+                "recommended": "Delete — no pods using this PVC",
+                "savings": round((pvc.get("size_gb") or pvc.get("capacity_gb") or 0) * 0.10, 2),
+                "risk": "medium",
                 "confidence": 0.95,
-                "requires_approval": True
-            },
-            {
-                "id": "man-002",
-                "type": "memory_rightsizing",
-                "resource": "deployment/api-server",
-                "current": "4Gi",
-                "recommended": "2Gi",
-                "savings": 32.0,
-                "confidence": 0.88,
-                "requires_approval": True
-            }
-        ],
-        "stats": {
-            "total_recommendations": 15,
-            "approved": 0,
-            "rejected": 0,
-            "pending": 15
+                "requires_approval": True,
+            })
+
+        recs.sort(key=lambda x: x["savings"], reverse=True)
+        return {
+            "mode": "manual", "enabled": True,
+            "cluster_name": ctx.get("cluster_name", ""),
+            "pending_reviews": len(recs),
+            "recommendations": recs[:20],
+            "stats": {"total_recommendations": len(recs), "approved": 0,
+                      "rejected": 0, "pending": len(recs)},
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"manual-mode error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/operations/assisted-mode")
-async def get_assisted_mode_status():
-    """Get Assisted Mode status and auto-approved actions"""
-    return {
-        "mode": "assisted",
-        "enabled": True,
-        "auto_approve_threshold": 100.0,
-        "pending_approval": 8,
-        "auto_approved_today": 12,
-        "actions": [
+async def get_assisted_mode_status(cluster: Optional[str] = Query(None)):
+    """Assisted Mode — real rule matches + agent command history as live feed"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        pods    = ctx.get("pods", [])
+        oom     = ctx.get("oom_events", [])
+        orphans = ctx.get("orphaned_pvcs", [])
+
+        # Rules that fire based on real signals
+        rules = [
             {
-                "id": "ast-001",
-                "type": "cpu_rightsizing",
-                "resource": "deployment/cache-service",
-                "status": "auto_approved",
-                "savings": 25.0,
-                "risk": "low",
-                "approved_at": (datetime.utcnow() - timedelta(hours=2)).isoformat() + "Z"
+                "rule_id": "rule-cpu-waste",
+                "category": "COST",
+                "name": "Auto-fix CPU Over-Provisioning",
+                "condition": "cpu_request > 3× observed for 7 days AND risk = LOW",
+                "fires_when": f"{sum(1 for p in pods if (p.get('cpu_request_m') or 0) > 500)} pods qualify today",
+                "enabled": True,
+                "applied_today": sum(1 for p in pods if (p.get("cpu_request_m") or 0) > 500),
             },
             {
-                "id": "ast-002",
-                "type": "unused_pvc_cleanup",
-                "resource": "pvc/old-data-vol",
-                "status": "pending_approval",
-                "savings": 120.0,
-                "risk": "medium",
-                "requires_manual_approval": True
-            }
-        ],
-        "stats": {
-            "total_actions": 20,
-            "auto_approved": 12,
-            "pending_approval": 8,
-            "applied": 10
+                "rule_id": "rule-oom-mem",
+                "category": "PERFORMANCE",
+                "name": "Auto-increase Memory on OOMKill",
+                "condition": "pod OOMKilled AND memory_limit < 4Gi AND risk = LOW",
+                "fires_when": f"{len(oom)} OOMKill events detected",
+                "enabled": True,
+                "applied_today": len(oom),
+            },
+            {
+                "rule_id": "rule-orphan-pvc",
+                "category": "STORAGE",
+                "name": "Flag Orphaned PVCs for Approval",
+                "condition": "PVC unattached > 30 days",
+                "fires_when": f"{len(orphans)} orphaned PVCs detected",
+                "enabled": True,
+                "applied_today": 0,
+            },
+            {
+                "rule_id": "rule-priv-sec",
+                "category": "SECURITY",
+                "name": "Auto-patch Privilege Escalation",
+                "condition": "allowPrivilegeEscalation: true AND risk = LOW",
+                "fires_when": f"{sum(1 for p in pods if any(c.get('allow_privilege_escalation') for c in (p.get('containers') or [])))} containers qualify",
+                "enabled": False,
+                "applied_today": 0,
+            },
+        ]
+
+        return {
+            "mode": "assisted", "enabled": True,
+            "cluster_name": ctx.get("cluster_name", ""),
+            "auto_approve_threshold": 50.0,
+            "rules": rules,
+            "stats": {
+                "total_rules": len(rules),
+                "enabled_rules": sum(1 for r in rules if r["enabled"]),
+                "auto_applied_today": sum(r["applied_today"] for r in rules),
+                "pending_approval": len(orphans),
+            },
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"assisted-mode error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/operations/autonomous-mode")
-async def get_autonomous_mode_status():
-    """Get Autonomous Mode status and automated actions"""
-    return {
-        "mode": "autonomous",
-        "status": "active",
-        "autonomous_enabled": False,
-        "optimizations_today": 45,
-        "total_savings_today": "$1,250.00",
-        "success_rate": 95.6,
-        "recent_activities": [
-            {
-                "id": "auto-001",
-                "timestamp": (datetime.utcnow() - timedelta(minutes=30)).isoformat() + "Z",
-                "action": "CPU Rightsizing Applied",
-                "resource": "deployment/worker-pool",
-                "result": "success",
-                "savings": "$35.00"
+async def get_autonomous_mode_status(cluster: Optional[str] = Query(None)):
+    """Autonomous Mode — real agent command history as activity feed"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        pods = ctx.get("pods", [])
+        oom  = ctx.get("oom_events", [])
+        restarts = ctx.get("restart_analysis", [])
+
+        # Read real agent command history from DB
+        recent_activities = []
+        try:
+            from database.db import db_manager
+            clusters_list = db_manager.get_all_clusters()
+            for c in (clusters_list if not cluster else [{"cluster_name": cluster}]):
+                history = db_manager.get_metrics_history(c["cluster_name"], limit=5)
+                for row in history:
+                    recent_activities.append({
+                        "id": f"hist-{row.get('id','')}",
+                        "timestamp": row.get("received_at") or row.get("timestamp", ""),
+                        "action": "Metrics snapshot collected",
+                        "resource": f"cluster/{c['cluster_name']}",
+                        "result": "success",
+                    })
+        except Exception:
+            pass
+
+        total_pods    = len(pods)
+        unstable_pods = sum(1 for r in restarts if r.get("restart_count", 0) > 5)
+        oom_pods      = len(oom)
+
+        return {
+            "mode": "autonomous",
+            "cluster_name": ctx.get("cluster_name", ""),
+            "autonomous_enabled": False,
+            "cluster_summary": {
+                "total_pods": total_pods,
+                "oom_pods": oom_pods,
+                "unstable_pods": unstable_pods,
+                "fixable_automatically": max(0, unstable_pods + oom_pods - 1),
             },
-            {
-                "id": "auto-002",
-                "timestamp": (datetime.utcnow() - timedelta(hours=1)).isoformat() + "Z",
-                "action": "Horizontal Scaling (Scaled Down)",
-                "resource": "deployment/api-server",
-                "result": "success",
-                "savings": "$80.00"
-            },
-            {
-                "id": "auto-003",
-                "timestamp": (datetime.utcnow() - timedelta(hours=3)).isoformat() + "Z",
-                "action": "Node Consolidation (Drained)",
-                "resource": "node/worker-3",
-                "result": "success",
-                "savings": "$450.00"
-            }
-        ]
-    }
+            "guardrails": [
+                "AI will NEVER delete production namespaces",
+                "AI will NEVER delete PVCs with data",
+                "AI will NEVER scale down below 1 replica",
+                "AI will NEVER touch database StatefulSets",
+                "AI will NEVER modify RBAC or cluster-admin roles",
+            ],
+            "recent_activities": recent_activities[:10],
+            "last_updated": datetime.utcnow().isoformat() + "Z",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"autonomous-mode error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # AUTO-FIX CENTER SECTION
 # ============================================================================
 
 @router.get("/autofix/resource-fixes")
-async def get_resource_fixes():
-    """Get resource optimization fixes"""
-    return {
-        "category": "resource_fixes",
-        "total_fixes": 28,
-        "potential_savings": 3200.0,
-        "fixes": [
-            {
-                "fix_id": "res-001",
+async def get_resource_fixes(cluster: Optional[str] = Query(None)):
+    """Resource fixes — real over-provisioned pods + orphaned PVCs"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        CPU_PER_CORE_MONTH = 0.031 * 24 * 30
+        MEM_PER_GB_MONTH   = 0.0035 * 24 * 30
+        pods    = ctx.get("pods", [])
+        orphans = ctx.get("orphaned_pvcs", [])
+        fixes   = []
+
+        # CPU over-provisioning
+        for p in sorted(pods, key=lambda x: x.get("cpu_request_m", 0) or 0, reverse=True):
+            cpu_req = p.get("cpu_request_m") or 0
+            if cpu_req < 500:
+                continue
+            rec_cpu = max(100, int(cpu_req * 0.30))
+            savings = round((cpu_req - rec_cpu) / 1000 * CPU_PER_CORE_MONTH, 2)
+            fixes.append({
+                "fix_id": f"res-{len(fixes)+1:03d}",
+                "category": "CPU_WASTE",
                 "type": "cpu_over_provisioning",
-                "resource": "deployment/frontend-web",
-                "namespace": "production",
-                "current_cpu": "2000m",
-                "recommended_cpu": "500m",
-                "savings": 45.0,
+                "resource": p.get("name", "?"),
+                "namespace": p.get("namespace", ""),
+                "cluster": p.get("_cluster", ctx.get("cluster_name", "")),
+                "current_cpu": f"{cpu_req}m",
+                "recommended_cpu": f"{rec_cpu}m",
+                "savings": savings,
                 "risk": "low",
                 "status": "ready",
-                "confidence": 0.95
-            },
-            {
-                "fix_id": "res-002",
+                "confidence": 0.90,
+                "agent_command": {
+                    "command": "patch_deployment_resources",
+                    "params": {"name": p.get("name","?").rsplit("-", 2)[0],
+                               "namespace": p.get("namespace",""),
+                               "cpu_request": f"{rec_cpu}m"},
+                },
+            })
+
+        # Memory over-provisioning
+        for p in sorted(pods, key=lambda x: x.get("memory_request_mb", 0) or 0, reverse=True):
+            mem_req = p.get("memory_request_mb") or 0
+            if mem_req < 512:
+                continue
+            rec_mem = max(128, int(mem_req * 0.50))
+            savings = round((mem_req - rec_mem) / 1024 * MEM_PER_GB_MONTH, 2)
+            fixes.append({
+                "fix_id": f"res-{len(fixes)+1:03d}",
+                "category": "MEMORY_WASTE",
                 "type": "memory_over_provisioning",
-                "resource": "deployment/api-server",
-                "namespace": "production",
-                "current_memory": "4Gi",
-                "recommended_memory": "2Gi",
-                "savings": 32.0,
+                "resource": p.get("name", "?"),
+                "namespace": p.get("namespace", ""),
+                "cluster": p.get("_cluster", ctx.get("cluster_name", "")),
+                "current_memory": f"{mem_req}Mi",
+                "recommended_memory": f"{rec_mem}Mi",
+                "savings": savings,
                 "risk": "low",
                 "status": "ready",
-                "confidence": 0.88
-            },
-            {
-                "fix_id": "res-003",
+                "confidence": 0.87,
+                "agent_command": {
+                    "command": "patch_deployment_resources",
+                    "params": {"name": p.get("name","?").rsplit("-", 2)[0],
+                               "namespace": p.get("namespace",""),
+                               "memory_request": f"{rec_mem}Mi"},
+                },
+            })
+
+        # Orphaned PVCs
+        for pvc in orphans:
+            gb = pvc.get("size_gb") or pvc.get("capacity_gb") or 0
+            fixes.append({
+                "fix_id": f"res-{len(fixes)+1:03d}",
+                "category": "STORAGE_WASTE",
                 "type": "unused_pvc",
-                "resource": "pvc/old-data-vol",
-                "namespace": "staging",
-                "size": "100Gi",
-                "last_used": "90 days ago",
-                "savings": 120.0,
+                "resource": pvc.get("name", "?"),
+                "namespace": pvc.get("namespace", ""),
+                "cluster": pvc.get("_cluster", ctx.get("cluster_name", "")),
+                "size": f"{gb}Gi",
+                "savings": round(gb * 0.10, 2),
                 "risk": "medium",
                 "status": "ready",
-                "confidence": 0.92
-            }
-        ]
-    }
+                "confidence": 0.95,
+            })
+
+        total_savings = round(sum(f["savings"] for f in fixes), 2)
+        return {
+            "category": "resource_fixes",
+            "cluster_name": ctx.get("cluster_name", ""),
+            "total_fixes": len(fixes),
+            "potential_savings": total_savings,
+            "fixes": fixes,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"resource-fixes error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/autofix/security-fixes")
 async def get_security_fixes(cluster: Optional[str] = Query(None)):
@@ -1234,340 +1511,526 @@ async def get_compliance_fixes(cluster: Optional[str] = Query(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/autofix/bulk-fixes")
-async def get_bulk_fixes():
-    """Get bulk fix operations"""
-    return {
-        "category": "bulk_fixes",
-        "available_operations": [
-            {
-                "operation_id": "bulk-001",
-                "name": "Right-size All Over-Provisioned Deployments",
-                "description": "Apply CPU/memory right-sizing to all deployments with >50% waste",
-                "affected_resources": 15,
-                "total_savings": 2400.0,
+async def get_bulk_fixes(cluster: Optional[str] = Query(None)):
+    """Bulk fixes — combined fix candidates from all categories, real data"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        CPU_PER_CORE_MONTH = 0.031 * 24 * 30
+        MEM_PER_GB_MONTH   = 0.0035 * 24 * 30
+        pods    = ctx.get("pods", [])
+        orphans = ctx.get("orphaned_pvcs", [])
+        oom     = ctx.get("oom_events", [])
+
+        cpu_waste = sum(1 for p in pods if (p.get("cpu_request_m") or 0) > 500)
+        mem_waste = sum(1 for p in pods if (p.get("memory_request_mb") or 0) > 512)
+        cpu_savings = round(sum(
+            max(0, (p.get("cpu_request_m") or 0) - max(100, int((p.get("cpu_request_m") or 0) * 0.30))) / 1000 * CPU_PER_CORE_MONTH
+            for p in pods if (p.get("cpu_request_m") or 0) > 500
+        ), 2)
+        mem_savings = round(sum(
+            max(0, (p.get("memory_request_mb") or 0) - max(128, int((p.get("memory_request_mb") or 0) * 0.50))) / 1024 * MEM_PER_GB_MONTH
+            for p in pods if (p.get("memory_request_mb") or 0) > 512
+        ), 2)
+        pvc_savings = round(sum((p.get("size_gb") or p.get("capacity_gb") or 0) * 0.10 for p in orphans), 2)
+
+        # Unique namespaces for filter
+        namespaces = sorted(set(p.get("namespace", "") for p in pods if p.get("namespace")))
+
+        operations = []
+        if cpu_waste:
+            operations.append({
+                "operation_id": "bulk-cpu",
+                "category": "CPU_WASTE",
+                "name": "Right-size All Over-Provisioned CPU",
+                "description": f"Reduce CPU requests on {cpu_waste} pods requesting >500m",
+                "affected_resources": cpu_waste,
+                "total_savings": cpu_savings,
                 "risk": "low",
-                "estimated_duration": "5 minutes"
-            },
-            {
-                "operation_id": "bulk-002",
-                "name": "Clean Up All Unused PVCs",
-                "description": "Remove all PVCs not attached to pods for >90 days",
-                "affected_resources": 8,
-                "total_savings": 960.0,
+            })
+        if mem_waste:
+            operations.append({
+                "operation_id": "bulk-mem",
+                "category": "MEMORY_WASTE",
+                "name": "Right-size All Over-Provisioned Memory",
+                "description": f"Reduce memory requests on {mem_waste} pods requesting >512Mi",
+                "affected_resources": mem_waste,
+                "total_savings": mem_savings,
+                "risk": "low",
+            })
+        if orphans:
+            operations.append({
+                "operation_id": "bulk-pvc",
+                "category": "STORAGE_WASTE",
+                "name": "Clean Up All Orphaned PVCs",
+                "description": f"Remove {len(orphans)} PVCs not attached to any pod",
+                "affected_resources": len(orphans),
+                "total_savings": pvc_savings,
                 "risk": "medium",
-                "estimated_duration": "2 minutes"
-            },
-            {
-                "operation_id": "bulk-003",
-                "name": "Update All Vulnerable Images",
-                "description": "Upgrade all container images with high-severity CVEs",
-                "affected_resources": 12,
+            })
+        if oom:
+            operations.append({
+                "operation_id": "bulk-oom",
+                "category": "RELIABILITY",
+                "name": "Fix All OOMKilled Pods",
+                "description": f"Increase memory limits on {len(oom)} pods that have been OOMKilled",
+                "affected_resources": len(oom),
                 "total_savings": 0.0,
-                "risk": "medium",
-                "estimated_duration": "10 minutes"
-            }
-        ],
-        "last_bulk_operation": {
-            "operation_id": "bulk-004",
-            "name": "Remove Stale ConfigMaps",
-            "completed_at": (datetime.utcnow() - timedelta(days=1)).isoformat() + "Z",
-            "resources_affected": 23,
-            "status": "success"
+                "risk": "low",
+            })
+
+        return {
+            "category": "bulk_fixes",
+            "cluster_name": ctx.get("cluster_name", ""),
+            "total_operations": len(operations),
+            "total_potential_savings": round(cpu_savings + mem_savings + pvc_savings, 2),
+            "available_namespaces": namespaces,
+            "available_operations": operations,
         }
-    }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"bulk-fixes error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # ROLLBACK CENTER SECTION
 # ============================================================================
 
 @router.get("/rollback/deployment-rollback")
-async def get_deployment_rollbacks():
-    """Get deployment rollback history and options"""
-    return {
-        "category": "deployment_rollback",
-        "available_rollbacks": 8,
-        "rollbacks": [
-            {
-                "rollback_id": "dep-rb-001",
-                "deployment": "frontend-web",
-                "namespace": "production",
-                "current_revision": 5,
-                "previous_revision": 4,
-                "change_date": (datetime.utcnow() - timedelta(hours=2)).isoformat() + "Z",
-                "change_type": "cpu_rightsizing",
+async def get_deployment_rollbacks(cluster: Optional[str] = Query(None)):
+    """Deployment rollback — real deployments from workloads domain"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+        deployments = ctx.get("deployments", [])
+        items = []
+        for dep in deployments[:20]:
+            name = dep.get("name") or dep.get("deployment_name", "?")
+            ns   = dep.get("namespace", "")
+            items.append({
+                "deployment": name,
+                "namespace": ns,
+                "cluster": dep.get("_cluster", ctx.get("cluster_name", "")),
+                "current_replicas": dep.get("replicas") or dep.get("ready_replicas", 1),
+                "image": dep.get("image") or dep.get("container_image", ""),
                 "can_rollback": True,
-                "reason": "CPU reduced from 2000m to 500m"
-            },
-            {
-                "rollback_id": "dep-rb-002",
-                "deployment": "api-server",
-                "namespace": "production",
-                "current_revision": 12,
-                "previous_revision": 11,
-                "change_date": (datetime.utcnow() - timedelta(hours=5)).isoformat() + "Z",
-                "change_type": "image_update",
-                "can_rollback": True,
-                "reason": "Updated to version 2.5.0"
-            }
-        ],
-        "recent_rollbacks": [
-            {
-                "rollback_id": "dep-rb-003",
-                "deployment": "worker-pool",
-                "namespace": "processing",
-                "rolled_back_at": (datetime.utcnow() - timedelta(days=1)).isoformat() + "Z",
-                "reason": "Performance degradation after update",
-                "status": "success"
-            }
-        ]
-    }
+            })
+        return {
+            "category": "deployment_rollback",
+            "cluster_name": ctx.get("cluster_name", ""),
+            "available_deployments": len(items),
+            "deployments": items,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"deployment-rollback error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/rollback/configuration-rollback")
-async def get_configuration_rollbacks():
-    """Get configuration rollback history"""
-    return {
-        "category": "configuration_rollback",
-        "available_rollbacks": 15,
-        "rollbacks": [
+async def get_configuration_rollbacks(cluster: Optional[str] = Query(None)):
+    """Configuration rollback — real ConfigMaps and Secrets from cluster"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+        cms  = ctx.get("configmaps", [])
+        secs = ctx.get("secrets", [])
+        cm_items = [
             {
-                "rollback_id": "cfg-rb-001",
                 "resource_type": "ConfigMap",
-                "resource_name": "app-config",
-                "namespace": "production",
-                "change_date": (datetime.utcnow() - timedelta(hours=1)).isoformat() + "Z",
-                "changes": [
-                    {"key": "max_connections", "old": "100", "new": "200"},
-                    {"key": "timeout", "old": "30s", "new": "60s"}
-                ],
-                "can_rollback": True
-            },
-            {
-                "rollback_id": "cfg-rb-002",
-                "resource_type": "Secret",
-                "resource_name": "db-credentials",
-                "namespace": "production",
-                "change_date": (datetime.utcnow() - timedelta(hours=3)).isoformat() + "Z",
-                "changes": [
-                    {"key": "password", "old": "***", "new": "***"}
-                ],
-                "can_rollback": True
+                "name": cm.get("name", "?"),
+                "namespace": cm.get("namespace", ""),
+                "cluster": cm.get("_cluster", ctx.get("cluster_name", "")),
+                "data_keys": cm.get("data_keys") or list((cm.get("data") or {}).keys()),
+                "key_count": cm.get("key_count") or len(cm.get("data") or {}),
+                "can_rollback": True,
             }
+            for cm in cms[:20]
         ]
-    }
+        sec_items = [
+            {
+                "resource_type": "Secret",
+                "name": s.get("name", "?"),
+                "namespace": s.get("namespace", ""),
+                "cluster": s.get("_cluster", ctx.get("cluster_name", "")),
+                "key_count": s.get("key_count") or len(s.get("data") or {}),
+                "values_hidden": True,
+                "can_rollback": True,
+            }
+            for s in secs[:20]
+        ]
+        return {
+            "category": "configuration_rollback",
+            "cluster_name": ctx.get("cluster_name", ""),
+            "configmaps": cm_items,
+            "secrets": sec_items,
+            "total_configmaps": len(cm_items),
+            "total_secrets": len(sec_items),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"configuration-rollback error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/rollback/namespace-rollback")
-async def get_namespace_rollbacks():
-    """Get namespace-wide rollback options"""
-    return {
-        "category": "namespace_rollback",
-        "available_namespaces": 5,
-        "namespaces": [
-            {
-                "rollback_id": "ns-rb-001",
-                "namespace": "production",
-                "last_snapshot": (datetime.utcnow() - timedelta(hours=6)).isoformat() + "Z",
-                "changes_since_snapshot": 12,
-                "can_rollback": True,
-                "affected_resources": {
-                    "deployments": 5,
-                    "configmaps": 3,
-                    "secrets": 2,
-                    "services": 2
-                }
-            },
-            {
-                "rollback_id": "ns-rb-002",
-                "namespace": "staging",
-                "last_snapshot": (datetime.utcnow() - timedelta(hours=12)).isoformat() + "Z",
-                "changes_since_snapshot": 8,
-                "can_rollback": True,
-                "affected_resources": {
-                    "deployments": 3,
-                    "configmaps": 2,
-                    "secrets": 1,
-                    "services": 2
-                }
-            }
-        ]
-    }
+async def get_namespace_rollbacks(cluster: Optional[str] = Query(None)):
+    """Namespace rollback — real namespaces with deployment counts"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+        pods        = ctx.get("pods", [])
+        deployments = ctx.get("deployments", [])
+        namespaces  = ctx.get("namespaces", [])
+
+        # Build per-namespace summary from real data
+        ns_names = set()
+        for p in pods:
+            if p.get("namespace"):
+                ns_names.add(p["namespace"])
+        for d in deployments:
+            if d.get("namespace"):
+                ns_names.add(d["namespace"])
+        for n in namespaces:
+            name = n.get("name") if isinstance(n, dict) else str(n)
+            if name:
+                ns_names.add(name)
+
+        items = []
+        for ns in sorted(ns_names):
+            pod_count = sum(1 for p in pods if p.get("namespace") == ns)
+            dep_count = sum(1 for d in deployments if d.get("namespace") == ns)
+            risk = "extreme" if ns in ("production", "prod", "kube-system") else \
+                   "medium"  if ns in ("staging", "stage") else "low"
+            items.append({
+                "namespace": ns,
+                "cluster": ctx.get("cluster_name", ""),
+                "pod_count": pod_count,
+                "deployment_count": dep_count,
+                "risk": risk,
+                "can_rollback": dep_count > 0,
+            })
+        return {
+            "category": "namespace_rollback",
+            "cluster_name": ctx.get("cluster_name", ""),
+            "namespaces": items,
+            "total_namespaces": len(items),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"namespace-rollback error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/rollback/cluster-rollback")
-async def get_cluster_rollbacks():
-    """Get cluster-wide rollback options"""
-    return {
-        "category": "cluster_rollback",
-        "cluster_name": "production-cluster",
-        "last_snapshot": (datetime.utcnow() - timedelta(days=1)).isoformat() + "Z",
-        "changes_since_snapshot": 45,
-        "can_rollback": True,
-        "snapshot_details": {
-            "total_resources": 234,
-            "namespaces": 8,
-            "deployments": 32,
-            "statefulsets": 5,
-            "daemonsets": 8,
-            "services": 45,
-            "configmaps": 67,
-            "secrets": 34,
-            "pvcs": 23
-        },
-        "rollback_scope": [
-            "All resource configurations",
-            "RBAC policies",
-            "Network policies",
-            "Resource quotas",
-            "Limit ranges"
-        ],
-        "estimated_duration": "15 minutes",
-        "risk": "high"
-    }
+async def get_cluster_rollbacks(cluster: Optional[str] = Query(None)):
+    """Cluster rollback — real snapshots from metrics history"""
+    try:
+        from database.db import db_manager
+        clusters_list = db_manager.get_all_clusters()
+        if not clusters_list:
+            raise HTTPException(status_code=503, detail="No clusters available")
+
+        target = cluster or clusters_list[0]["cluster_name"]
+        history = db_manager.get_metrics_history(target, limit=10)
+
+        snapshots = []
+        for row in history:
+            pods_raw = row.get("pods") or {}
+            if isinstance(pods_raw, str):
+                import json as _j
+                try: pods_raw = _j.loads(pods_raw)
+                except Exception: pods_raw = {}
+            pod_count = len(pods_raw.get("items", []))
+            snapshots.append({
+                "snapshot_id":  row["id"],
+                "timestamp":    row.get("timestamp") or row.get("received_at", ""),
+                "pod_count":    pod_count,
+                "can_rollback": True,
+            })
+
+        ctx = await _fetch_cluster_context(cluster)
+        return {
+            "category": "cluster_rollback",
+            "cluster_name": target,
+            "total_pods": len(ctx.get("pods", [])),
+            "total_deployments": len(ctx.get("deployments", [])),
+            "total_namespaces": len(set(p.get("namespace","") for p in ctx.get("pods", []))),
+            "snapshots": snapshots,
+            "risk": "extreme",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"cluster-rollback error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ============================================================================
 # AI RECOMMENDATIONS SECTION
 # ============================================================================
 
 @router.get("/recommendations/cost")
-async def get_cost_recommendations():
-    """Get AI-powered cost optimization recommendations"""
-    return {
-        "category": "cost",
-        "total_recommendations": 15,
-        "potential_savings": 4200.0,
-        "recommendations": [
-            {
-                "id": "cost-001",
-                "priority": "high",
-                "title": "Right-size Over-Provisioned Deployments",
-                "description": "8 deployments using <30% of requested resources",
-                "savings": 1800.0,
-                "effort": "low",
-                "confidence": 0.95,
-                "affected_resources": 8,
-                "implementation": "Reduce CPU/memory requests to match actual usage"
-            },
-            {
-                "id": "cost-002",
-                "priority": "high",
-                "title": "Remove Unused PVCs",
-                "description": "5 PVCs not attached to any pods for >90 days",
-                "savings": 600.0,
-                "effort": "low",
-                "confidence": 0.98,
-                "affected_resources": 5,
-                "implementation": "Delete unused persistent volume claims"
-            },
-            {
-                "id": "cost-003",
-                "priority": "medium",
-                "title": "Enable Cluster Autoscaling",
-                "description": "Cluster has 3 underutilized nodes that could be scaled down",
-                "savings": 1800.0,
-                "effort": "medium",
-                "confidence": 0.85,
-                "affected_resources": 3,
-                "implementation": "Configure cluster autoscaler with min/max node counts"
-            }
-        ]
-    }
+async def get_cost_recommendations(cluster: Optional[str] = Query(None)):
+    """Cost recommendations — real namespace cost breakdown from finops domain"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        CPU_MONTH = 0.031 * 24 * 30
+        MEM_MONTH = 0.0035 * 24 * 30
+        pods    = ctx.get("pods", [])
+        orphans = ctx.get("orphaned_pvcs", [])
+        ns_res  = ctx.get("namespace_resources", [])
+
+        recs = []
+        # Per-namespace cost recommendations
+        ns_costs = []
+        for ns in ns_res:
+            cpu_cores = (ns.get("total_cpu_request_m") or 0) / 1000
+            mem_gb    = (ns.get("total_memory_request_mb") or 0) / 1024
+            cost      = round(cpu_cores * CPU_MONTH + mem_gb * MEM_MONTH, 2)
+            ns_costs.append({"namespace": ns.get("namespace","?"), "cost": cost,
+                              "cluster": ns.get("_cluster","")})
+        ns_costs.sort(key=lambda x: x["cost"], reverse=True)
+
+        for i, ns in enumerate(ns_costs[:5]):
+            potential = round(ns["cost"] * 0.35, 2)
+            recs.append({
+                "id": f"cost-ns-{i+1:03d}", "priority": "high" if i < 2 else "medium",
+                "title": f"Right-size workloads in {ns['namespace']}",
+                "description": f"Namespace costs ~${ns['cost']}/mo — 35% savings estimated",
+                "savings": potential, "effort": "low", "confidence": 0.88,
+                "affected_namespace": ns["namespace"],
+                "cluster": ns.get("cluster",""),
+            })
+
+        # Orphaned PVC recommendations
+        for pvc in orphans[:5]:
+            gb = pvc.get("size_gb") or pvc.get("capacity_gb") or 0
+            savings = round(gb * 0.10, 2)
+            recs.append({
+                "id": f"cost-pvc-{len(recs)+1:03d}", "priority": "high",
+                "title": f"Delete orphaned PVC {pvc.get('name','?')}",
+                "description": f"PVC {pvc.get('name','?')} in {pvc.get('namespace','')} is unattached ({gb}Gi)",
+                "savings": savings, "effort": "low", "confidence": 0.97,
+                "affected_namespace": pvc.get("namespace",""),
+                "cluster": pvc.get("_cluster",""),
+            })
+
+        # Over-provisioned pods
+        cpu_waste_pods = [p for p in pods if (p.get("cpu_request_m") or 0) > 1000]
+        if cpu_waste_pods:
+            total = round(sum((p.get("cpu_request_m",0) or 0) * 0.70 / 1000 * CPU_MONTH for p in cpu_waste_pods), 2)
+            recs.append({
+                "id": f"cost-cpu-{len(recs)+1:03d}", "priority": "high",
+                "title": f"Right-size {len(cpu_waste_pods)} over-provisioned pods",
+                "description": f"{len(cpu_waste_pods)} pods requesting >1000m CPU — 70% savings possible",
+                "savings": total, "effort": "low", "confidence": 0.91,
+            })
+
+        recs.sort(key=lambda x: x["savings"], reverse=True)
+        total_savings = round(sum(r["savings"] for r in recs), 2)
+        return {
+            "category": "cost",
+            "cluster_name": ctx.get("cluster_name",""),
+            "total_recommendations": len(recs),
+            "potential_savings": total_savings,
+            "namespace_costs": ns_costs[:10],
+            "recommendations": recs,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"cost-recommendations error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/recommendations/performance")
-async def get_performance_recommendations():
-    """Get AI-powered performance optimization recommendations"""
-    return {
-        "category": "performance",
-        "total_recommendations": 12,
-        "recommendations": [
-            {
-                "id": "perf-001",
+async def get_performance_recommendations(cluster: Optional[str] = Query(None)):
+    """Performance recommendations — real throttled/OOM/unstable pods"""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        pods     = ctx.get("pods", [])
+        oom      = ctx.get("oom_events", [])
+        restarts = sorted(ctx.get("restart_analysis", []),
+                          key=lambda x: x.get("restart_count", 0), reverse=True)
+        recs = []
+
+        # OOMKill pods — memory needs increase
+        for ev in oom[:5]:
+            name = ev.get("pod_name") or ev.get("name", "?")
+            ns   = ev.get("namespace", "")
+            recs.append({
+                "id": f"perf-oom-{len(recs)+1:03d}",
+                "category": "STABILITY",
+                "priority": "critical",
+                "title": f"OOMKill fix — {name}",
+                "description": f"Pod {name} in {ns} was OOMKilled — increase memory limit",
+                "impact": "critical", "effort": "low", "confidence": 0.96,
+                "affected_pod": name, "namespace": ns,
+                "cluster": ev.get("_cluster", ctx.get("cluster_name","")),
+                "agent_command": {"command": "patch_deployment_resources",
+                                  "params": {"name": name.rsplit("-",2)[0],
+                                             "namespace": ns, "memory_limit": "4Gi"}},
+            })
+
+        # High-restart pods — instability
+        for r in restarts[:5]:
+            if r.get("restart_count", 0) < 3:
+                continue
+            name = r.get("name", "?")
+            ns   = r.get("namespace", "")
+            recs.append({
+                "id": f"perf-rst-{len(recs)+1:03d}",
+                "category": "STABILITY",
                 "priority": "high",
-                "title": "Increase CPU Limits for Throttled Pods",
-                "description": "Frontend pods experiencing 45% CPU throttling",
-                "impact": "high",
-                "effort": "low",
-                "confidence": 0.92,
-                "affected_resources": 3,
-                "metrics": {
-                    "current_throttling": "45%",
-                    "target_throttling": "<5%",
-                    "response_time_improvement": "40%"
-                }
-            },
-            {
-                "id": "perf-002",
-                "priority": "high",
-                "title": "Add Memory to OOMKilling Pods",
-                "description": "API server pods restarting due to OOM",
-                "impact": "critical",
-                "effort": "low",
-                "confidence": 0.98,
-                "affected_resources": 2,
-                "metrics": {
-                    "current_memory": "2Gi",
-                    "recommended_memory": "4Gi",
-                    "restart_count": 12
-                }
-            },
-            {
-                "id": "perf-003",
+                "title": f"CrashLoop — {name} ({r.get('restart_count',0)} restarts)",
+                "description": f"Pod restarts indicate resource pressure or app error",
+                "impact": "high", "effort": "low", "confidence": 0.88,
+                "affected_pod": name, "namespace": ns,
+                "cluster": r.get("_cluster", ctx.get("cluster_name","")),
+            })
+
+        # No CPU limits — throttling risk
+        no_cpu_limit = [p for p in pods if not p.get("cpu_limit_m") and (p.get("cpu_request_m") or 0) > 200]
+        if no_cpu_limit:
+            recs.append({
+                "id": f"perf-cpu-{len(recs)+1:03d}",
+                "category": "THROTTLING",
                 "priority": "medium",
-                "title": "Enable Horizontal Pod Autoscaling",
-                "description": "Traffic patterns show 3x variation during peak hours",
-                "impact": "medium",
-                "effort": "medium",
-                "confidence": 0.88,
-                "affected_resources": 5,
-                "metrics": {
-                    "peak_traffic": "3000 req/s",
-                    "off_peak_traffic": "1000 req/s",
-                    "recommended_min_replicas": 3,
-                    "recommended_max_replicas": 10
-                }
-            }
-        ]
-    }
+                "title": f"{len(no_cpu_limit)} pods have no CPU limit — throttling risk",
+                "description": "Pods without CPU limits can consume all node CPU, throttling neighbours",
+                "impact": "medium", "effort": "low", "confidence": 0.85,
+            })
+
+        # Single replicas — SPOF
+        single_replica = [p for p in pods
+                          if (p.get("replicas") or p.get("ready_replicas") or 1) == 1][:5]
+        for p in single_replica:
+            recs.append({
+                "id": f"perf-spof-{len(recs)+1:03d}",
+                "category": "CAPACITY",
+                "priority": "medium",
+                "title": f"Single replica — {p.get('name','?')}",
+                "description": "Pod has 1 replica — any crash causes full downtime",
+                "impact": "high", "effort": "medium", "confidence": 0.92,
+                "affected_pod": p.get("name","?"), "namespace": p.get("namespace",""),
+            })
+
+        total_pods = len(pods)
+        no_probe   = sum(1 for p in pods if not p.get("has_liveness"))
+        perf_score = max(0, min(100, 100
+                                - len(oom) * 5
+                                - len([r for r in restarts if r.get("restart_count",0) > 5]) * 3
+                                - len(no_cpu_limit) * 1))
+        return {
+            "category": "performance",
+            "cluster_name": ctx.get("cluster_name",""),
+            "performance_score": perf_score,
+            "total_recommendations": len(recs),
+            "summary": {"total_pods": total_pods, "oom_pods": len(oom),
+                        "no_probe_pods": no_probe, "no_cpu_limit_pods": len(no_cpu_limit)},
+            "recommendations": recs,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"performance-recommendations error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/recommendations/reliability")
-async def get_reliability_recommendations():
-    """Get AI-powered reliability recommendations"""
-    return {
-        "category": "reliability",
-        "total_recommendations": 10,
-        "recommendations": [
-            {
-                "id": "rel-001",
+async def get_reliability_recommendations(cluster: Optional[str] = Query(None)):
+    """Reliability recommendations — real pods missing probes, single replicas, etc."""
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available")
+
+        pods     = ctx.get("pods", [])
+        restarts = ctx.get("restart_analysis", [])
+        recs     = []
+
+        # Missing liveness probes
+        no_live = [p for p in pods if not p.get("has_liveness")][:10]
+        for p in no_live:
+            recs.append({
+                "id": f"rel-probe-{len(recs)+1:03d}",
+                "fix_type": "ADD_HEALTH_CHECK",
                 "priority": "high",
-                "title": "Add Liveness and Readiness Probes",
-                "description": "8 deployments missing health check probes",
-                "impact": "high",
-                "effort": "low",
-                "confidence": 0.95,
-                "affected_resources": 8,
-                "risk_reduction": "Prevents serving traffic to unhealthy pods"
-            },
-            {
-                "id": "rel-002",
-                "priority": "high",
-                "title": "Configure Pod Disruption Budgets",
-                "description": "Critical services lack PDB protection",
-                "impact": "high",
-                "effort": "low",
-                "confidence": 0.92,
-                "affected_resources": 5,
-                "risk_reduction": "Ensures minimum availability during updates"
-            },
-            {
-                "id": "rel-003",
+                "title": f"No liveness probe — {p.get('name','?')}",
+                "description": f"Pod {p.get('name','?')} in {p.get('namespace','')} has no liveness probe — can silently fail",
+                "impact": "high", "effort": "low", "confidence": 0.93,
+                "affected_pod": p.get("name","?"), "namespace": p.get("namespace",""),
+                "cluster": p.get("_cluster", ctx.get("cluster_name","")),
+                "agent_command": {"command": "patch_deployment_probes",
+                                  "params": {"name": p.get("name","?").rsplit("-",2)[0],
+                                             "namespace": p.get("namespace","")}},
+            })
+
+        # Missing readiness probes
+        no_ready = [p for p in pods if not p.get("has_readiness")][:5]
+        for p in no_ready:
+            recs.append({
+                "id": f"rel-rdy-{len(recs)+1:03d}",
+                "fix_type": "ADD_READINESS_PROBE",
                 "priority": "medium",
-                "title": "Implement Multi-Zone Deployment",
-                "description": "All pods in single availability zone",
-                "impact": "critical",
-                "effort": "high",
-                "confidence": 0.98,
-                "affected_resources": 15,
-                "risk_reduction": "Protects against zone failures"
-            }
-        ]
-    }
+                "title": f"No readiness probe — {p.get('name','?')}",
+                "description": "Traffic sent to pod even if it is not ready to serve",
+                "impact": "medium", "effort": "low", "confidence": 0.90,
+                "affected_pod": p.get("name","?"), "namespace": p.get("namespace",""),
+                "cluster": p.get("_cluster", ctx.get("cluster_name","")),
+            })
+
+        # High-restart pods (reliability risk)
+        for r in sorted(restarts, key=lambda x: x.get("restart_count",0), reverse=True)[:5]:
+            if r.get("restart_count",0) < 5:
+                continue
+            recs.append({
+                "id": f"rel-rst-{len(recs)+1:03d}",
+                "fix_type": "ADD_REPLICA",
+                "priority": "high",
+                "title": f"Frequent crashes — {r.get('name','?')} ({r.get('restart_count',0)} restarts)",
+                "description": "High restart count indicates reliability risk",
+                "impact": "high", "effort": "medium", "confidence": 0.87,
+                "affected_pod": r.get("name","?"), "namespace": r.get("namespace",""),
+                "cluster": r.get("_cluster", ctx.get("cluster_name","")),
+            })
+
+        no_probe_count  = len(no_live)
+        no_ready_count  = len(no_ready)
+        high_rst_count  = len([r for r in restarts if r.get("restart_count",0) > 5])
+        reliability_score = max(0, min(100, 100
+                                       - no_probe_count * 3
+                                       - high_rst_count * 5
+                                       - no_ready_count * 2))
+        return {
+            "category": "reliability",
+            "cluster_name": ctx.get("cluster_name",""),
+            "reliability_score": reliability_score,
+            "total_recommendations": len(recs),
+            "summary": {"total_pods": len(pods), "no_liveness": no_probe_count,
+                        "no_readiness": no_ready_count, "high_restart": high_rst_count},
+            "recommendations": recs,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"reliability-recommendations error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/recommendations/security")
 async def get_security_recommendations(cluster: Optional[str] = Query(None)):

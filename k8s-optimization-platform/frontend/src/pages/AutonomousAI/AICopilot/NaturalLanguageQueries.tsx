@@ -1,289 +1,533 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
 import {
   Box,
-  Paper,
   Typography,
   TextField,
-  Button,
-  Card,
-  CardContent,
-  Grid,
-  Chip,
   IconButton,
-  List,
-  ListItem,
-  ListItemText,
-  Divider,
+  Chip,
   CircularProgress,
-  Alert
+  Divider,
+  Tooltip,
+  List,
+  ListItemButton,
+  ListItemText,
 } from '@mui/material';
-import {
-  Send as SendIcon,
-  Lightbulb as LightbulbIcon,
-  History as HistoryIcon,
-  Clear as ClearIcon
-} from '@mui/icons-material';
-import axios from 'axios';
+import SendIcon from '@mui/icons-material/Send';
+import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
+import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined';
+import HistoryIcon from '@mui/icons-material/History';
+import TipsAndUpdatesOutlinedIcon from '@mui/icons-material/TipsAndUpdatesOutlined';
+import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import { API_BASE_URL } from '../../../config/api';
 
-interface QueryResponse {
-  query: string;
-  response: string;
+// ─── Design tokens (matches Incidents.tsx) ───────────────────────────────────
+
+const DK = {
+  bg:      '#0d1117',
+  surface: '#161b22',
+  surface2:'#1c2128',
+  border:  '#30363d',
+  text:    '#e6edf3',
+  muted:   '#8b949e',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface RelatedResource {
+  name: string;
+  namespace?: string;
+  kind?: string;
+}
+
+interface Conversation {
+  id: string;
+  userQuery: string;
+  aiResponse: string;
+  confidence: number;
+  relatedResources: RelatedResource[];
   suggestions: string[];
   timestamp: string;
 }
 
-interface QueryHistory {
+interface HistoryItem {
   query: string;
   timestamp: string;
 }
 
+// ─── Suggested starter queries ────────────────────────────────────────────────
+
+const STARTER_QUERIES = [
+  { label: '💸 Why is my cluster expensive?',    query: 'Why is my cluster expensive?' },
+  { label: '🔥 Which pods waste the most CPU?',   query: 'Which workloads waste the most CPU?' },
+  { label: '🔒 Show security vulnerabilities',    query: 'Show security vulnerabilities' },
+  { label: '💾 Find orphaned storage',            query: 'Find orphaned PVCs and wasted storage' },
+  { label: '🔁 Pods crashing or restarting',      query: 'Which pods are crashing or restarting?' },
+  { label: '🏥 Cluster health overview',          query: 'Give me a cluster health overview' },
+  { label: '📉 Idle namespaces',                  query: 'List idle namespaces' },
+  { label: '💡 What should I fix first?',         query: 'What should I optimize first?' },
+];
+
+// ─── Confidence badge ─────────────────────────────────────────────────────────
+
+const ConfidenceBadge: React.FC<{ value: number }> = ({ value }) => {
+  const pct = Math.round(value * 100);
+  const color = pct >= 85 ? '#3fb950' : pct >= 65 ? '#d29922' : '#f85149';
+  return (
+    <Chip
+      label={`${pct}% confidence`}
+      size="small"
+      sx={{
+        bgcolor: `${color}1a`,
+        color,
+        border: `1px solid ${color}44`,
+        fontWeight: 600,
+        fontSize: '0.68rem',
+      }}
+    />
+  );
+};
+
+// ─── User bubble ──────────────────────────────────────────────────────────────
+
+const UserBubble: React.FC<{ query: string; timestamp: string }> = ({ query, timestamp }) => (
+  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2, gap: 1 }}>
+    <Box sx={{ maxWidth: '70%' }}>
+      <Box
+        sx={{
+          bgcolor: '#1f6feb',
+          borderRadius: '12px 12px 2px 12px',
+          px: 2,
+          py: 1.25,
+          color: '#ffffff',
+          fontSize: '0.9rem',
+          lineHeight: 1.6,
+          wordBreak: 'break-word',
+        }}
+      >
+        {query}
+      </Box>
+      <Typography sx={{ color: DK.muted, fontSize: '0.68rem', mt: 0.5, textAlign: 'right' }}>
+        {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+      </Typography>
+    </Box>
+    <Box sx={{ mt: 0.5, flexShrink: 0 }}>
+      <PersonOutlineIcon sx={{ fontSize: 20, color: DK.muted }} />
+    </Box>
+  </Box>
+);
+
+// ─── AI bubble ────────────────────────────────────────────────────────────────
+
+const AIBubble: React.FC<{
+  conv: Conversation;
+  onSuggestion: (q: string) => void;
+}> = ({ conv, onSuggestion }) => (
+  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2.5, gap: 1 }}>
+    <Box sx={{ mt: 0.5, flexShrink: 0 }}>
+      <SmartToyOutlinedIcon sx={{ fontSize: 20, color: '#58a6ff' }} />
+    </Box>
+    <Box sx={{ maxWidth: '80%' }}>
+      {/* Main response */}
+      <Box
+        sx={{
+          bgcolor: DK.surface2,
+          border: `1px solid ${DK.border}`,
+          borderRadius: '2px 12px 12px 12px',
+          px: 2,
+          py: 1.5,
+          color: DK.text,
+          fontSize: '0.88rem',
+          lineHeight: 1.75,
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}
+      >
+        {conv.aiResponse}
+      </Box>
+
+      {/* Meta row: confidence + timestamp */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.75, flexWrap: 'wrap' }}>
+        <ConfidenceBadge value={conv.confidence} />
+        <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>
+          {new Date(conv.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Typography>
+      </Box>
+
+      {/* Related resources chips */}
+      {conv.relatedResources.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1 }}>
+          {conv.relatedResources.map((r, i) => (
+            <Chip
+              key={i}
+              label={r.kind ? `${r.kind}/${r.name}` : r.name}
+              size="small"
+              variant="outlined"
+              sx={{
+                borderColor: DK.border,
+                color: DK.muted,
+                fontSize: '0.68rem',
+                height: 22,
+              }}
+            />
+          ))}
+        </Box>
+      )}
+
+      {/* Follow-up suggestion chips */}
+      {conv.suggestions.length > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mt: 1 }}>
+          {conv.suggestions.map((s, i) => (
+            <Chip
+              key={i}
+              label={s}
+              size="small"
+              clickable
+              onClick={() => onSuggestion(s)}
+              sx={{
+                bgcolor: '#1f6feb22',
+                color: '#58a6ff',
+                border: '1px solid #1f6feb55',
+                fontSize: '0.72rem',
+                '&:hover': { bgcolor: '#1f6feb44' },
+              }}
+            />
+          ))}
+        </Box>
+      )}
+
+      {/* Feedback buttons */}
+      <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75 }}>
+        <Tooltip title="Helpful">
+          <IconButton size="small" sx={{ color: DK.muted, '&:hover': { color: '#3fb950' } }}>
+            <ThumbUpOutlinedIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Not helpful">
+          <IconButton size="small" sx={{ color: DK.muted, '&:hover': { color: '#f85149' } }}>
+            <ThumbDownOutlinedIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Tooltip>
+      </Box>
+    </Box>
+  </Box>
+);
+
+// ─── Main component ────────────────────────────────────────────────────────────
+
 const NaturalLanguageQueries: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [query, setQuery] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<QueryResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState<QueryHistory[]>([]);
+  const { activeClusterId, activeClusterName } = useActiveCluster();
 
-  const suggestedQueries = [
-    "Why is my cluster expensive?",
-    "Which workloads waste the most CPU?",
-    "Show savings opportunities above $500/month",
-    "What should I optimize first?",
-    "Find pods with high memory usage",
-    "List idle namespaces",
-    "Show security vulnerabilities",
-    "Recommend cost optimizations"
-  ];
+  const [input, setInput]               = useState('');
+  const [loading, setLoading]           = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [history, setHistory]           = useState<HistoryItem[]>([]);
+  const [error, setError]               = useState<string | null>(null);
 
-  const handleSubmit = async () => {
-    if (!query.trim()) return;
+  const threadRef = useRef<HTMLDivElement>(null);
+
+  // Auto-scroll to bottom when a new message arrives
+  useEffect(() => {
+    if (threadRef.current) {
+      threadRef.current.scrollTop = threadRef.current.scrollHeight;
+    }
+  }, [conversations, loading]);
+
+  const submitQuery = useCallback(async (queryText: string) => {
+    const trimmed = queryText.trim();
+    if (!trimmed || loading) return;
 
     setLoading(true);
     setError(null);
+    setInput('');
+
+    // Append placeholder (will be replaced on response)
+    const tempId = `q-${Date.now()}`;
+
+    // Add to history sidebar
+    setHistory(prev => [{ query: trimmed, timestamp: new Date().toISOString() }, ...prev.slice(0, 19)]);
 
     try {
-      const res = await axios.post('/api/v1/autonomous-ai/copilot/query', {
-        query: query.trim()
+      const res = await fetch(`${API_BASE_URL}/v1/autonomous-ai/copilot/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: trimmed,
+          cluster: activeClusterId === 'all' ? null : activeClusterId,
+        }),
       });
 
-      setResponse(res.data);
-      setHistory(prev => [{
-        query: query.trim(),
-        timestamp: new Date().toISOString()
-      }, ...prev.slice(0, 9)]);
-      
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to process query');
+      const body = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        setError(body?.detail ?? `Error ${res.status}`);
+        setLoading(false);
+        return;
+      }
+
+      const conv: Conversation = {
+        id: body.query_id ?? tempId,
+        userQuery: trimmed,
+        aiResponse: body.response ?? '(no response)',
+        confidence: body.confidence ?? 0.80,
+        relatedResources: body.related_resources ?? [],
+        suggestions: body.suggestions ?? [],
+        timestamp: body.timestamp ?? new Date().toISOString(),
+      };
+
+      setConversations(prev => [...prev, conv]);
+    } catch (e: any) {
+      setError(e?.message ?? 'Network error');
     } finally {
       setLoading(false);
     }
+  }, [activeClusterId, loading]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submitQuery(input);
+    }
   };
 
-  const handleSuggestedQuery = (suggestedQuery: string) => {
-    setQuery(suggestedQuery);
-  };
-
-  const handleHistoryQuery = (historicalQuery: string) => {
-    setQuery(historicalQuery);
-  };
-
-  const handleClear = () => {
-    setQuery('');
-    setResponse(null);
-    setError(null);
+  const handleStarterClick = (query: string) => {
+    submitQuery(query);
   };
 
   return (
-    <Box>
-      <Typography variant="h4" gutterBottom>
-        Natural Language Queries
-      </Typography>
-      <Typography variant="body1" color="text.secondary" paragraph>
-        Ask questions about your Kubernetes infrastructure in plain English
-      </Typography>
+    <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', gap: 0 }}>
 
-      <Grid container spacing={3}>
-        {/* Query Input Section */}
-        <Grid item xs={12} md={8}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Ask a Question
-            </Typography>
-            
-            <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-              <TextField
-                fullWidth
-                multiline
-                rows={3}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="e.g., Why is my cluster expensive?"
-                variant="outlined"
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit();
-                  }
-                }}
-              />
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  onClick={handleSubmit}
-                  disabled={loading || !query.trim()}
-                  startIcon={loading ? <CircularProgress size={20} /> : <SendIcon />}
-                >
-                  {loading ? 'Processing...' : 'Ask'}
-                </Button>
-                <IconButton onClick={handleClear} disabled={!query && !response}>
-                  <ClearIcon />
-                </IconButton>
-              </Box>
-            </Box>
+      {/* ── Left: Chat area ──────────────────────────────────────────────── */}
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-            {error && (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {error}
-              </Alert>
-            )}
+        {/* Header */}
+        <Box sx={{ px: 3, pt: 3, pb: 1.5, borderBottom: `1px solid ${DK.border}`, bgcolor: DK.surface }}>
+          <Typography sx={{ color: DK.text, fontSize: '1.1rem', fontWeight: 600 }}>
+            Natural Language Queries
+          </Typography>
+          <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mt: 0.25 }}>
+            Ask anything about your Kubernetes infrastructure — real answers from{' '}
+            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+          </Typography>
+        </Box>
 
-            {/* Response Section */}
-            {response && (
-              <Card sx={{ mb: 3, bgcolor: 'background.default' }}>
-                <CardContent>
-                  <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                    Response:
-                  </Typography>
-                  <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', mb: 2 }}>
-                    {response.response}
-                  </Typography>
-
-                  {response.suggestions && response.suggestions.length > 0 && (
-                    <>
-                      <Divider sx={{ my: 2 }} />
-                      <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                        Follow-up Suggestions:
-                      </Typography>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {response.suggestions.map((suggestion, index) => (
-                          <Chip
-                            key={index}
-                            label={suggestion}
-                            onClick={() => handleSuggestedQuery(suggestion)}
-                            color="primary"
-                            variant="outlined"
-                            size="small"
-                          />
-                        ))}
-                      </Box>
-                    </>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Suggested Queries */}
-            <Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <LightbulbIcon sx={{ mr: 1, color: 'warning.main' }} />
-                <Typography variant="h6">
-                  Suggested Queries
-                </Typography>
-              </Box>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {suggestedQueries.map((sq, index) => (
+        {/* Thread */}
+        <Box
+          ref={threadRef}
+          sx={{
+            flex: 1,
+            overflowY: 'auto',
+            px: 3,
+            py: 2.5,
+            '&::-webkit-scrollbar': { width: 6 },
+            '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
+            '&::-webkit-scrollbar-thumb': { bgcolor: DK.border, borderRadius: 3 },
+          }}
+        >
+          {/* Empty state: starter chips */}
+          {conversations.length === 0 && !loading && (
+            <Box sx={{ textAlign: 'center', mt: 6 }}>
+              <SmartToyOutlinedIcon sx={{ fontSize: 48, color: DK.border, mb: 2 }} />
+              <Typography sx={{ color: DK.muted, fontSize: '0.95rem', mb: 3 }}>
+                Ask a question in plain English — no Kubernetes jargon required
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, justifyContent: 'center', maxWidth: 560, mx: 'auto' }}>
+                {STARTER_QUERIES.map((sq) => (
                   <Chip
-                    key={index}
-                    label={sq}
-                    onClick={() => handleSuggestedQuery(sq)}
-                    color="default"
-                    variant="outlined"
+                    key={sq.query}
+                    label={sq.label}
+                    clickable
+                    onClick={() => handleStarterClick(sq.query)}
+                    sx={{
+                      bgcolor: DK.surface,
+                      color: DK.text,
+                      border: `1px solid ${DK.border}`,
+                      fontSize: '0.8rem',
+                      '&:hover': { bgcolor: DK.surface2, borderColor: '#58a6ff' },
+                    }}
                   />
                 ))}
               </Box>
             </Box>
-          </Paper>
-        </Grid>
+          )}
 
-        {/* Query History Sidebar */}
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-              <HistoryIcon sx={{ mr: 1 }} />
-              <Typography variant="h6">
-                Recent Queries
-              </Typography>
+          {/* Conversation thread */}
+          {conversations.map((conv) => (
+            <React.Fragment key={conv.id}>
+              <UserBubble query={conv.userQuery} timestamp={conv.timestamp} />
+              <AIBubble conv={conv} onSuggestion={submitQuery} />
+            </React.Fragment>
+          ))}
+
+          {/* Typing indicator */}
+          {loading && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+              <SmartToyOutlinedIcon sx={{ fontSize: 20, color: '#58a6ff' }} />
+              <Box
+                sx={{
+                  bgcolor: DK.surface2,
+                  border: `1px solid ${DK.border}`,
+                  borderRadius: '2px 12px 12px 12px',
+                  px: 2,
+                  py: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                }}
+              >
+                <CircularProgress size={14} sx={{ color: '#58a6ff' }} />
+                <Typography sx={{ color: DK.muted, fontSize: '0.82rem' }}>Thinking…</Typography>
+              </Box>
             </Box>
+          )}
 
-            {history.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
-                No query history yet
-              </Typography>
-            ) : (
-              <List>
-                {history.map((item, index) => (
-                  <React.Fragment key={index}>
-                    <ListItem
-                      button
-                      onClick={() => handleHistoryQuery(item.query)}
-                      sx={{ px: 0 }}
-                    >
-                      <ListItemText
-                        primary={item.query}
-                        secondary={new Date(item.timestamp).toLocaleString()}
-                        primaryTypographyProps={{
-                          noWrap: true,
-                          variant: 'body2'
-                        }}
-                        secondaryTypographyProps={{
-                          variant: 'caption'
-                        }}
-                      />
-                    </ListItem>
-                    {index < history.length - 1 && <Divider />}
-                  </React.Fragment>
-                ))}
-              </List>
-            )}
-          </Paper>
+          {/* Error */}
+          {error && (
+            <Box sx={{ bgcolor: '#f851491a', border: '1px solid #f8514944', borderRadius: 2, px: 2, py: 1.25, mb: 2 }}>
+              <Typography sx={{ color: '#f85149', fontSize: '0.83rem' }}>{error}</Typography>
+            </Box>
+          )}
+        </Box>
 
-          {/* Query Tips */}
-          <Paper sx={{ p: 3, mt: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              Query Tips
+        {/* Input bar */}
+        <Box
+          sx={{
+            px: 3,
+            py: 2,
+            borderTop: `1px solid ${DK.border}`,
+            bgcolor: DK.surface,
+            display: 'flex',
+            gap: 1.5,
+            alignItems: 'flex-end',
+          }}
+        >
+          <TextField
+            fullWidth
+            multiline
+            maxRows={4}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about your cluster… (Enter to send, Shift+Enter for newline)"
+            disabled={loading}
+            variant="outlined"
+            size="small"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                bgcolor: DK.bg,
+                color: DK.text,
+                fontSize: '0.88rem',
+                borderRadius: 2,
+                '& fieldset': { borderColor: DK.border },
+                '&:hover fieldset': { borderColor: '#58a6ff' },
+                '&.Mui-focused fieldset': { borderColor: '#58a6ff' },
+              },
+              '& .MuiInputBase-input::placeholder': { color: DK.muted, opacity: 1 },
+            }}
+          />
+          <Tooltip title="Send (Enter)">
+            <span>
+              <IconButton
+                onClick={() => submitQuery(input)}
+                disabled={loading || !input.trim()}
+                sx={{
+                  bgcolor: '#1f6feb',
+                  color: '#fff',
+                  width: 40,
+                  height: 40,
+                  borderRadius: 2,
+                  '&:hover': { bgcolor: '#388bfd' },
+                  '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
+                }}
+              >
+                {loading
+                  ? <CircularProgress size={18} sx={{ color: '#fff' }} />
+                  : <SendIcon sx={{ fontSize: 18 }} />
+                }
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+      </Box>
+
+      {/* ── Right: Sidebar ──────────────────────────────────────────────── */}
+      <Box
+        sx={{
+          width: 280,
+          flexShrink: 0,
+          borderLeft: `1px solid ${DK.border}`,
+          bgcolor: DK.surface,
+          display: 'flex',
+          flexDirection: 'column',
+          overflow: 'hidden',
+        }}
+      >
+        {/* History */}
+        <Box sx={{ flex: 1, overflowY: 'auto', px: 2, pt: 2, pb: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
+            <HistoryIcon sx={{ fontSize: 16, color: DK.muted }} />
+            <Typography sx={{ color: DK.text, fontSize: '0.8rem', fontWeight: 600 }}>
+              Recent Queries
             </Typography>
-            <List dense>
-              <ListItem>
-                <ListItemText
-                  primary="Be specific"
-                  secondary="Include cluster, namespace, or workload names"
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary="Ask about metrics"
-                  secondary="CPU, memory, cost, waste, efficiency"
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary="Request actions"
-                  secondary="Show, find, list, recommend, optimize"
-                />
-              </ListItem>
-              <ListItem>
-                <ListItemText
-                  primary="Set thresholds"
-                  secondary="Above $500, more than 50%, less than 30%"
-                />
-              </ListItem>
+          </Box>
+
+          {history.length === 0 ? (
+            <Typography sx={{ color: DK.muted, fontSize: '0.78rem' }}>No history yet</Typography>
+          ) : (
+            <List dense disablePadding>
+              {history.map((item, i) => (
+                <React.Fragment key={i}>
+                  <ListItemButton
+                    onClick={() => submitQuery(item.query)}
+                    sx={{
+                      px: 1,
+                      py: 0.75,
+                      borderRadius: 1,
+                      '&:hover': { bgcolor: DK.surface2 },
+                    }}
+                  >
+                    <ListItemText
+                      primary={item.query}
+                      secondary={new Date(item.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      primaryTypographyProps={{
+                        noWrap: true,
+                        sx: { color: DK.text, fontSize: '0.78rem' },
+                      }}
+                      secondaryTypographyProps={{
+                        sx: { color: DK.muted, fontSize: '0.68rem' },
+                      }}
+                    />
+                  </ListItemButton>
+                  {i < history.length - 1 && <Divider sx={{ borderColor: DK.border }} />}
+                </React.Fragment>
+              ))}
             </List>
-          </Paper>
-        </Grid>
-      </Grid>
+          )}
+        </Box>
+
+        {/* Tips */}
+        <Box sx={{ borderTop: `1px solid ${DK.border}`, px: 2, py: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
+            <TipsAndUpdatesOutlinedIcon sx={{ fontSize: 16, color: '#d29922' }} />
+            <Typography sx={{ color: DK.text, fontSize: '0.8rem', fontWeight: 600 }}>
+              Tips
+            </Typography>
+          </Box>
+          {[
+            ['Be specific', 'Include namespace or pod names for scoped answers'],
+            ['Ask about cost', '"Why is kube-system expensive?"'],
+            ['Ask about health', '"Which pods are crashing?"'],
+            ['Set thresholds', '"Pods using more than 80% memory"'],
+          ].map(([title, tip]) => (
+            <Box key={title} sx={{ mb: 1 }}>
+              <Typography sx={{ color: DK.text, fontSize: '0.75rem', fontWeight: 600 }}>{title}</Typography>
+              <Typography sx={{ color: DK.muted, fontSize: '0.72rem', lineHeight: 1.5 }}>{tip}</Typography>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+
     </Box>
   );
 };
