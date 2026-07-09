@@ -13,28 +13,579 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from enum import Enum
 import logging
+import os
 import random
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-async def _ai_security_context(cluster: Optional[str] = None) -> Dict[str, Any]:
-    """Fetch real pod signals for AI endpoints."""
+# ============================================================================
+# SHARED DATA LAYER — _fetch_cluster_context + _answer_engine
+# ============================================================================
+
+async def _fetch_cluster_context(cluster: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Fetch ALL data domains for a cluster (or aggregate all clusters).
+    Single cluster  → reads 1 latest row from agent_metrics.
+    All clusters    → aggregates all clusters; each pod/resource tagged with _cluster.
+    """
     try:
         from database.db import db_manager
         clusters = db_manager.get_all_clusters()
         if not clusters:
             return {}
-        cluster_name = cluster or clusters[0]["cluster_name"]
-        metrics = db_manager.get_latest_metrics(cluster_name)
-        if not metrics:
+
+        def _safe(raw) -> Any:
+            if raw is None:
+                return {}
+            if isinstance(raw, str):
+                import json as _j
+                try:
+                    return _j.loads(raw)
+                except Exception:
+                    return {}
+            return raw
+
+        def _extract(metrics: Dict) -> Dict:
+            pods_d  = _safe(metrics.get("pods"))
+            finops_d = _safe(metrics.get("finops"))
+            stor_d  = _safe(metrics.get("storage"))
+            obs_d   = _safe(metrics.get("observability"))
+            wl_d    = _safe(metrics.get("workloads"))
+            cm_d    = _safe(metrics.get("configmaps"))
+            sec_d   = _safe(metrics.get("secrets_domain"))
+            ns_raw  = _safe(metrics.get("namespaces"))
+            return {
+                "pods":             pods_d.get("items", []),
+                "oom_events":       pods_d.get("oom_events", []),
+                "restart_analysis": pods_d.get("restart_analysis", []),
+                "namespace_resources": finops_d.get("namespace_resources", []),
+                "pvcs":             (_safe(stor_d.get("pvcs"))).get("items", []),
+                "orphaned_pvcs":    (_safe(stor_d.get("pvcs"))).get("orphaned", []),
+                "warning_events":   (_safe(obs_d.get("events"))).get("warning_events", []),
+                "deployments":      (_safe(wl_d.get("deployments"))).get("items", []),
+                "configmaps":       cm_d.get("items", []),
+                "secrets":          sec_d.get("items", []),
+                "namespaces":       ns_raw.get("items", []) if isinstance(ns_raw, dict) else
+                                    (ns_raw if isinstance(ns_raw, list) else []),
+                "finops":           finops_d,
+                "storage":          stor_d,
+                "observability":    obs_d,
+                "workloads":        wl_d,
+            }
+
+        if cluster:
+            metrics = db_manager.get_latest_metrics(cluster)
+            if not metrics:
+                return {}
+            data = _extract(metrics)
+            data["cluster_name"] = cluster
+            return data
+
+        # All clusters — aggregate and tag each item with _cluster
+        list_keys = ["pods", "oom_events", "restart_analysis", "namespace_resources",
+                     "pvcs", "orphaned_pvcs", "warning_events", "deployments",
+                     "configmaps", "secrets", "namespaces"]
+        agg: Dict[str, Any] = {k: [] for k in list_keys}
+        agg["cluster_name"] = "all"
+        agg.update({"finops": {}, "storage": {}, "observability": {}, "workloads": {}})
+
+        for c in clusters:
+            cname = c["cluster_name"]
+            metrics = db_manager.get_latest_metrics(cname)
+            if not metrics:
+                continue
+            d = _extract(metrics)
+            for k in list_keys:
+                for item in d.get(k, []):
+                    if isinstance(item, dict):
+                        item["_cluster"] = cname
+                    agg[k].append(item)
+        return agg
+    except Exception as e:
+        logger.error(f"_fetch_cluster_context error: {e}")
+        return {}
+
+
+# ── Beginner detection ────────────────────────────────────────────────────────
+
+_K8S_TERMS = {
+    "pod", "pods", "deployment", "namespace", "container", "kubectl",
+    "node", "cluster", "pvc", "configmap", "daemonset", "statefulset",
+    "hpa", "rbac", "ingress", "service", "cpu", "memory", "oom",
+    "oomkill", "throttl", "evict", "replica", "liveness", "readiness",
+    "cis", "pci", "cve", "securitycontext", "privileged",
+}
+
+def _is_beginner(query: str) -> bool:
+    words = set(query.lower().split())
+    return not bool(words & _K8S_TERMS)
+
+
+# ── Intent routing ────────────────────────────────────────────────────────────
+
+def _detect_intent(query: str) -> str:
+    q = query.lower()
+    if any(w in q for w in ["crash", "restart", "oomkill", "oom kill", "kill", "evict", "broken", "down", "fail"]):
+        return "incident"
+    if any(w in q for w in ["cost", "expensive", "money", "spend", "bill", "save", "waste", "cheap"]):
+        return "cost"
+    if any(w in q for w in ["security", "vulnerab", "privileged", "root", "cve", "attack", "hack", "exploit"]):
+        return "security"
+    if any(w in q for w in ["memory", "oom", "ram", "heap", "leak"]):
+        return "memory"
+    if any(w in q for w in ["storage", "disk", "pvc", "volume", "pv "]):
+        return "storage"
+    if any(w in q for w in ["cpu", "throttl", "slow", "performance", "latency", "speed"]):
+        return "cpu"
+    if any(w in q for w in ["health", "status", "overview", "summary", "how is", "what is", "show me"]):
+        return "health"
+    return "health"
+
+
+# ── 7 response builders ───────────────────────────────────────────────────────
+
+def _build_incident_answer(ctx: Dict, beginner: bool) -> Dict:
+    oom = ctx.get("oom_events", [])
+    restarts = sorted(ctx.get("restart_analysis", []), key=lambda x: x.get("restart_count", 0), reverse=True)
+    warnings = ctx.get("warning_events", [])
+
+    resources = []
+    lines = []
+
+    if oom:
+        top = oom[:3]
+        for e in top:
+            name = e.get("pod_name") or e.get("name", "unknown")
+            ns = e.get("namespace", "")
+            resources.append({"type": "Pod", "name": name, "namespace": ns})
+        lines.append(f"**OOMKill events:** {len(oom)} detected — top pods: " +
+                     ", ".join(e.get("pod_name") or e.get("name", "?") for e in top))
+
+    if restarts:
+        top_r = restarts[:3]
+        for r in top_r:
+            resources.append({"type": "Pod", "name": r.get("name", "?"), "namespace": r.get("namespace", "")})
+        lines.append(f"**High-restart pods:** " +
+                     ", ".join(f"{r.get('name','?')} ({r.get('restart_count',0)} restarts)" for r in top_r))
+
+    if warnings:
+        lines.append(f"**Warning events:** {len(warnings)} Kubernetes warning events in the last snapshot")
+
+    if not lines:
+        lines = ["No active incidents found in the latest cluster snapshot."]
+
+    if beginner:
+        response = (
+            "Think of your cluster like a fleet of workers. Some workers keep fainting (crashing) "
+            "and getting replaced — that means something is wrong.\n\n" +
+            "\n".join(lines) + "\n\n"
+            "The fixes: give the fainting workers more memory, or find out why they keep running out."
+        )
+    else:
+        response = "\n".join(lines)
+
+    return {
+        "response": response,
+        "confidence": 0.91 if (oom or restarts) else 0.60,
+        "related_resources": resources[:5],
+        "suggestions": [
+            "Show me which pods have the most restarts",
+            "What is causing the OOMKills?",
+            "How do I increase memory limits?",
+            "Show me all warning events",
+        ],
+    }
+
+
+def _build_cost_answer(ctx: Dict, beginner: bool) -> Dict:
+    ns_resources = ctx.get("namespace_resources", [])
+    pods = ctx.get("pod_cost_analysis", ctx.get("pods", []))
+    orphaned = ctx.get("orphaned_pvcs", [])
+
+    CPU_PER_CORE_MONTH = 0.031 * 24 * 30
+    MEM_PER_GB_MONTH   = 0.0035 * 24 * 30
+
+    ns_costs = []
+    for ns in ns_resources:
+        cpu_cores = (ns.get("total_cpu_request_m") or 0) / 1000
+        mem_gb    = (ns.get("total_memory_request_mb") or 0) / 1024
+        cost      = round(cpu_cores * CPU_PER_CORE_MONTH + mem_gb * MEM_PER_GB_MONTH, 2)
+        ns_costs.append({"namespace": ns.get("namespace", "?"), "_cluster": ns.get("_cluster", ""), "cost": cost})
+    ns_costs.sort(key=lambda x: x["cost"], reverse=True)
+
+    total_cost = sum(n["cost"] for n in ns_costs)
+    top_ns = ns_costs[:3]
+
+    # Over-provisioned pods (cpu_request > 3× rough threshold)
+    over_prov = [p for p in pods if (p.get("cpu_request_m") or 0) > 1000][:5]
+
+    resources = [{"type": "Namespace", "name": n["namespace"], "namespace": ""} for n in top_ns]
+    lines = []
+    if top_ns:
+        lines.append(f"**Total estimated monthly cost:** ${total_cost:,.0f}")
+        lines.append("**Top cost namespaces:**")
+        for n in top_ns:
+            suffix = f" [{n['_cluster']}]" if n.get("_cluster") and n["_cluster"] != "all" else ""
+            lines.append(f"  - {n['namespace']}{suffix}: ${n['cost']:,.0f}/mo")
+    if orphaned:
+        lines.append(f"**Orphaned PVCs:** {len(orphaned)} unused volumes wasting storage")
+    if over_prov:
+        lines.append(f"**Over-provisioned pods:** {len(over_prov)} pods requesting >1 CPU core each")
+
+    if not lines:
+        lines = ["No cost data available yet. Ensure the agent is collecting finops metrics."]
+
+    if beginner:
+        response = (
+            "Your cloud bill works like a hotel — you pay for the rooms you reserve, not just the ones you use. "
+            "Right now you have reserved more rooms than guests.\n\n" +
+            "\n".join(lines) + "\n\n"
+            "Quick wins: reduce over-reserved resources and delete unused storage volumes."
+        )
+    else:
+        response = "\n".join(lines)
+
+    return {
+        "response": response,
+        "confidence": 0.93 if ns_costs else 0.55,
+        "related_resources": resources[:5],
+        "suggestions": [
+            "Which namespace wastes the most CPU?",
+            "Show me unused PVCs",
+            "List over-provisioned pods",
+            "How much can I save by right-sizing?",
+        ],
+    }
+
+
+def _build_memory_answer(ctx: Dict, beginner: bool) -> Dict:
+    oom = ctx.get("oom_events", [])
+    pods = ctx.get("pods", [])
+    high_mem = sorted(
+        [p for p in pods if (p.get("memory_request_mb") or 0) > 512],
+        key=lambda x: x.get("memory_request_mb", 0), reverse=True
+    )[:5]
+
+    resources = []
+    lines = []
+    if oom:
+        lines.append(f"**OOMKilled pods:** {len(oom)} — these pods ran out of memory and were killed")
+        for e in oom[:3]:
+            name = e.get("pod_name") or e.get("name", "?")
+            resources.append({"type": "Pod", "name": name, "namespace": e.get("namespace", "")})
+    if high_mem:
+        lines.append("**Highest memory consumers:**")
+        for p in high_mem:
+            lines.append(f"  - {p.get('name','?')} ({p.get('namespace','')}) — "
+                         f"{p.get('memory_request_mb',0):.0f} Mi requested")
+            resources.append({"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")})
+
+    if not lines:
+        lines = ["No memory pressure signals found in the latest cluster snapshot."]
+
+    if beginner:
+        response = (
+            "Memory in Kubernetes is like RAM in a computer — when a program needs more than available, "
+            "it gets force-quit (OOMKilled). Your cluster has pods hitting this limit.\n\n" +
+            "\n".join(lines)
+        )
+    else:
+        response = "\n".join(lines)
+
+    return {
+        "response": response,
+        "confidence": 0.90 if oom else 0.65,
+        "related_resources": resources[:5],
+        "suggestions": [
+            "Which pods keep getting OOMKilled?",
+            "How do I increase memory limits?",
+            "Show me pods with memory leaks",
+            "What is a safe memory limit to set?",
+        ],
+    }
+
+
+def _build_cpu_answer(ctx: Dict, beginner: bool) -> Dict:
+    pods = ctx.get("pods", [])
+    high_cpu = sorted(
+        [p for p in pods if (p.get("cpu_request_m") or 0) > 500],
+        key=lambda x: x.get("cpu_request_m", 0), reverse=True
+    )[:5]
+    no_limit = [p for p in pods if not p.get("cpu_limit_m")][:3]
+
+    resources = []
+    lines = []
+    if high_cpu:
+        lines.append("**Top CPU consumers (by request):**")
+        for p in high_cpu:
+            lines.append(f"  - {p.get('name','?')} ({p.get('namespace','')}) — "
+                         f"{p.get('cpu_request_m',0)}m CPU requested")
+            resources.append({"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")})
+    if no_limit:
+        lines.append(f"**No CPU limit set:** {len(no_limit)} pods have no cpu limit — "
+                     "they can starve other workloads")
+
+    if not lines:
+        lines = ["No CPU pressure signals found in the latest cluster snapshot."]
+
+    if beginner:
+        response = (
+            "CPU in Kubernetes is like a highway — some cars (pods) are reserving 4 lanes but only using 1. "
+            "This wastes space and slows everyone else down.\n\n" +
+            "\n".join(lines)
+        )
+    else:
+        response = "\n".join(lines)
+
+    return {
+        "response": response,
+        "confidence": 0.88 if high_cpu else 0.60,
+        "related_resources": resources[:5],
+        "suggestions": [
+            "Which pods have no CPU limits?",
+            "Show me over-provisioned deployments",
+            "How do I set CPU requests correctly?",
+            "What is CPU throttling?",
+        ],
+    }
+
+
+def _build_security_answer(ctx: Dict, beginner: bool) -> Dict:
+    pods = ctx.get("pods", [])
+    priv_pods   = [p for p in pods if any(c.get("privileged") for c in (p.get("containers") or []))]
+    root_pods   = [p for p in pods if any(c.get("run_as_root") for c in (p.get("containers") or []))]
+    host_net    = [p for p in pods if p.get("host_network")]
+
+    resources = []
+    lines = []
+    if priv_pods:
+        lines.append(f"**CRITICAL — Privileged containers:** {len(priv_pods)} pods running with full host access")
+        for p in priv_pods[:3]:
+            resources.append({"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")})
+    if root_pods:
+        lines.append(f"**CRITICAL — Root containers:** {len(root_pods)} pods running as UID 0")
+        for p in root_pods[:3]:
+            resources.append({"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")})
+    if host_net:
+        lines.append(f"**HIGH — Host network pods:** {len(host_net)} pods bypass network isolation")
+
+    score_issues = len(priv_pods) + len(root_pods) + len(host_net)
+    if not lines:
+        lines = ["No critical security issues detected in the latest cluster snapshot."]
+
+    if beginner:
+        response = (
+            "Security issues in your cluster are like leaving keys under the doormat — "
+            "some containers have way too much access to the underlying machine.\n\n" +
+            "\n".join(lines) + "\n\n"
+            "Fix: patch the containers to run with minimal permissions."
+        )
+    else:
+        response = "\n".join(lines)
+
+    return {
+        "response": response,
+        "confidence": 0.95 if score_issues > 0 else 0.70,
+        "related_resources": resources[:5],
+        "suggestions": [
+            "Show me all privileged containers",
+            "How do I fix root containers?",
+            "What compliance frameworks am I failing?",
+            "Apply security hardening to all pods",
+        ],
+    }
+
+
+def _build_storage_answer(ctx: Dict, beginner: bool) -> Dict:
+    orphaned = ctx.get("orphaned_pvcs", [])
+    pvcs     = ctx.get("pvcs", [])
+
+    resources = []
+    lines = []
+    if orphaned:
+        total_gb = sum((p.get("size_gb") or p.get("capacity_gb") or 0) for p in orphaned)
+        lines.append(f"**Orphaned PVCs:** {len(orphaned)} unused volumes totalling ~{total_gb:.0f} GB")
+        for p in orphaned[:3]:
+            resources.append({"type": "PVC", "name": p.get("name","?"), "namespace": p.get("namespace","")})
+    if pvcs:
+        lines.append(f"**Total PVCs:** {len(pvcs)} persistent volumes in the cluster")
+
+    if not lines:
+        lines = ["No storage issues detected. All PVCs appear to be in use."]
+
+    if beginner:
+        response = (
+            "Storage in Kubernetes is like rented warehouse space — you keep paying even when "
+            "the warehouse is empty. Some of your storage volumes have no one using them.\n\n" +
+            "\n".join(lines)
+        )
+    else:
+        response = "\n".join(lines)
+
+    return {
+        "response": response,
+        "confidence": 0.92 if orphaned else 0.65,
+        "related_resources": resources[:5],
+        "suggestions": [
+            "List all orphaned PVCs",
+            "How much storage am I wasting?",
+            "Which PVCs can I safely delete?",
+            "Show me storage cost by namespace",
+        ],
+    }
+
+
+def _build_health_overview(ctx: Dict, beginner: bool) -> Dict:
+    pods = ctx.get("pods", [])
+    oom  = ctx.get("oom_events", [])
+    restarts = ctx.get("restart_analysis", [])
+    priv_pods = [p for p in pods if any(c.get("privileged") for c in (p.get("containers") or []))]
+
+    running  = sum(1 for p in pods if p.get("phase", "").lower() == "running")
+    pending  = sum(1 for p in pods if p.get("phase", "").lower() == "pending")
+    failed   = sum(1 for p in pods if p.get("phase", "").lower() == "failed")
+
+    lines = [
+        f"**Cluster:** {ctx.get('cluster_name','?')}",
+        f"**Total pods:** {len(pods)} — Running: {running} · Pending: {pending} · Failed: {failed}",
+    ]
+    if oom:
+        lines.append(f"**OOMKill events:** {len(oom)} (pods running out of memory)")
+    if restarts:
+        high = [r for r in restarts if r.get("restart_count", 0) > 5]
+        if high:
+            lines.append(f"**Unstable pods:** {len(high)} pods with >5 restarts")
+    if priv_pods:
+        lines.append(f"**Security alert:** {len(priv_pods)} privileged containers detected")
+
+    resources = [{"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")}
+                 for p in pods[:3]]
+
+    if beginner:
+        response = (
+            "Here is a health check of your Kubernetes cluster — like a doctor's report for your infrastructure.\n\n" +
+            "\n".join(lines)
+        )
+    else:
+        response = "\n".join(lines)
+
+    return {
+        "response": response,
+        "confidence": 0.85 if pods else 0.40,
+        "related_resources": resources,
+        "suggestions": [
+            "Why is my cluster expensive?",
+            "Show me security issues",
+            "Which pods keep crashing?",
+            "Show me over-provisioned resources",
+        ],
+    }
+
+
+# ── Phase 1 → Phase 2 swappable engine ───────────────────────────────────────
+
+async def _answer_engine(query: str, ctx: Dict) -> Dict:
+    """
+    Phase 1: keyword routing over real cluster data.
+    Phase 2: auto-activates when OPENAI_API_KEY is set in environment.
+    """
+    # Phase 2 slot — activate by adding OPENAI_API_KEY to .env + restart
+    openai_key = os.environ.get("OPENAI_API_KEY", "")
+    if openai_key:
+        try:
+            return await _llm_engine(query, ctx, openai_key)
+        except Exception as e:
+            logger.warning(f"LLM engine failed, falling back to Phase 1: {e}")
+
+    # Phase 1: rule-based keyword routing
+    beginner = _is_beginner(query)
+    intent   = _detect_intent(query)
+
+    builders = {
+        "incident": _build_incident_answer,
+        "cost":     _build_cost_answer,
+        "memory":   _build_memory_answer,
+        "cpu":      _build_cpu_answer,
+        "security": _build_security_answer,
+        "storage":  _build_storage_answer,
+        "health":   _build_health_overview,
+    }
+    return builders[intent](ctx, beginner)
+
+
+async def _llm_engine(query: str, ctx: Dict, api_key: str) -> Dict:
+    """
+    Phase 2: OpenAI gpt-4o-mini with real cluster data as context.
+    Only called when OPENAI_API_KEY is set.
+    Falls back to Phase 1 if called without key or on API error.
+    """
+    import openai
+
+    pod_summary = "\n".join(
+        f"  - {p.get('name','?')} ns={p.get('namespace','?')} "
+        f"cpu={p.get('cpu_request_m',0)}m mem={p.get('memory_request_mb',0)}Mi "
+        f"restarts={p.get('restart_count',0)} phase={p.get('phase','?')}"
+        for p in (ctx.get("pods") or [])[:20]
+    ) or "  (no pod data)"
+
+    oom_summary = "\n".join(
+        f"  - {e.get('pod_name') or e.get('name','?')} ns={e.get('namespace','?')}"
+        for e in (ctx.get("oom_events") or [])[:5]
+    ) or "  (none)"
+
+    system_prompt = (
+        "You are an expert Kubernetes optimization AI. Answer in plain, direct language. "
+        "Use the real cluster data below. Be specific — use actual pod names and numbers. "
+        "Format with markdown bold for important items. Keep answers under 200 words."
+    )
+    user_prompt = (
+        f"Cluster: {ctx.get('cluster_name','?')}\n\n"
+        f"Pods (top 20):\n{pod_summary}\n\n"
+        f"OOMKill events:\n{oom_summary}\n\n"
+        f"Question: {query}"
+    )
+
+    client = openai.AsyncOpenAI(api_key=api_key)
+    completion = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        temperature=0.3,
+        max_tokens=400,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user",   "content": user_prompt},
+        ],
+    )
+    answer = completion.choices[0].message.content or ""
+
+    return {
+        "response": answer,
+        "confidence": 0.97,
+        "related_resources": [
+            {"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")}
+            for p in (ctx.get("pods") or [])[:3]
+        ],
+        "suggestions": [
+            "Show me the most expensive namespace",
+            "Which pods are crashing?",
+            "What security issues exist?",
+            "Give me a full health overview",
+        ],
+    }
+
+
+async def _ai_security_context(cluster: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Fetch real pod signals for AI security/compliance endpoints.
+    FIXED: All-Clusters no longer silently falls back to clusters[0].
+    Now aggregates pods across ALL clusters via _fetch_cluster_context.
+    """
+    try:
+        ctx = await _fetch_cluster_context(cluster)
+        if not ctx:
             return {}
-        pods_domain = metrics.get("pods") or {}
-        if isinstance(pods_domain, str):
-            import json
-            pods_domain = json.loads(pods_domain)
-        pods = pods_domain.get("items", [])
+        pods = ctx.get("pods", [])
     except Exception as e:
         logger.error(f"_ai_security_context: {e}")
         pods = []
@@ -103,7 +654,8 @@ class QueryType(str, Enum):
 
 class CopilotQuery(BaseModel):
     query: str
-    query_type: QueryType
+    query_type: QueryType = QueryType.NATURAL_LANGUAGE
+    cluster: Optional[str] = None          # which cluster to scope (None = all clusters)
     context: Optional[Dict[str, Any]] = None
 
 class CopilotResponse(BaseModel):
@@ -117,81 +669,35 @@ class CopilotResponse(BaseModel):
 
 @router.post("/copilot/query", response_model=CopilotResponse)
 async def query_copilot(query: CopilotQuery):
-    """AI Copilot - Natural language query interface"""
-    query_id = f"q-{random.randint(1000, 9999)}"
+    """
+    AI Copilot — Natural language query interface.
+    Phase 1: keyword routing over real Postgres cluster data.
+    Phase 2: auto-activates when OPENAI_API_KEY is set in .env.
+    """
+    query_id  = f"q-{random.randint(10000, 99999)}"
     timestamp = datetime.utcnow().isoformat() + "Z"
-    
-    # Simulate AI response based on query type
-    responses = {
-        QueryType.NATURAL_LANGUAGE: {
-            "response": f"Based on your query '{query.query}', I found that your cluster has 45 pods with CPU over-provisioning. The average CPU utilization is 23%, while requests are set to 2000m. I recommend reducing CPU requests to 500m for better resource efficiency.",
-            "suggestions": [
-                "Review CPU requests for high-waste pods",
-                "Enable horizontal pod autoscaling",
-                "Set resource quotas per namespace",
-                "Monitor CPU throttling metrics"
-            ],
-            "related_resources": [
-                {"type": "Pod", "name": "frontend-web-7d9f8", "namespace": "production"},
-                {"type": "Pod", "name": "api-server-5c8b2", "namespace": "production"},
-                {"type": "Deployment", "name": "backend-api", "namespace": "production"}
-            ]
-        },
-        QueryType.OPTIMIZATION: {
-            "response": "I've analyzed your cluster and identified 12 optimization opportunities that could save $4,200/month. The top recommendations include right-sizing 8 over-provisioned deployments, removing 3 unused PVCs, and enabling cluster autoscaling.",
-            "suggestions": [
-                "Right-size frontend-web deployment (save $800/mo)",
-                "Remove unused PVC 'old-data-vol' (save $120/mo)",
-                "Enable cluster autoscaler (save $1,200/mo)",
-                "Consolidate low-utilization nodes (save $2,080/mo)"
-            ],
-            "related_resources": [
-                {"type": "Deployment", "name": "frontend-web", "namespace": "production"},
-                {"type": "PVC", "name": "old-data-vol", "namespace": "staging"},
-                {"type": "Node", "name": "worker-node-3", "namespace": ""}
-            ]
-        },
-        QueryType.SECURITY: {
-            "response": "Security scan complete. Found 3 critical vulnerabilities: 2 containers running as root, 1 exposed secret in environment variables, and 4 images with high-severity CVEs. Immediate action recommended for root containers.",
-            "suggestions": [
-                "Update nginx container to run as non-root user",
-                "Move database password to Kubernetes secret",
-                "Upgrade redis image to patch CVE-2024-1234",
-                "Enable Pod Security Standards"
-            ],
-            "related_resources": [
-                {"type": "Pod", "name": "nginx-proxy-8f7d", "namespace": "production"},
-                {"type": "Deployment", "name": "api-server", "namespace": "production"},
-                {"type": "Pod", "name": "redis-cache-9k2l", "namespace": "cache"}
-            ]
-        },
-        QueryType.INCIDENT: {
-            "response": "Incident analysis shows that the recent OOMKill events in the 'api-server' deployment are caused by memory leaks in the application. Memory usage grows from 512Mi to 4Gi over 6 hours. Root cause: unclosed database connections.",
-            "suggestions": [
-                "Increase memory limit to 6Gi as temporary fix",
-                "Implement connection pooling in application code",
-                "Add memory leak detection monitoring",
-                "Set up automatic pod restart on high memory"
-            ],
-            "related_resources": [
-                {"type": "Pod", "name": "api-server-7c9d8", "namespace": "production"},
-                {"type": "Event", "name": "OOMKilled", "namespace": "production"},
-                {"type": "Deployment", "name": "api-server", "namespace": "production"}
-            ]
-        }
-    }
-    
-    response_data = responses.get(query.query_type, responses[QueryType.NATURAL_LANGUAGE])
-    
-    return CopilotResponse(
-        query_id=query_id,
-        query=query.query,
-        response=response_data["response"],
-        suggestions=response_data["suggestions"],
-        related_resources=response_data["related_resources"],
-        confidence=0.92,
-        timestamp=timestamp
-    )
+
+    try:
+        ctx = await _fetch_cluster_context(query.cluster)
+        if not ctx:
+            raise HTTPException(status_code=503, detail="No cluster data available. Ensure the agent is running.")
+
+        result = await _answer_engine(query.query, ctx)
+
+        return CopilotResponse(
+            query_id=query_id,
+            query=query.query,
+            response=result["response"],
+            suggestions=result.get("suggestions", []),
+            related_resources=result.get("related_resources", []),
+            confidence=result.get("confidence", 0.80),
+            timestamp=timestamp,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"query_copilot error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/copilot/optimization-advisor")
 async def get_optimization_advisor():
