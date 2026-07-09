@@ -127,34 +127,9 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
       if (clerkUser?.id) {
         headers['X-Clerk-User-Id'] = clerkUser.id;
       }
-      // Use the agent-receiver endpoint — this is the authoritative cluster
-      // registry. The legacy /api/clusters endpoint returns an empty list.
-      const res = await fetch(`${API_BASE}/api/agents/clusters`, { headers });
+      const res = await fetch(`${API_BASE}/api/clusters`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const body = await res.json();
-      // Response shape: { total_clusters: N, clusters: [ { cluster_name, environment,
-      //   cloud_provider, region, version, status, ... } ] }
-      const rawList: any[] = body.clusters ?? (Array.isArray(body) ? body : []);
-      const data: ClusterInfo[] = rawList.map((c) => ({
-        id: c.cluster_name,
-        name: c.cluster_name,
-        environment: c.environment ?? 'production',
-        region: c.region ?? '',
-        provider: c.cloud_provider ?? '',
-        version: c.version ?? '',
-        status: c.status === 'active' ? 'healthy' : c.status ?? 'healthy',
-        nodes: c.nodes ?? 0,
-        pods: c.pods ?? 0,
-        namespaces: c.namespaces ?? 0,
-        cpu_capacity: c.cpu_capacity ?? '',
-        memory_capacity: c.memory_capacity ?? '',
-        cpu_usage: c.cpu_usage ?? '',
-        memory_usage: c.memory_usage ?? '',
-        health_score: c.health_score ?? 0,
-        monthly_cost: c.monthly_cost ?? 0,
-        potential_savings: c.potential_savings ?? 0,
-        last_updated: c.last_seen ?? c.registered_at ?? '',
-      }));
+      const data: ClusterInfo[] = await res.json();
       dispatch(setClusters(data));
     } catch (err: any) {
       dispatch(fetchError(err?.message ?? 'Failed to load clusters'));
