@@ -134,17 +134,19 @@ async def list_clusters(
     Pass X-Clerk-User-Id header to enable scoping.
     """
     org_id = _resolve_org_id(x_clerk_user_id)
+    # Unknown / unregistered Clerk users fall back to "default" so they still
+    # see all clusters rather than an empty list.
+    effective_org = org_id if org_id is not None else "default"
     clusters = []
 
     # PRIORITY 1: Agent-registered clusters (org-scoped)
     try:
-        if org_id is not None:
-            agent_clusters = db_manager.get_clusters_by_org(org_id)
-            if agent_clusters:
-                logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={org_id})")
-                clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
-            else:
-                logging.info(f"No agent-registered clusters found for org={org_id}")
+        agent_clusters = db_manager.get_clusters_by_org(effective_org)
+        if agent_clusters:
+            logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={effective_org})")
+            clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
+        else:
+            logging.info(f"No agent-registered clusters found for org={effective_org}")
     except Exception as e:
         logging.warning(f"DB lookup failed: {e}")
 

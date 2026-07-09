@@ -80,57 +80,56 @@ const Dashboard: React.FC = () => {
   });
 
   useEffect(() => {
+    // Only compute once clusters have loaded to avoid a zero-count first render
+    if (clustersLoading) return;
     fetchDashboardData();
     fetchSimulationMetrics();
 
     // Poll simulation metrics every 5 seconds for real-time updates
     const interval = setInterval(fetchSimulationMetrics, 5000);
     return () => clearInterval(interval);
+    // clusters ensures re-compute when cluster list loads or changes
     // clusterParam ensures re-fetch when user switches cluster or deletes one
-  }, [filters, clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filters, clusterParam, clusters, clustersLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch registered clusters from agent receiver
-      const clustersRes = await fetch(`${API_BASE_URL}/agents/clusters`);
-      if (!clustersRes.ok) throw new Error('Failed to fetch clusters');
-      const clustersData = await clustersRes.json();
-      const agentClusters: any[] = clustersData.clusters ?? [];
+      const visibleClusters = clusters.filter((cluster) =>
+        activeClusterName === 'All Clusters' ? true : cluster.name === activeClusterName || cluster.id === activeClusterName
+      );
 
-      // Aggregate metrics across all agent clusters
-      let totalNodes = 0, totalPods = 0, totalNamespaces = 0;
-      for (const c of agentClusters) {
-        const mRes = await fetch(`${API_BASE_URL}/agents/clusters/${c.cluster_name}/metrics`);
-        if (!mRes.ok) {
-          console.warn(
-            `[Dashboard] metrics fetch failed for cluster "${c.cluster_name}": ` +
-            `HTTP ${mRes.status} — nodes will count as 0 for this cluster.`
-          );
-          continue;
-        }
-        const m = await mRes.json();
-        // Prefer nodes.count; fall back to nodes.items.length in case the
-        // agent sent items but the count key was missing (e.g. partial payload).
-        const nodeItems: unknown[] = m.nodes?.items ?? [];
-        totalNodes += m.nodes?.count ?? nodeItems.length;
-        totalPods += m.pods?.total ?? 0;
-        totalNamespaces += m.namespaces?.count ?? 0;
+      let totalNodes = 0;
+      let totalPods = 0;
+      let totalNamespaces = 0;
+      let totalHealthScore = 0;
+      let monthlyCost = 0;
+      let potentialSavings = 0;
+
+      for (const cluster of visibleClusters) {
+        totalNodes += cluster.nodes ?? 0;
+        totalPods += cluster.pods ?? 0;
+        totalNamespaces += cluster.namespaces ?? 0;
+        totalHealthScore += cluster.health_score ?? 0;
+        monthlyCost += cluster.monthly_cost ?? 0;
+        potentialSavings += cluster.potential_savings ?? 0;
       }
 
+      const totalClusters = visibleClusters.length;
+
       setSummary({
-        total_clusters: agentClusters.length,
+        total_clusters: totalClusters,
         total_nodes: totalNodes,
         total_pods: totalPods,
         total_namespaces: totalNamespaces,
-        monthly_cost: 0,
-        potential_savings: 0,
+        monthly_cost: Math.round(monthlyCost * 100) / 100,
+        potential_savings: Math.round(potentialSavings * 100) / 100,
         resources_optimized: 0,
-        resources_pending: 0,
+        resources_pending: totalPods,
         unused_resources: 0,
-        cluster_health_score: 0,
+        cluster_health_score: totalClusters > 0 ? Math.round(totalHealthScore / totalClusters) : 0,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -148,14 +147,12 @@ const Dashboard: React.FC = () => {
       if (response.ok) {
         const data = await response.json();
         setSimulationMetrics(data);
-        
-        // Update summary with real-time simulation data
+        // Only pull cost/savings from simulation — do NOT overwrite cluster/pod
+        // counts which come from real agent metrics fetched in fetchDashboardData.
         setSummary(prev => prev ? {
           ...prev,
-          total_clusters: data.total_clusters,
-          total_pods: data.total_pods,
-          monthly_cost: data.current_monthly_cost,
-          potential_savings: data.potential_savings
+          monthly_cost: data.current_monthly_cost || prev.monthly_cost,
+          potential_savings: data.potential_savings || prev.potential_savings,
         } : null);
       }
     } catch (err) {
