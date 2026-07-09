@@ -214,19 +214,33 @@ def _to_response(u: dict) -> UserResponse:
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@router.get("/org/{org_id}/exists")
+async def org_exists(org_id: str):
+    """
+    Check whether an org already has at least one approved admin.
+    Frontend uses this to decide Create vs Join flow.
+    """
+    members = [u for u in USER_REGISTRY.values()
+               if u.get("org_id") == org_id and u.get("status") == "approved"]
+    admin = next((u for u in members if u.get("role") == "admin"), None)
+    return {
+        "exists": len(members) > 0,
+        "has_admin": admin is not None,
+        "admin_email": admin["email"] if admin else None,
+    }
+
+
 @router.post("/register", response_model=UserResponse, status_code=201)
 async def register_user(req: UserRegistrationRequest):
     """
-    Called after a Clerk sign-up to register the user in the platform store.
-    The very first user to register is automatically approved as admin so the
-    platform is immediately usable without a chicken-and-egg approval problem.
-    Subsequent users start in 'pending' state until an admin approves.
-    If the user already exists (re-registration after logout) we return the
-    existing record so the frontend can show the current status.
+    Registration logic:
+    - If user already exists → return existing record (idempotent re-registration).
+    - If org_id is NEW (no approved members yet) → auto-approve as admin of that org.
+    - If org_id is EXISTING → create as pending; the org's admin will approve.
+    - Edge case: very first user on the whole platform → auto-approve as admin.
     """
     # Return existing record if already registered.
-    # Exception: if the stored org_id is still 'default' and the caller provides
-    # a real org_id (onboarding step), patch it before returning.
+    # Patch org_id if it was still 'default' (user went through onboarding after initial register).
     existing = next(
         (u for u in USER_REGISTRY.values() if u["clerk_user_id"] == req.clerk_user_id),
         None,
@@ -241,9 +255,22 @@ async def register_user(req: UserRegistrationRequest):
     role = req.requested_role if req.requested_role in VALID_ROLES else "viewer"
     teams = [t for t in req.requested_teams if t in VALID_TEAMS]
 
-    # First user ever → auto-approve as admin so the app is immediately usable
-    all_users = USER_REGISTRY.values()
-    is_first_user = len(all_users) == 0
+    org_id = req.org_id or "default"
+
+    # Determine if this is a brand-new org (no approved members yet)
+    # OR the very first user ever on the platform.
+    all_users = list(USER_REGISTRY.values())
+    is_first_ever = len(all_users) == 0
+    org_has_approved_members = any(
+        u.get("org_id") == org_id and u.get("status") == "approved"
+        for u in all_users
+    )
+    # First user of a new org → auto-approve as admin
+    is_org_founder = not org_has_approved_members
+
+    auto_approve = is_first_ever or is_org_founder
+    assigned_role = "admin" if auto_approve else role
+    assigned_status = "approved" if auto_approve else "pending"
 
     uid = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
@@ -253,22 +280,22 @@ async def register_user(req: UserRegistrationRequest):
         "username": req.username,
         "email": req.email,
         "full_name": req.full_name,
-        "role": "admin" if is_first_user else role,
+        "role": assigned_role,
         "teams": teams,
-        "status": "approved" if is_first_user else "pending",
+        "status": assigned_status,
         "mfa_enabled": False,
         "last_login": None,
         "registered_at": now,
-        "approved_at": now if is_first_user else None,
-        "approved_by": "system" if is_first_user else None,
-        "notes": "Auto-approved: first user" if is_first_user else None,
-        "org_id": req.org_id or "default",
+        "approved_at": now if auto_approve else None,
+        "approved_by": "system" if auto_approve else None,
+        "notes": "Auto-approved: org founder" if auto_approve else None,
+        "org_id": org_id,
     }
     USER_REGISTRY.save(user)
-    if is_first_user:
-        logger.info(f"First user auto-approved as admin: {req.email} (clerk_id={req.clerk_user_id})")
+    if auto_approve:
+        logger.info(f"Org founder auto-approved as admin: {req.email} org={org_id}")
     else:
-        logger.info(f"New user registered (pending): {req.email} (clerk_id={req.clerk_user_id})")
+        logger.info(f"New user pending approval: {req.email} org={org_id}")
     return _to_response(user)
 
 

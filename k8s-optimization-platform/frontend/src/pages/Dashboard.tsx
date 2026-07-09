@@ -113,6 +113,9 @@ const Dashboard: React.FC = () => {
       let monthlyCost = 0;
       let potentialSavings = 0;
       let clustersWithMetrics = 0;
+      let runningPods = 0;
+      let pendingPods = 0;
+      let failedPods = 0;
 
       // Cost constants — matches backend _calculate_costs()
       const CPU_COST_PER_CORE_HOUR = 0.04;
@@ -131,8 +134,11 @@ const Dashboard: React.FC = () => {
 
         const nodeItems: unknown[] = nodesData.items ?? [];
         totalNodes += nodesData.count ?? nodeItems.length;
-        totalPods += podsData.total ?? 0;
+        totalPods += podsData.total ?? (podsData.items ?? []).length;
         totalNamespaces += namespacesData.count ?? 0;
+        runningPods += podsData.running ?? 0;
+        pendingPods += podsData.pending ?? 0;
+        failedPods += podsData.failed ?? 0;
 
         const cpuCap: number = nodesData.cpu_capacity_cores ?? resourcesData.cpu_capacity_cores ?? 0;
         const memCap: number = nodesData.memory_capacity_gb ?? resourcesData.memory_capacity_gb ?? 0;
@@ -157,18 +163,19 @@ const Dashboard: React.FC = () => {
 
       const totalClusters = targetClusters.length;
 
-      setSummary({
+      setSummary(prev => ({
         total_clusters: totalClusters,
         total_nodes: totalNodes,
         total_pods: totalPods,
         total_namespaces: totalNamespaces,
-        monthly_cost: Math.round(monthlyCost * 100) / 100,
-        potential_savings: Math.round(potentialSavings * 100) / 100,
-        resources_optimized: 0,
-        resources_pending: totalPods,
-        unused_resources: 0,
+        // Prefer simulation cost if it already loaded a non-zero value, otherwise use computed
+        monthly_cost: (prev?.monthly_cost && prev.monthly_cost > 0) ? prev.monthly_cost : Math.round(monthlyCost * 100) / 100,
+        potential_savings: (prev?.potential_savings && prev.potential_savings > 0) ? prev.potential_savings : Math.round(potentialSavings * 100) / 100,
+        resources_optimized: runningPods,
+        resources_pending: pendingPods,
+        unused_resources: failedPods,
         cluster_health_score: clustersWithMetrics > 0 ? Math.round(totalHealthScore / clustersWithMetrics) : 0,
-      });
+      }));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setSummary(null);
@@ -189,8 +196,8 @@ const Dashboard: React.FC = () => {
         // counts which come from real agent metrics fetched in fetchDashboardData.
         setSummary(prev => prev ? {
           ...prev,
-          monthly_cost: data.current_monthly_cost || prev.monthly_cost,
-          potential_savings: data.potential_savings || prev.potential_savings,
+          monthly_cost: data.current_monthly_cost > 0 ? data.current_monthly_cost : prev.monthly_cost,
+          potential_savings: data.potential_savings > 0 ? data.potential_savings : prev.potential_savings,
         } : null);
       }
     } catch (err) {
