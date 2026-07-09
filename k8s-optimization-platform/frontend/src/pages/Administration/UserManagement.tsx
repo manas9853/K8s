@@ -43,6 +43,7 @@ interface PlatformUser {
   approved_at: string | null;
   approved_by: string | null;
   notes: string | null;
+  org_id: string;
 }
 
 const roleColor: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
@@ -64,18 +65,20 @@ interface EditDialogProps {
   open: boolean;
   user: PlatformUser | null;
   onClose: () => void;
-  onSave: (id: string, role: string, teams: string[], notes: string) => void;
+  onSave: (id: string, role: string, teams: string[], notes: string, org_id: string) => void;
 }
 const EditDialog: React.FC<EditDialogProps> = ({ open, user, onClose, onSave }) => {
   const [role, setRole] = useState('viewer');
   const [teams, setTeams] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
+  const [orgId, setOrgId] = useState('');
 
   useEffect(() => {
     if (user) {
       setRole(user.role);
       setTeams(user.teams);
       setNotes(user.notes ?? '');
+      setOrgId(user.org_id ?? '');
     }
   }, [user]);
 
@@ -85,6 +88,15 @@ const EditDialog: React.FC<EditDialogProps> = ({ open, user, onClose, onSave }) 
       <DialogTitle>Edit User — {user.username}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
         <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+
+        <TextField
+          label="Organisation ID"
+          size="small"
+          value={orgId}
+          onChange={(e) => setOrgId(e.target.value)}
+          helperText="Cluster access is restricted to this org — must match the cluster's org_id"
+          required
+        />
 
         <FormControl fullWidth size="small">
           <InputLabel>Role</InputLabel>
@@ -121,7 +133,7 @@ const EditDialog: React.FC<EditDialogProps> = ({ open, user, onClose, onSave }) 
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={() => { onSave(user.id, role, teams, notes); onClose(); }}>
+        <Button variant="contained" onClick={() => { onSave(user.id, role, teams, notes, orgId); onClose(); }}>
           Save
         </Button>
       </DialogActions>
@@ -134,14 +146,19 @@ interface ApproveDialogProps {
   open: boolean;
   user: PlatformUser | null;
   onClose: () => void;
-  onApprove: (id: string, role: string, teams: string[]) => void;
+  onApprove: (id: string, role: string, teams: string[], org_id: string) => void;
 }
 const ApproveDialog: React.FC<ApproveDialogProps> = ({ open, user, onClose, onApprove }) => {
   const [role, setRole] = useState('viewer');
   const [teams, setTeams] = useState<string[]>([]);
+  const [orgId, setOrgId] = useState('');
 
   useEffect(() => {
-    if (user) { setRole(user.role || 'viewer'); setTeams(user.teams || []); }
+    if (user) {
+      setRole(user.role || 'viewer');
+      setTeams(user.teams || []);
+      setOrgId(user.org_id || '');
+    }
   }, [user]);
 
   if (!user) return null;
@@ -150,6 +167,15 @@ const ApproveDialog: React.FC<ApproveDialogProps> = ({ open, user, onClose, onAp
       <DialogTitle>Approve User — {user.username}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
         <Typography variant="body2" color="text.secondary">{user.email}</Typography>
+
+        <TextField
+          label="Organisation ID"
+          size="small"
+          value={orgId}
+          onChange={(e) => setOrgId(e.target.value)}
+          helperText="User will only see clusters belonging to this org (e.g. xforce-devops)"
+          required
+        />
 
         <FormControl fullWidth size="small">
           <InputLabel>Assign Role</InputLabel>
@@ -180,7 +206,8 @@ const ApproveDialog: React.FC<ApproveDialogProps> = ({ open, user, onClose, onAp
         <Button
           variant="contained"
           color="success"
-          onClick={() => { onApprove(user.id, role, teams); onClose(); }}
+          disabled={!orgId.trim()}
+          onClick={() => { onApprove(user.id, role, teams, orgId); onClose(); }}
         >
           Approve
         </Button>
@@ -214,9 +241,9 @@ const UserManagement: React.FC = () => {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  const callApprove = async (id: string, newStatus: string, role?: string, teams?: string[]) => {
+  const callApprove = async (id: string, newStatus: string, role?: string, teams?: string[], org_id?: string) => {
     try {
-      await axios.post(`${API_BASE}/api/v1/users/${id}/approve`, { status: newStatus, role, teams });
+      await axios.post(`${API_BASE}/api/v1/users/${id}/approve`, { status: newStatus, role, teams, org_id });
       setToast({ msg: `User ${newStatus} successfully`, severity: 'success' });
       fetchUsers();
     } catch (e: any) {
@@ -234,9 +261,9 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const callUpdate = async (id: string, role: string, teams: string[], notes: string) => {
+  const callUpdate = async (id: string, role: string, teams: string[], notes: string, org_id: string) => {
     try {
-      await axios.patch(`${API_BASE}/api/v1/users/${id}`, { role, teams, notes });
+      await axios.patch(`${API_BASE}/api/v1/users/${id}`, { role, teams, notes, org_id });
       setToast({ msg: 'User updated successfully', severity: 'success' });
       fetchUsers();
     } catch {
@@ -372,6 +399,7 @@ const UserManagement: React.FC = () => {
                 <TableCell>Username</TableCell>
                 <TableCell>Full Name</TableCell>
                 <TableCell>Email</TableCell>
+                <TableCell>Org ID</TableCell>
                 <TableCell>Role</TableCell>
                 <TableCell>Teams</TableCell>
                 <TableCell>Status</TableCell>
@@ -382,10 +410,19 @@ const UserManagement: React.FC = () => {
             <TableBody>
               {users.map((u) => (
                 <TableRow key={u.id} hover>
-                  <TableCell sx={{ fontWeight: 600 }}>{u.username}</TableCell>
-                  <TableCell>{u.full_name || '—'}</TableCell>
-                  <TableCell sx={{ fontSize: '0.8rem' }}>{u.email}</TableCell>
-                  <TableCell>
+                <TableCell sx={{ fontWeight: 600 }}>{u.username}</TableCell>
+                <TableCell>{u.full_name || '—'}</TableCell>
+                <TableCell sx={{ fontSize: '0.8rem' }}>{u.email}</TableCell>
+                <TableCell>
+                  <Chip
+                    label={u.org_id || 'unset'}
+                    size="small"
+                    variant="outlined"
+                    color={u.org_id && u.org_id !== 'default' ? 'primary' : 'default'}
+                    sx={{ fontFamily: 'monospace', fontSize: '0.75rem' }}
+                  />
+                </TableCell>
+                <TableCell>
                     <Chip
                       label={u.role}
                       color={roleColor[u.role] ?? 'default'}
@@ -463,7 +500,7 @@ const UserManagement: React.FC = () => {
         open={!!approveTarget}
         user={approveTarget}
         onClose={() => setApproveTarget(null)}
-        onApprove={(id, role, teams) => callApprove(id, 'approved', role, teams)}
+        onApprove={(id, role, teams, org_id) => callApprove(id, 'approved', role, teams, org_id)}
       />
       <EditDialog
         open={!!editTarget}

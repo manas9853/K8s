@@ -134,25 +134,23 @@ async def list_clusters(
     Pass X-Clerk-User-Id header to enable scoping.
     """
     org_id = _resolve_org_id(x_clerk_user_id)
-    # Unknown / unregistered Clerk users fall back to "default" so they still
-    # see all clusters rather than an empty list.
-    effective_org = org_id if org_id is not None else "default"
+    # No header or completely unknown user → return nothing (strict isolation).
+    # Every legitimate user must be registered and have an org_id assigned.
+    if org_id is None:
+        logging.warning("list_clusters: no valid org resolved — returning empty list")
+        return []
+
     clusters = []
 
-    # PRIORITY 1: Agent-registered clusters (org-scoped)
+    # PRIORITY 1: Agent-registered clusters — strict org isolation.
+    # Users only see clusters that belong to their own org_id.
     try:
-        agent_clusters = db_manager.get_clusters_by_org(effective_org)
-        # If the org-specific query returns nothing, fall back to all clusters.
-        # This handles the case where cluster org_id="default" but user org_id
-        # is something specific (e.g. "xforce-devops").
-        if not agent_clusters and effective_org != "default":
-            logging.info(f"No clusters for org={effective_org}, falling back to all clusters")
-            agent_clusters = db_manager.get_all_clusters()
+        agent_clusters = db_manager.get_clusters_by_org(org_id)
         if agent_clusters:
-            logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={effective_org})")
+            logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={org_id})")
             clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
         else:
-            logging.info(f"No agent-registered clusters found for org={effective_org}")
+            logging.info(f"No agent-registered clusters found for org={org_id}")
     except Exception as e:
         logging.warning(f"DB lookup failed: {e}")
 

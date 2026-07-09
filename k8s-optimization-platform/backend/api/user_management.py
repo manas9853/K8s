@@ -157,6 +157,7 @@ class UserApprovalRequest(BaseModel):
     role: Optional[str] = None
     teams: Optional[List[str]] = None
     notes: Optional[str] = None
+    org_id: Optional[str] = None   # assign org at approval time
 
 
 class UserUpdateRequest(BaseModel):
@@ -164,6 +165,7 @@ class UserUpdateRequest(BaseModel):
     teams: Optional[List[str]] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    org_id: Optional[str] = None   # reassign org
 
 
 class UserResponse(BaseModel):
@@ -358,6 +360,8 @@ async def approve_or_reject_user(
     if req.status == "approved":
         fields["approved_at"] = datetime.utcnow().isoformat()
         fields["approved_by"] = "admin"
+    if req.org_id and req.org_id.strip():
+        fields["org_id"] = req.org_id.strip()
 
     USER_REGISTRY.update(user_id, fields)
     user = USER_REGISTRY.get(user_id)
@@ -400,6 +404,8 @@ async def update_user(
         fields["status"] = req.status
     if req.notes is not None:
         fields["notes"] = req.notes
+    if req.org_id is not None and req.org_id.strip():
+        fields["org_id"] = req.org_id.strip()
 
     USER_REGISTRY.update(user_id, fields)
     user = USER_REGISTRY.get(user_id)
