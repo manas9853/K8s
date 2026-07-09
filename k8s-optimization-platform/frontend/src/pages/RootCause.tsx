@@ -157,25 +157,32 @@ const RootCauseInner: React.FC = () => {
     }
   };
 
-  // Fix action — dispatches an autofix command via the agent
+  // Fix action — enqueues a patch_deployment/daemonset_resources agent command
   const handleFix = async (issue: ResourceIssue) => {
     const key = issue.resource_name;
     setFixLoading(key);
     try {
-      const res = await fetch(`${API_BASE_URL}/v1/autofix/apply/${encodeURIComponent(issue.resource_name)}`, {
+      // Parse current_state values to extract numeric request amounts
+      const cpuStr = issue.current_state?.cpu_request ?? '0';
+      const memStr = issue.current_state?.memory_request ?? '0';
+      const cpuRequest = parseFloat(cpuStr) || 0;
+      const memRequestMb = parseFloat(memStr) || 0;
+
+      const res = await fetch(`${API_BASE_URL}/v1/root-cause/fix`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resource_name: issue.resource_name,
           namespace: issue.namespace,
           issue_type: issue.issue_type,
-          recommended_action: issue.recommended_action,
+          cpu_request: cpuRequest,
+          memory_request_mb: memRequestMb,
         }),
       });
+      const body = await res.json().catch(() => ({}));
       if (res.ok) {
-        setToast({ open: true, msg: `Fix queued for ${issue.resource_name}`, sev: 'success' });
+        setToast({ open: true, msg: body.message ?? `Fix queued for ${issue.resource_name}`, sev: 'success' });
       } else {
-        const body = await res.json().catch(() => ({}));
         setToast({ open: true, msg: body?.detail ?? `Fix failed (HTTP ${res.status})`, sev: 'error' });
       }
     } catch (e: any) {
