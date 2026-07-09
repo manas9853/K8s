@@ -383,7 +383,7 @@ const Dashboard: React.FC = () => {
               </Box>
               <Typography variant="h3">{summary?.total_pods ?? '—'}</Typography>
               <Typography variant="body2" color="text.secondary" mt={1}>
-                Running workloads
+                All pod phases (running, pending, failed)
               </Typography>
             </CardContent>
           </Card>
@@ -456,22 +456,24 @@ const Dashboard: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" gutterBottom>
-                Optimization Status
+                Pod Health
               </Typography>
-              {simulationMetrics && (
+              {summary && (
                 <Box mb={2}>
                   <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
                     <Typography variant="body2" color="text.secondary">
-                      Optimization Progress
+                      Running pods
                     </Typography>
-                    <Typography variant="body2" fontWeight="bold" color="primary">
-                      {simulationMetrics.optimization_percentage.toFixed(2)}%
+                    <Typography variant="body2" fontWeight="bold" color="success.main">
+                      {summary.total_pods > 0
+                        ? `${Math.round((summary.resources_optimized / summary.total_pods) * 100)}%`
+                        : '—'}
                     </Typography>
                   </Box>
                   <LinearProgress
                     variant="determinate"
-                    value={simulationMetrics.optimization_percentage}
-                    color="primary"
+                    value={summary.total_pods > 0 ? (summary.resources_optimized / summary.total_pods) * 100 : 0}
+                    color="success"
                     sx={{ height: 8, borderRadius: 4, mb: 2 }}
                   />
                 </Box>
@@ -482,7 +484,7 @@ const Dashboard: React.FC = () => {
                     {summary?.resources_optimized ?? '—'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Optimized
+                    Running
                   </Typography>
                 </Grid>
                 <Grid item xs={4}>
@@ -498,7 +500,7 @@ const Dashboard: React.FC = () => {
                     {summary?.unused_resources ?? '—'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Unused
+                    Failed
                   </Typography>
                 </Grid>
               </Grid>
