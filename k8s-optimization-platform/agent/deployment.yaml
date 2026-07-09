@@ -184,7 +184,7 @@ metadata:
     app.kubernetes.io/name: k8s-optimization-agent
 data:
   # REPLACE THESE VALUES FOR EACH CLUSTER
-  CLUSTER_NAME: "my-cluster"
+  CLUSTER_NAME: "xforce-devops"
   ENVIRONMENT: "production"
   COLLECTION_INTERVAL: "60"
   LOG_LEVEL: "INFO"
