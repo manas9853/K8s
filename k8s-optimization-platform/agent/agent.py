@@ -2370,6 +2370,22 @@ class ClusterAgent:
 
             raise ValueError(f"emergency_rollback not supported for resource_type={resource_type}")
 
+        if command == "patch_configmap":
+            # Apply key→value updates to a ConfigMap.
+            # params: { namespace, name, data: {key: value, ...} }
+            data = params.get("data")
+            if not data or not isinstance(data, dict):
+                raise ValueError("patch_configmap requires a non-empty 'data' dict in params")
+            self.core.patch_namespaced_config_map(
+                name=name, namespace=ns,
+                body={"data": data},
+            )
+            return {
+                "patched": name,
+                "namespace": ns,
+                "keys_updated": list(data.keys()),
+            }
+
         raise ValueError(f"Unknown command: {command}")
 
     def _ack_command(self, cmd_id: int, success: bool,

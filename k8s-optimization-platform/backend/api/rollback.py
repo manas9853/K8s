@@ -1,395 +1,365 @@
 """
-Rollback Engine API - Feature 8
-Provides change history tracking, rollback capabilities, and audit trail
-Integrates with AutoFix API to track applied changes
+Rollback Center API
+Wires all 4 rollback operations to the real agent command pipeline.
+No in-memory state — every action is persisted via db_manager.enqueue_command().
+The agent polls for commands every 3 seconds and executes them on the real cluster.
+
+Command routing:
+  DeploymentRollback    → emergency_rollback      (agent: kubectl rollout undo)
+  ConfigurationRollback → patch_configmap         (agent: patch_namespaced_config_map)
+  NamespaceRollback     → restart_deployment × N  (agent: rolling restart per deployment)
+  ClusterRollback       → restart_deployment × all (agent: all deployments across cluster)
 """
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 import logging
-import httpx
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# Pydantic Models
-class ConfigurationSnapshot(BaseModel):
-    """Snapshot of configuration before change"""
-    field: str
-    old_value: str
-    new_value: str
-    resource_path: str
+# ── Request models ────────────────────────────────────────────────────────────
 
-
-class ChangeRecord(BaseModel):
-    """Record of a change made to the system"""
-    change_id: str
-    action_id: str
-    resource_type: str
-    resource_name: str
-    namespace: str
+class DeploymentRollbackRequest(BaseModel):
     cluster: str
-    change_type: str
-    user: str
-    timestamp: str
-    status: str
-    snapshots: List[ConfigurationSnapshot]
-    rollback_available: bool
-    rollback_id: Optional[str] = None
+    deployment: str
+    namespace: str
+    revision: Optional[int] = None       # target revision (None = previous)
 
 
-class RollbackRequest(BaseModel):
-    """Request to rollback a change"""
-    change_ids: List[str]
-    reason: str
-    user: str
+class ConfigurationRollbackRequest(BaseModel):
+    cluster: str
+    name: str                            # ConfigMap name
+    namespace: str
+    data: Dict[str, str]                 # key→value pairs to restore
 
 
-class RollbackResult(BaseModel):
-    """Result of a rollback operation"""
-    rollback_id: str
-    change_id: str
-    success: bool
+class NamespaceRollbackRequest(BaseModel):
+    cluster: str
+    namespace: str
+
+
+class ClusterRollbackRequest(BaseModel):
+    cluster: str
+    snapshot_timestamp: Optional[str] = None   # informational; agent restarts all
+
+
+# ── Response models ───────────────────────────────────────────────────────────
+
+class RollbackEnqueuedResponse(BaseModel):
+    command_id: int
+    cluster: str
+    command: str
+    status: str = "pending"
     message: str
-    rolled_back_at: str
 
 
-class AuditEntry(BaseModel):
-    """Audit trail entry"""
-    audit_id: str
-    change_id: str
-    action: str
-    user: str
-    timestamp: str
-    details: Dict[str, Any]
-    ip_address: Optional[str] = None
+class BatchRollbackEnqueuedResponse(BaseModel):
+    command_ids: List[int]
+    cluster: str
+    commands_enqueued: int
+    status: str = "pending"
+    message: str
 
 
-class ChangeHistorySummary(BaseModel):
-    """Summary of change history"""
-    total_changes: int
-    successful_changes: int
-    failed_changes: int
-    rolled_back_changes: int
-    pending_changes: int
-    total_rollbacks: int
-    successful_rollbacks: int
-    failed_rollbacks: int
+class CommandStatusResponse(BaseModel):
+    command_id: int
+    cluster: str
+    command: str
+    status: str           # pending | done | failed
+    result: Optional[Dict[str, Any]] = None
+    created_at: str
+    updated_at: str
 
 
-# In-memory storage for changes (in production, use database)
-CHANGE_HISTORY = []
-ROLLBACK_HISTORY = []
-AUDIT_TRAIL = []
+# ── Helper ────────────────────────────────────────────────────────────────────
+
+def _db():
+    from database.db import db_manager
+    return db_manager
 
 
-def create_change_record_from_fix_action(
-    action: dict,
-    user: str = "system@k8s-optimizer.local"
-) -> ChangeRecord:
-    """Convert a fix action into a change record"""
-    
-    change_id = f"chg-{len(CHANGE_HISTORY) + 1:03d}"
-    timestamp = datetime.utcnow().isoformat() + "Z"
-    
-    # Convert changes to snapshots
-    snapshots = []
-    for change in action.get('changes', []):
-        snapshots.append(ConfigurationSnapshot(
-            field=change.get('field', ''),
-            old_value=change.get('old_value', ''),
-            new_value=change.get('new_value', ''),
-            resource_path=f"{action.get('resource_type', '').lower()}s/"
-                         f"{action.get('resource_name', '')}"
-        ))
-    
-    return ChangeRecord(
-        change_id=change_id,
-        action_id=action.get('action_id', ''),
-        resource_type=action.get('resource_type', 'Unknown'),
-        resource_name=action.get('resource_name', 'unknown'),
-        namespace=action.get('namespace', 'default'),
-        cluster=action.get('cluster', 'unknown'),
-        change_type=action.get('fix_type', 'Optimization'),
-        user=user,
-        timestamp=timestamp,
-        status="applied",
-        snapshots=snapshots,
-        rollback_available=True,
-        rollback_id=None
-    )
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
-
-@router.get("/history", response_model=List[ChangeRecord])
-async def get_change_history(
-    cluster: Optional[str] = None,
-    namespace: Optional[str] = None,
-    status: Optional[str] = None,
-    user: Optional[str] = None
-):
+@router.post("/deployment", response_model=RollbackEnqueuedResponse)
+async def rollback_deployment(req: DeploymentRollbackRequest):
     """
-    Get change history with optional filters
-    Fetches from AutoFix API applied changes
+    Roll a specific deployment back to its previous revision.
+    Enqueues emergency_rollback → agent runs real kubectl rollout undo.
+    """
+    params: Dict[str, Any] = {
+        "name":          req.deployment,
+        "namespace":     req.namespace,
+        "resource_type": "deployment",
+    }
+    if req.revision is not None:
+        params["revision"] = req.revision
+
+    try:
+        cmd_id = _db().enqueue_command(req.cluster, "emergency_rollback", params)
+        if cmd_id is None:
+            raise HTTPException(status_code=503, detail="Database unavailable — could not enqueue command")
+        logger.info(f"DeploymentRollback enqueued: cluster={req.cluster} deployment={req.deployment} cmd_id={cmd_id}")
+        return RollbackEnqueuedResponse(
+            command_id=cmd_id,
+            cluster=req.cluster,
+            command="emergency_rollback",
+            message=f"Rollback of {req.deployment} enqueued. Agent will execute within 3 seconds.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"rollback_deployment error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/configuration", response_model=RollbackEnqueuedResponse)
+async def rollback_configuration(req: ConfigurationRollbackRequest):
+    """
+    Revert a ConfigMap to a previous state by applying the supplied key→value snapshot.
+    Enqueues patch_configmap → agent runs core_v1.patch_namespaced_config_map().
+    """
+    if not req.data:
+        raise HTTPException(status_code=400, detail="data must be a non-empty dict of key→value pairs to restore")
+
+    params: Dict[str, Any] = {
+        "name":      req.name,
+        "namespace": req.namespace,
+        "data":      req.data,
+    }
+
+    try:
+        cmd_id = _db().enqueue_command(req.cluster, "patch_configmap", params)
+        if cmd_id is None:
+            raise HTTPException(status_code=503, detail="Database unavailable — could not enqueue command")
+        logger.info(f"ConfigRollback enqueued: cluster={req.cluster} configmap={req.name} cmd_id={cmd_id}")
+        return RollbackEnqueuedResponse(
+            command_id=cmd_id,
+            cluster=req.cluster,
+            command="patch_configmap",
+            message=f"ConfigMap '{req.name}' rollback enqueued. Agent will apply within 3 seconds.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"rollback_configuration error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/namespace", response_model=BatchRollbackEnqueuedResponse)
+async def rollback_namespace(req: NamespaceRollbackRequest):
+    """
+    Roll back ALL deployments in a namespace by triggering a rolling restart on each.
+    Enqueues one restart_deployment command per deployment found in the latest metrics snapshot.
     """
     try:
-        # If no changes in history, generate from AutoFix actions
-        # (simulating that some actions were applied)
-        if len(CHANGE_HISTORY) == 0:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    "http://localhost:8000/api/autofix/actions"
-                )
-                
-                if response.status_code == 200:
-                    actions = response.json()
-                    
-                    # Simulate that first 5 actions were applied
-                    for action in actions[:5]:
-                        change = create_change_record_from_fix_action(
-                            action,
-                            user="admin@k8s-optimizer.local"
-                        )
-                        CHANGE_HISTORY.append(change.dict())
-                    
-                    logger.info(
-                        f"Generated {len(CHANGE_HISTORY)} change records "
-                        f"from AutoFix actions"
-                    )
-        
-        changes = CHANGE_HISTORY.copy()
-        
-        # Apply filters
-        if cluster:
-            changes = [c for c in changes if cluster in c["cluster"]]
-        if namespace:
-            changes = [c for c in changes if c["namespace"] == namespace]
-        if status:
-            changes = [c for c in changes if c["status"] == status]
-        if user:
-            changes = [c for c in changes if c["user"] == user]
-        
-        return changes
-        
+        db = _db()
+        # Read real deployments in the namespace from the latest metrics snapshot
+        metrics = db.get_latest_metrics(req.cluster)
+        deployments = []
+        if metrics:
+            import json as _json
+            wl_raw = metrics.get("workloads") or {}
+            if isinstance(wl_raw, str):
+                try:
+                    wl_raw = _json.loads(wl_raw)
+                except Exception:
+                    wl_raw = {}
+            dep_list = (wl_raw.get("deployments") or {})
+            if isinstance(dep_list, dict):
+                dep_list = dep_list.get("items", [])
+            deployments = [
+                d for d in (dep_list or [])
+                if d.get("namespace") == req.namespace
+            ]
+
+        if not deployments:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No deployments found in namespace '{req.namespace}' on cluster '{req.cluster}'. "
+                       "Ensure the agent has collected metrics for this cluster."
+            )
+
+        command_ids = []
+        for dep in deployments:
+            dep_name = dep.get("name") or dep.get("deployment_name", "")
+            if not dep_name:
+                continue
+            cmd_id = db.enqueue_command(req.cluster, "restart_deployment", {
+                "name":      dep_name,
+                "namespace": req.namespace,
+            })
+            if cmd_id:
+                command_ids.append(cmd_id)
+
+        if not command_ids:
+            raise HTTPException(status_code=500, detail="Failed to enqueue any restart commands")
+
+        logger.info(f"NamespaceRollback enqueued: cluster={req.cluster} ns={req.namespace} commands={command_ids}")
+        return BatchRollbackEnqueuedResponse(
+            command_ids=command_ids,
+            cluster=req.cluster,
+            commands_enqueued=len(command_ids),
+            message=f"Namespace '{req.namespace}' rollback enqueued — {len(command_ids)} deployments will be restarted.",
+        )
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error fetching change history: {e}")
-        return []
+        logger.error(f"rollback_namespace error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/history/{change_id}", response_model=ChangeRecord)
-async def get_change_details(change_id: str):
+@router.post("/cluster", response_model=BatchRollbackEnqueuedResponse)
+async def rollback_cluster(req: ClusterRollbackRequest):
     """
-    Get detailed information about a specific change
+    Roll back the entire cluster by restarting ALL deployments across all namespaces.
+    Reads real deployments from the latest metrics snapshot and enqueues restart_deployment × all.
     """
-    # Ensure history is populated
-    await get_change_history()
-    
-    change = next(
-        (c for c in CHANGE_HISTORY if c["change_id"] == change_id),
-        None
-    )
-    if not change:
-        raise HTTPException(status_code=404, detail="Change not found")
-    return change
+    try:
+        db = _db()
+        metrics = db.get_latest_metrics(req.cluster)
+        if not metrics:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No metrics found for cluster '{req.cluster}'. Ensure the agent is running."
+            )
 
+        import json as _json
+        wl_raw = metrics.get("workloads") or {}
+        if isinstance(wl_raw, str):
+            try:
+                wl_raw = _json.loads(wl_raw)
+            except Exception:
+                wl_raw = {}
+        dep_list = (wl_raw.get("deployments") or {})
+        if isinstance(dep_list, dict):
+            dep_list = dep_list.get("items", [])
+        deployments = dep_list or []
 
-@router.post("/rollback", response_model=List[RollbackResult])
-async def rollback_changes(request: RollbackRequest):
-    """
-    Rollback one or more changes
-    """
-    results = []
-    
-    # Ensure history is populated
-    await get_change_history()
-    
-    for change_id in request.change_ids:
-        change = next(
-            (c for c in CHANGE_HISTORY if c["change_id"] == change_id),
-            None
+        if not deployments:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No deployments found for cluster '{req.cluster}'."
+            )
+
+        command_ids = []
+        for dep in deployments:
+            dep_name = dep.get("name") or dep.get("deployment_name", "")
+            dep_ns   = dep.get("namespace", "default")
+            if not dep_name:
+                continue
+            cmd_id = db.enqueue_command(req.cluster, "restart_deployment", {
+                "name":      dep_name,
+                "namespace": dep_ns,
+            })
+            if cmd_id:
+                command_ids.append(cmd_id)
+
+        if not command_ids:
+            raise HTTPException(status_code=500, detail="Failed to enqueue any restart commands")
+
+        logger.info(f"ClusterRollback enqueued: cluster={req.cluster} commands={len(command_ids)}")
+        return BatchRollbackEnqueuedResponse(
+            command_ids=command_ids,
+            cluster=req.cluster,
+            commands_enqueued=len(command_ids),
+            message=f"Cluster '{req.cluster}' rollback enqueued — {len(command_ids)} deployments will be restarted.",
         )
-        
-        if not change:
-            results.append(RollbackResult(
-                rollback_id=f"rb-{len(ROLLBACK_HISTORY) + len(results) + 1:03d}",
-                change_id=change_id,
-                success=False,
-                message="Change not found",
-                rolled_back_at=datetime.utcnow().isoformat() + "Z"
-            ))
-            continue
-        
-        if not change["rollback_available"]:
-            results.append(RollbackResult(
-                rollback_id=f"rb-{len(ROLLBACK_HISTORY) + len(results) + 1:03d}",
-                change_id=change_id,
-                success=False,
-                message="Rollback not available for this change",
-                rolled_back_at=datetime.utcnow().isoformat() + "Z"
-            ))
-            continue
-        
-        if change["status"] == "rolled_back":
-            results.append(RollbackResult(
-                rollback_id=f"rb-{len(ROLLBACK_HISTORY) + len(results) + 1:03d}",
-                change_id=change_id,
-                success=False,
-                message="Change already rolled back",
-                rolled_back_at=datetime.utcnow().isoformat() + "Z"
-            ))
-            continue
-        
-        # Simulate successful rollback
-        rollback_id = f"rb-{len(ROLLBACK_HISTORY) + len(results) + 1:03d}"
-        rolled_back_at = datetime.utcnow().isoformat() + "Z"
-        
-        result = RollbackResult(
-            rollback_id=rollback_id,
-            change_id=change_id,
-            success=True,
-            message=f"Successfully rolled back {change['change_type']} "
-                   f"for {change['resource_name']}",
-            rolled_back_at=rolled_back_at
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"rollback_cluster error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/status/{command_id}", response_model=CommandStatusResponse)
+async def get_rollback_status(command_id: int):
+    """
+    Poll the status of a rollback command.
+    Returns: pending → agent is processing | done → success | failed → error
+    Frontend polls this endpoint every 2 seconds until status is done or failed.
+    """
+    try:
+        row = _db().get_command(command_id)
+        if not row:
+            raise HTTPException(status_code=404, detail=f"Command {command_id} not found")
+
+        result = row.get("result")
+        if isinstance(result, str):
+            import json as _json
+            try:
+                result = _json.loads(result)
+            except Exception:
+                result = {"raw": result}
+
+        return CommandStatusResponse(
+            command_id=row["id"],
+            cluster=row["cluster_name"],
+            command=row["command"],
+            status=row["status"],
+            result=result,
+            created_at=row["created_at"],
+            updated_at=row["updated_at"],
         )
-        results.append(result)
-        
-        # Update change status
-        change["status"] = "rolled_back"
-        change["rollback_available"] = False
-        change["rollback_id"] = rollback_id
-        
-        # Add to rollback history
-        ROLLBACK_HISTORY.append(result.dict())
-        
-        # Add audit entry
-        AUDIT_TRAIL.append({
-            "audit_id": f"aud-{len(AUDIT_TRAIL) + 1:03d}",
-            "change_id": change_id,
-            "action": "rollback_change",
-            "user": request.user,
-            "timestamp": rolled_back_at,
-            "details": {
-                "rollback_id": rollback_id,
-                "reason": request.reason,
-                "changes_reverted": len(change["snapshots"])
-            },
-            "ip_address": "127.0.0.1"
-        })
-        
-        logger.info(
-            f"Rolled back change {change_id} "
-            f"(rollback_id: {rollback_id})"
-        )
-    
-    return results
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"get_rollback_status error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/rollbacks", response_model=List[RollbackResult])
-async def get_rollback_history():
-    """
-    Get history of all rollback operations
-    """
-    return ROLLBACK_HISTORY
-
-
-@router.get("/rollbacks/{rollback_id}", response_model=RollbackResult)
-async def get_rollback_details(rollback_id: str):
-    """
-    Get details of a specific rollback operation
-    """
-    rollback = next(
-        (r for r in ROLLBACK_HISTORY if r["rollback_id"] == rollback_id),
-        None
-    )
-    if not rollback:
-        raise HTTPException(status_code=404, detail="Rollback not found")
-    return rollback
-
-
-@router.get("/audit", response_model=List[AuditEntry])
-async def get_audit_trail(
-    change_id: Optional[str] = None,
-    user: Optional[str] = None,
-    action: Optional[str] = None
+@router.get("/snapshots")
+async def get_cluster_snapshots(
+    cluster: str = Query(..., description="Cluster name"),
+    limit: int = Query(10, ge=1, le=50),
 ):
     """
-    Get audit trail with optional filters
+    Return the last N metric snapshots for a cluster as rollback points.
+    Used by ClusterRollback and NamespaceRollback to show the timeline of available states.
     """
-    # Ensure history is populated
-    await get_change_history()
-    
-    # Generate audit entries for applied changes if not exists
-    if len(AUDIT_TRAIL) == 0:
-        for change in CHANGE_HISTORY:
-            AUDIT_TRAIL.append({
-                "audit_id": f"aud-{len(AUDIT_TRAIL) + 1:03d}",
-                "change_id": change["change_id"],
-                "action": "apply_change",
-                "user": change["user"],
-                "timestamp": change["timestamp"],
-                "details": {
-                    "action_id": change["action_id"],
-                    "resource": f"{change['resource_type'].lower()}s/"
-                               f"{change['resource_name']}",
-                    "changes_applied": len(change["snapshots"])
-                },
-                "ip_address": "127.0.0.1"
+    try:
+        history = _db().get_metrics_history(cluster, limit=limit)
+        snapshots = []
+        for row in history:
+            pods_raw = row.get("pods") or {}
+            if isinstance(pods_raw, str):
+                import json as _json
+                try:
+                    pods_raw = _json.loads(pods_raw)
+                except Exception:
+                    pods_raw = {}
+            pod_count  = len(pods_raw.get("items", []))
+            nodes_raw  = row.get("nodes") or {}
+            if isinstance(nodes_raw, str):
+                import json as _json
+                try:
+                    nodes_raw = _json.loads(nodes_raw)
+                except Exception:
+                    nodes_raw = {}
+            node_count = len(nodes_raw.get("items", [])) if isinstance(nodes_raw, dict) else 0
+
+            ns_raw = row.get("namespaces") or {}
+            if isinstance(ns_raw, str):
+                import json as _json
+                try:
+                    ns_raw = _json.loads(ns_raw)
+                except Exception:
+                    ns_raw = {}
+            ns_count = len(ns_raw.get("items", [])) if isinstance(ns_raw, dict) else 0
+
+            snapshots.append({
+                "snapshot_id":  row["id"],
+                "timestamp":    row.get("timestamp") or row.get("received_at", ""),
+                "pod_count":    pod_count,
+                "node_count":   node_count,
+                "namespace_count": ns_count,
             })
-    
-    audit = AUDIT_TRAIL.copy()
-    
-    # Apply filters
-    if change_id:
-        audit = [a for a in audit if a["change_id"] == change_id]
-    if user:
-        audit = [a for a in audit if a["user"] == user]
-    if action:
-        audit = [a for a in audit if a["action"] == action]
-    
-    return audit
-
-
-@router.get("/summary", response_model=ChangeHistorySummary)
-async def get_change_summary():
-    """
-    Get summary statistics of change history
-    """
-    # Ensure history is populated
-    await get_change_history()
-    
-    total_changes = len(CHANGE_HISTORY)
-    successful_changes = len(
-        [c for c in CHANGE_HISTORY if c["status"] == "applied"]
-    )
-    failed_changes = len(
-        [c for c in CHANGE_HISTORY if c["status"] == "failed"]
-    )
-    rolled_back_changes = len(
-        [c for c in CHANGE_HISTORY if c["status"] == "rolled_back"]
-    )
-    pending_changes = len(
-        [c for c in CHANGE_HISTORY if c["status"] == "pending"]
-    )
-    
-    total_rollbacks = len(ROLLBACK_HISTORY)
-    successful_rollbacks = len(
-        [r for r in ROLLBACK_HISTORY if r["success"]]
-    )
-    failed_rollbacks = len(
-        [r for r in ROLLBACK_HISTORY if not r["success"]]
-    )
-    
-    return ChangeHistorySummary(
-        total_changes=total_changes,
-        successful_changes=successful_changes,
-        failed_changes=failed_changes,
-        rolled_back_changes=rolled_back_changes,
-        pending_changes=pending_changes,
-        total_rollbacks=total_rollbacks,
-        successful_rollbacks=successful_rollbacks,
-        failed_rollbacks=failed_rollbacks
-    )
+        return {"cluster": cluster, "snapshots": snapshots}
+    except Exception as e:
+        logger.error(f"get_cluster_snapshots error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # Made with Bob

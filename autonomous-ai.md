@@ -53,7 +53,7 @@ after their prerequisite is done.
 
 ---
 
-### STEP 2 — Sub-Task 10 · Agent: Add patch_configmap + Fix Rollback Pipeline
+### STEP 2 — Sub-Task 10 · Agent: Add patch_configmap + Fix Rollback Pipeline ✅ DONE
 **Do this second, before wiring any frontend rollback pages.**
 
 **What to build:**
@@ -66,6 +66,16 @@ after their prerequisite is done.
 - `k8s-optimization-platform/backend/api/rollback.py`
 
 **Done when:** Calling `POST /api/v1/autonomous-ai/rollback/deployment` returns a real `command_id`, and `GET /api/v1/autonomous-ai/rollback/status/{command_id}` shows `pending → done` as the agent processes it.
+
+**Completed:** ✅
+- `patch_configmap` command added to `_run_k8s_command()` in `agent.py` — calls `core_v1.patch_namespaced_config_map()`, returns `{patched, namespace, keys_updated}`.
+- `rollback.py` fully rewritten — `CHANGE_HISTORY = []` removed entirely.
+- `POST /rollback/deployment` → enqueues `emergency_rollback` → returns `{command_id}`.
+- `POST /rollback/configuration` → enqueues `patch_configmap` → returns `{command_id}`.
+- `POST /rollback/namespace` → reads real deployments from `get_latest_metrics()`, enqueues `restart_deployment` × N → returns `{command_ids}`.
+- `POST /rollback/cluster` → reads all deployments from `get_latest_metrics()`, enqueues `restart_deployment` × all → returns `{command_ids}`.
+- `GET /rollback/status/{command_id}` → calls `db_manager.get_command()` → returns real `pending/done/failed` status.
+- `GET /rollback/snapshots?cluster=X` → calls `get_metrics_history()` → returns real timestamp-based rollback points.
 
 ---
 
