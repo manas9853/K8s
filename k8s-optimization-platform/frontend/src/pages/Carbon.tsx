@@ -8,7 +8,7 @@ import EnergySavingsLeafIcon from '@mui/icons-material/EnergySavingsLeaf';
 import { Refresh as RefreshIcon } from '@mui/icons-material';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, defs, linearGradient, stop,
+  ResponsiveContainer,
 } from 'recharts';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
@@ -167,18 +167,12 @@ const CarbonInner: React.FC = () => {
           </Typography>
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={trends} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-              <defs>
-                <linearGradient id="carbonGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor={RED}  stopOpacity={0.35} />
-                  <stop offset="95%" stopColor={AMBER} stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={DK.border} />
               <XAxis dataKey="month" stroke={DK.muted} tick={{ fill: DK.muted, fontSize: 11 }} />
-              <YAxis stroke={DK.muted} tick={{ fill: DK.muted, fontSize: 11 }} tickFormatter={v => `${v} kg`} />
+              <YAxis stroke={DK.muted} tick={{ fill: DK.muted, fontSize: 11 }} tickFormatter={(v: number) => `${v} kg`} />
               <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v} kg`, 'Carbon']} />
               <Area type="monotone" dataKey="carbon_kg" stroke={RED} strokeWidth={2}
-                fill="url(#carbonGrad)" name="Carbon kg" />
+                fill={`${RED}33`} fillOpacity={1} name="Carbon kg" />
             </AreaChart>
           </ResponsiveContainer>
         </Paper>

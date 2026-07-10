@@ -269,7 +269,7 @@ const SavingsTrackerInner: React.FC = () => {
               <YAxis tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
                 tick={{ fill: DK.muted, fontSize: 11 }} />
               <RTooltip
-                contentStyle={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 8 }}
+                contentStyle={{ background: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 8 }}
                 labelStyle={{ color: DK.text, fontWeight: 600 }}
                 formatter={(v: number) => fmt(v)}
               />

@@ -3,7 +3,7 @@ import {
   Box, Typography, Grid, Card, CardContent, Paper, IconButton,
   LinearProgress, Chip, CircularProgress, Alert, Divider,
 } from '@mui/material';
-import EcoIcon from '@mui/icons-material/Eco';
+import EcoIcon from '@mui/icons-material/EnergySavingsLeaf';
 import { Refresh as RefreshIcon, CheckCircle as CheckCircleIcon,
          TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon,
          TrendingFlat as TrendingFlatIcon } from '@mui/icons-material';

@@ -303,7 +303,7 @@ const FinancialBenchmarkingInner: React.FC = () => {
             <Radar name="Industry Avg" dataKey="Industry" stroke={AMBER} fill={AMBER} fillOpacity={0.1} strokeWidth={1.5} strokeDasharray="4 2" />
             <Radar name="Best-in-class" dataKey="Best" stroke={GREEN} fill="none" strokeWidth={1.5} strokeDasharray="6 3" />
             <RTooltip
-              contentStyle={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 8 }}
+              contentStyle={{ background: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 8 }}
               labelStyle={{ color: DK.text, fontWeight: 600 }}
               formatter={(v: number) => [`${v}`, undefined]}
             />

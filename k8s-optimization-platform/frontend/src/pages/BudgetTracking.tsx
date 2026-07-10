@@ -244,7 +244,7 @@ const BudgetTrackingInner: React.FC = () => {
                   />
                   <RechartTooltip
                     formatter={(v: number, name: string) => [fmt(v), name]}
-                    contentStyle={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 8, color: DK.text }}
+                    contentStyle={{ background: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 8, color: DK.text }}
                     labelStyle={{ color: DK.text, fontWeight: 600 }}
                   />
                   <Legend wrapperStyle={{ color: DK.muted, fontSize: 12 }} />
