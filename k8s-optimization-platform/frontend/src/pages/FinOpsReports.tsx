@@ -7,7 +7,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Grid, CircularProgress, Alert, Chip, Paper,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, Button, IconButton, Tooltip, Divider,
+  LinearProgress, Button, IconButton, Tooltip,
 } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -219,10 +219,10 @@ const FinOpsReportsInner: React.FC = () => {
         Executive Summary
       </Typography>
       <Box sx={{ ...card(ACCENT), mb: 2.5 }}>
-        <Grid container spacing={0} divider={<Divider orientation="vertical" flexItem sx={{ borderColor: DK.border }} />}>
+        <Grid container spacing={0}>
 
           {/* Cost overview col */}
-          <Grid item xs={12} md={4} sx={{ pr: { md: 3 } }}>
+          <Grid item xs={12} md={4} sx={{ pr: { md: 3 }, borderRight: { md: `1px solid ${DK.border}` } }}>
             <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: ACCENT, textTransform: 'uppercase', letterSpacing: 0.8, mb: 1.5 }}>
               Cost Overview
             </Typography>
@@ -239,7 +239,7 @@ const FinOpsReportsInner: React.FC = () => {
           </Grid>
 
           {/* Savings col */}
-          <Grid item xs={12} md={4} sx={{ px: { md: 3 }, mt: { xs: 2, md: 0 } }}>
+          <Grid item xs={12} md={4} sx={{ px: { md: 3 }, mt: { xs: 2, md: 0 }, borderRight: { md: `1px solid ${DK.border}` } }}>
             <Typography sx={{ fontSize: '0.72rem', fontWeight: 700, color: GREEN, textTransform: 'uppercase', letterSpacing: 0.8, mb: 1.5 }}>
               Savings
             </Typography>
