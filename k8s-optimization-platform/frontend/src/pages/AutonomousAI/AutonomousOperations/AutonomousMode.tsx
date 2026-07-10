@@ -1,294 +1,329 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
 import {
-  Box,
-  Paper,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  LinearProgress,
-  Alert,
-  Switch,
-  FormControlLabel,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  IconButton,
-  Tooltip
+  Box, Typography, Grid, Chip, CircularProgress,
+  IconButton, Tooltip, Snackbar, Alert, Button, Switch,
 } from '@mui/material';
-import {
-  AutoMode as AutoModeIcon,
-  Refresh as RefreshIcon,
-  CheckCircle as CheckCircleIcon,
-  Warning as WarningIcon
-} from '@mui/icons-material';
-import axios from 'axios';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import BlockIcon from '@mui/icons-material/Block';
+import AutoModeIcon from '@mui/icons-material/AutoMode';
+import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import { API_BASE_URL } from '../../../config/api';
 
-interface OptimizationActivity {
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const DK = {
+  bg:       '#0d1117',
+  surface:  '#161b22',
+  surface2: '#1c2128',
+  border:   '#30363d',
+  text:     '#e6edf3',
+  muted:    '#8b949e',
+};
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+interface Activity {
   id: string;
   timestamp: string;
   action: string;
   resource: string;
   result: string;
-  savings: string;
 }
-
-interface AutonomousModeData {
+interface ClusterSummary {
+  total_pods: number;
+  oom_pods: number;
+  unstable_pods: number;
+  fixable_automatically: number;
+}
+interface AutonomousPayload {
   mode: string;
-  status: string;
+  cluster_name: string;
   autonomous_enabled: boolean;
-  optimizations_today: number;
-  total_savings_today: string;
-  success_rate: number;
-  recent_activities: OptimizationActivity[];
+  cluster_summary: ClusterSummary;
+  guardrails: string[];
+  recent_activities: Activity[];
+  last_updated: string;
 }
 
-const AutonomousMode: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [data, setData] = useState<AutonomousModeData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// ─── KPI card ─────────────────────────────────────────────────────────────────
+const KpiCard: React.FC<{ label: string; value: number; accent?: string }> = ({ label, value, accent }) => (
+  <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}>
+    <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{label}</Typography>
+    <Typography sx={{ color: accent ?? DK.text, fontSize: '1.8rem', fontWeight: 700, lineHeight: 1.2 }}>{value}</Typography>
+  </Box>
+);
 
-  const fetchData = async () => {
+// ─── Main ─────────────────────────────────────────────────────────────────────
+const AutonomousMode: React.FC = () => {
+  const { activeClusterName, clusterParam } = useActiveCluster();
+  const [payload, setPayload]       = useState<AutonomousPayload | null>(null);
+  const [loading, setLoading]       = useState(true);
+  const [enabled, setEnabled]       = useState(false);
+  const [toggling, setToggling]     = useState(false);
+  const [toast, setToast]           = useState<{ open: boolean; msg: string; sev: 'success' | 'error' | 'info' | 'warning' }>({ open: false, msg: '', sev: 'info' });
+
+  const fetchData = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      const response = await fetch('/api/v1/autonomous-ai/operations/autonomous-mode');
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const data = await response.json();
-      setData(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to fetch autonomous mode data');
+      const res = await fetch(`${API_BASE_URL}/v1/autonomous-ai/operations/autonomous-mode${clusterParam}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data: AutonomousPayload = await res.json();
+      setPayload(data);
+      setEnabled(data.autonomous_enabled);
+    } catch (e: any) {
+      setToast({ open: true, msg: e.message ?? 'Failed to load', sev: 'error' });
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchData();
   }, [clusterParam]);
 
-  const toggleAutonomous = async () => {
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const handleToggle = async () => {
+    const newState = !enabled;
+    setToggling(true);
     try {
-      await axios.post('/api/v1/autonomous-ai/operations/autonomous-mode/toggle');
-      fetchData();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to toggle autonomous mode');
+      const res = await fetch(`${API_BASE_URL}/v1/autonomous-ai/operations/autonomous-mode/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (res.ok) {
+        setEnabled(newState);
+        setToast({
+          open: true,
+          msg: newState ? '🤖 Autonomous Mode ACTIVATED — AI is now optimizing your cluster' : '⏸ Autonomous Mode DEACTIVATED',
+          sev: newState ? 'success' : 'warning',
+        });
+      } else {
+        setToast({ open: true, msg: 'Failed to toggle autonomous mode', sev: 'error' });
+      }
+    } catch {
+      setToast({ open: true, msg: 'Network error', sev: 'error' });
+    } finally {
+      setToggling(false);
     }
   };
 
-  if (loading) {
-    return (
-      <Box>
-        <Typography variant="h4" gutterBottom>Autonomous Mode</Typography>
-        <LinearProgress />
-      </Box>
-    );
-  }
+  const handleEmergencyStop = async () => {
+    if (!enabled) return;
+    setToggling(true);
+    try {
+      await fetch(`${API_BASE_URL}/v1/autonomous-ai/operations/autonomous-mode/toggle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      setEnabled(false);
+      setToast({ open: true, msg: '🛑 Emergency Stop — Autonomous Mode halted immediately', sev: 'warning' });
+    } catch {
+      setToast({ open: true, msg: 'Emergency stop failed — contact your cluster admin', sev: 'error' });
+    } finally {
+      setToggling(false);
+    }
+  };
 
-  if (error) {
-    return (
-      <Box>
-        <Typography variant="h4" gutterBottom>Autonomous Mode</Typography>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
-  }
+  if (loading) return (
+    <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <CircularProgress sx={{ color: '#58a6ff' }} />
+    </Box>
+  );
 
-  if (!data) return null;
+  const cs = payload?.cluster_summary;
+  const glowColor = enabled ? '#238636' : DK.border;
+  const activities = payload?.recent_activities ?? [];
 
   return (
-    <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+    <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
+
+      {/* Header */}
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
-            Autonomous Mode
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Fully automated optimization with AI-powered decision making
+          <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Autonomous Mode</Typography>
+          <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
+            Fully automated AI optimization —{' '}
+            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh">
-          <IconButton onClick={fetchData} color="primary">
+          <IconButton onClick={fetchData} sx={{ color: DK.muted, '&:hover': { color: DK.text } }}>
             <RefreshIcon />
           </IconButton>
         </Tooltip>
       </Box>
 
-      {/* Autonomous Toggle */}
-      <Alert severity={data.autonomous_enabled ? 'success' : 'warning'} sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <AutoModeIcon />
-            <Typography variant="body2">
-              <strong>Autonomous Mode:</strong> {data.autonomous_enabled ? 'Active - System is automatically optimizing your infrastructure' : 'Inactive - Switch to enable full automation'}
-            </Typography>
-          </Box>
-          <FormControlLabel
-            control={
-              <Switch
-                checked={data.autonomous_enabled}
-                onChange={toggleAutonomous}
-                color="primary"
-              />
-            }
-            label={data.autonomous_enabled ? 'Enabled' : 'Disabled'}
+      {/* ── Centered toggle card ── */}
+      <Box
+        sx={{
+          bgcolor: DK.surface,
+          border: `1px solid ${glowColor}`,
+          borderRadius: 3,
+          p: 4,
+          mb: 3,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 2,
+          boxShadow: enabled ? `0 0 24px ${glowColor}55` : 'none',
+          transition: 'all 0.4s ease',
+        }}
+      >
+        {/* Pulsing status dot */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box
+            sx={{
+              width: 12,
+              height: 12,
+              borderRadius: '50%',
+              bgcolor: enabled ? '#3fb950' : DK.muted,
+              boxShadow: enabled ? '0 0 0 0 #3fb95088' : 'none',
+              animation: enabled ? 'pulse 2s infinite' : 'none',
+              '@keyframes pulse': {
+                '0%':   { boxShadow: '0 0 0 0 #3fb95066' },
+                '70%':  { boxShadow: '0 0 0 10px transparent' },
+                '100%': { boxShadow: '0 0 0 0 transparent' },
+              },
+            }}
           />
-        </Box>
-      </Alert>
-
-      {/* Summary Cards */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Optimizations Today
-              </Typography>
-              <Typography variant="h4" color="primary">
-                {data.optimizations_today}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Total Savings Today
-              </Typography>
-              <Typography variant="h4" color="success.main">
-                {data.total_savings_today}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Success Rate
-              </Typography>
-              <Typography variant="h4" color={data.success_rate >= 95 ? 'success.main' : 'warning.main'}>
-                {data.success_rate}%
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent>
-              <Typography color="text.secondary" gutterBottom>
-                Mode Status
-              </Typography>
-              <Chip
-                label={data.status}
-                color={data.autonomous_enabled ? 'success' : 'default'}
-                icon={data.autonomous_enabled ? <CheckCircleIcon /> : <WarningIcon />}
-              />
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* Recent Activities */}
-      <Paper>
-        <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-          <Typography variant="h6">
-            Recent Autonomous Activities
+          <Typography sx={{ color: enabled ? '#3fb950' : DK.muted, fontWeight: 700, fontSize: '0.88rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            {enabled ? 'AUTONOMOUS MODE: ACTIVE' : 'AUTONOMOUS MODE: INACTIVE'}
           </Typography>
         </Box>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Timestamp</TableCell>
-                <TableCell>Action</TableCell>
-                <TableCell>Resource</TableCell>
-                <TableCell>Result</TableCell>
-                <TableCell>Savings</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.recent_activities.map((activity) => (
-                <TableRow key={activity.id} hover>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {new Date(activity.timestamp).toLocaleString()}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{activity.action}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{activity.resource}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={activity.result}
-                      size="small"
-                      color={activity.result === 'Success' ? 'success' : 'error'}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="success.main" fontWeight="medium">
-                      {activity.savings}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
 
-      {/* Info Boxes */}
-      <Grid container spacing={3} sx={{ mt: 1 }}>
+        {/* Big icon */}
+        <AutoModeIcon sx={{
+          fontSize: 64,
+          color: enabled ? '#3fb950' : DK.border,
+          transition: 'color 0.4s ease',
+          animation: enabled ? 'spin 8s linear infinite' : 'none',
+          '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
+        }} />
+
+        <Typography sx={{ color: DK.muted, fontSize: '0.83rem', textAlign: 'center', maxWidth: 420 }}>
+          {enabled
+            ? 'AI is continuously monitoring and optimizing your cluster. All changes are within guardrail bounds.'
+            : 'Enable to let the AI continuously apply low-risk optimizations without manual approval.'}
+        </Typography>
+
+        {/* Toggle switch */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Typography sx={{ color: DK.muted, fontSize: '0.83rem' }}>Disabled</Typography>
+          {toggling
+            ? <CircularProgress size={28} sx={{ color: '#3fb950' }} />
+            : (
+              <Switch
+                checked={enabled}
+                onChange={handleToggle}
+                sx={{
+                  transform: 'scale(1.3)',
+                  '& .MuiSwitch-switchBase.Mui-checked': { color: '#3fb950' },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3fb950' },
+                }}
+              />
+            )
+          }
+          <Typography sx={{ color: enabled ? '#3fb950' : DK.muted, fontSize: '0.83rem', fontWeight: enabled ? 700 : 400 }}>Enabled</Typography>
+        </Box>
+      </Box>
+
+      {/* ── Emergency Stop — always visible ── */}
+      <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
+        <Button
+          variant="contained"
+          size="large"
+          startIcon={<BlockIcon />}
+          onClick={handleEmergencyStop}
+          disabled={!enabled || toggling}
+          sx={{
+            bgcolor: '#da3633',
+            '&:hover': { bgcolor: '#f85149' },
+            '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
+            fontWeight: 700,
+            fontSize: '0.9rem',
+            px: 4,
+            py: 1.25,
+            letterSpacing: '0.05em',
+          }}
+        >
+          🛑 EMERGENCY STOP
+        </Button>
+      </Box>
+
+      {/* Cluster snapshot + guardrails row */}
+      <Grid container spacing={2} sx={{ mb: 3 }}>
+
+        {/* Cluster KPIs */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom color="success.main">
-              Benefits of Autonomous Mode
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              • Continuous 24/7 optimization without human intervention
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              • Immediate response to resource inefficiencies
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              • Maximum cost savings through proactive optimization
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              • AI learns from your infrastructure patterns over time
-            </Typography>
-          </Paper>
+          <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2.5 }}>
+            <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.88rem', mb: 2 }}>Cluster Snapshot</Typography>
+            <Grid container spacing={1.5}>
+              <Grid item xs={6}><KpiCard label="Total Pods" value={cs?.total_pods ?? 0} /></Grid>
+              <Grid item xs={6}><KpiCard label="OOM Pods" value={cs?.oom_pods ?? 0} accent="#f85149" /></Grid>
+              <Grid item xs={6}><KpiCard label="Unstable Pods" value={cs?.unstable_pods ?? 0} accent="#d29922" /></Grid>
+              <Grid item xs={6}><KpiCard label="Auto-Fixable" value={cs?.fixable_automatically ?? 0} accent="#3fb950" /></Grid>
+            </Grid>
+          </Box>
         </Grid>
+
+        {/* Guardrails */}
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom color="warning.main">
-              Safety Guardrails
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              • Only applies changes with {'<'} 5% risk score
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              • Automatic rollback on failure detection
-            </Typography>
-            <Typography variant="body2" color="text.secondary" paragraph>
-              • Respects resource limits and quotas
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              • Complete audit trail of all changes
-            </Typography>
-          </Paper>
+          <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2.5, height: '100%' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+              <ShieldOutlinedIcon sx={{ fontSize: 18, color: '#d29922' }} />
+              <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.88rem' }}>Safety Guardrails</Typography>
+            </Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              {(payload?.guardrails ?? []).map((g, i) => (
+                <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <WarningAmberIcon sx={{ fontSize: 14, color: '#d29922', flexShrink: 0, mt: '3px' }} />
+                  <Typography sx={{ color: DK.muted, fontSize: '0.8rem', lineHeight: 1.5 }}>{g}</Typography>
+                </Box>
+              ))}
+            </Box>
+          </Box>
         </Grid>
       </Grid>
+
+      {/* Activity feed */}
+      <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, overflow: 'hidden' }}>
+        <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${DK.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: enabled ? '#3fb950' : DK.muted }} />
+          <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.85rem' }}>
+            Recent Activity Feed
+          </Typography>
+        </Box>
+        {activities.length === 0 ? (
+          <Box sx={{ p: 3, textAlign: 'center' }}>
+            <CheckCircleOutlineIcon sx={{ fontSize: 28, color: DK.border, mb: 0.75 }} />
+            <Typography sx={{ color: DK.muted, fontSize: '0.83rem' }}>No activity yet — enable Autonomous Mode to start</Typography>
+          </Box>
+        ) : (
+          activities.map((act, i) => (
+            <Box key={act.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.25, borderBottom: i < activities.length - 1 ? `1px solid ${DK.border}` : 'none' }}>
+              <Box sx={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, bgcolor: act.result === 'success' ? '#3fb950' : '#f85149' }} />
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography sx={{ color: DK.text, fontSize: '0.82rem' }} noWrap>{act.action}</Typography>
+                <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }} noWrap>{act.resource}</Typography>
+              </Box>
+              <Typography sx={{ color: DK.muted, fontSize: '0.7rem', flexShrink: 0 }}>
+                {act.timestamp ? new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+              </Typography>
+              <Chip
+                label={act.result}
+                size="small"
+                sx={{ bgcolor: act.result === 'success' ? '#3fb9501a' : '#f851491a', color: act.result === 'success' ? '#3fb950' : '#f85149', border: `1px solid ${act.result === 'success' ? '#3fb95044' : '#f8514944'}`, fontSize: '0.65rem', height: 18 }}
+              />
+            </Box>
+          ))
+        )}
+      </Box>
+
+      <Snackbar open={toast.open} autoHideDuration={6000} onClose={() => setToast(t => ({ ...t, open: false }))}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert severity={toast.sev} onClose={() => setToast(t => ({ ...t, open: false }))}
+          sx={{ bgcolor: DK.surface, color: DK.text, border: `1px solid ${DK.border}` }}>
+          {toast.msg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

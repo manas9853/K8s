@@ -162,63 +162,60 @@ after their prerequisite is done.
 
 ---
 
-### STEP 7 — Sub-Task 5 · Frontend: Autonomous Operations (3 pages)
+### STEP 7 — Sub-Task 5 · Frontend: Autonomous Operations (3 pages) ✅ DONE
 *(parallel after Step 3)*
 
-**What to build:**
-- ManualMode: split-screen approval queue, before/after diff, Approve/Reject/Defer buttons, progress bar
-- AssistedMode: rule cards by category with toggle switches, live auto-applied feed
-- AutonomousMode: dramatic centered toggle with green glow, pulsing banner, guardrails panel, red Emergency Stop
-
-**Files:** `ManualMode.tsx` · `AssistedMode.tsx` · `AutonomousMode.tsx`
-
-**Done when:** ManualMode Approve button enqueues a real agent command. AutonomousMode toggle POSTs to backend. Emergency Stop is always visible.
+**Completed:** ✅
+- **ManualMode**: flat table + Dialog replaced with **split-screen** — left: scrollable queue list (type icon, resource, namespace, savings, risk badge), right: detail + diff panel
+- `<DiffRow>` component — `- current` (red monospace) → `+ recommended` (green monospace), git diff style
+- Approve & Apply → `POST /v1/root-cause/fix` → polls agent → item fades from queue on success
+- Defer + Reject — immediately remove from queue, toast notification
+- Review progress bar — `N of M reviewed`, fills blue → green at 100%
+- Auto-advances to next item when selected item is actioned
+- **AssistedMode**: flat rules table replaced with **rule cards grouped by category** (COST / PERFORMANCE / STORAGE / SECURITY)
+- Each card: category icon, name, condition, `fires_when` live signal, `applied_today` counter
+- Active border glow in category colour; disabled = 0.6 opacity
+- `<Switch>` per card — optimistic update, reverts on API error; per-rule `<CircularProgress>` while toggling
+- Auto-approve threshold banner explaining the `$50/mo + risk=LOW` logic
+- `fetch()` + `API_BASE_URL` — `axios` removed
+- **AutonomousMode**: flat toggle + table replaced with **dramatic centered toggle card**
+- Pulsing green dot + uppercase `AUTONOMOUS MODE: ACTIVE/INACTIVE` status
+- Spinning `AutoModeIcon` (64px) animates when enabled; green glow on card border
+- `🛑 EMERGENCY STOP` — always rendered, red button, disabled only when mode is already off
+- Toggle → `POST /autonomous-mode/toggle` → optimistic state update with coloured toast
+- Guardrails panel from real backend data (`payload.guardrails[]`)
+- Cluster Snapshot KPIs: Total Pods / OOM Pods / Unstable Pods / Auto-Fixable
+- Activity feed with live dot per entry (green=success, red=fail)
+- All 3 files: `API_BASE_URL + clusterParam`, `axios` removed, TypeScript: 0 errors
 
 ---
 
-### STEP 8 — Sub-Task 6 · Frontend: Auto-Fix Center (4 pages)
-*(parallel after Step 3)*
+### STEP 8 — Sub-Task 6 · Frontend: Auto-Fix Center (4 pages) ✅ DONE
 
-**What to build:**
-- ResourceFixes: grouped fix cards (CPU/Memory/Storage), batch select checkboxes, "Fix Selected (N)" button
-- SecurityFixes: severity-banded list, compliance tags, Apply Fix → agent command
-- ComplianceFixes: framework tabs (CIS/PCI/ISO/HIPAA/GDPR), per-tab score ring, "Apply All" bulk button
-- BulkFixes: operation builder left/right layout, namespace filter, dry-run toggle, execution progress ticker
-
-**Files:** `ResourceFixes.tsx` · `SecurityFixes.tsx` · `ComplianceFixes.tsx` · `BulkFixes.tsx`
-
-**Done when:** All Apply buttons reach the real agent. Dry-run mode on BulkFixes shows a preview without applying. ComplianceFixes score ring animates after a fix completes.
+**Completed:** ✅ All 4 pages built with dark theme, agent polling, batch-select, dry-run.
 
 ---
 
-### STEP 9 — Sub-Task 7 · Frontend: Rollback Center (4 pages)
-*(parallel after Steps 2 + 3)*
+### STEP 9 — Sub-Task 7 · Frontend: Rollback Center (4 pages) ✅ DONE
 
-**What to build:**
-- DeploymentRollback: searchable deployment selector, horizontal version timeline, diff preview, "Rollback Now" → agent
-- ConfigurationRollback: two-column ConfigMap/Secret layout, snapshot history, values never shown for secrets
-- NamespaceRollback: namespace cards with risk indicators, 3-step confirm flow, button locked until name typed
-- ClusterRollback: **red accent theme** (danger), 4-step confirm, "type cluster name" gate, ABORT always visible
-
-**Files:** `DeploymentRollback.tsx` · `ConfigurationRollback.tsx` · `NamespaceRollback.tsx` · `ClusterRollback.tsx`
-
-**Done when:** "Rollback Now" on DeploymentRollback enqueues a real `emergency_rollback` command and shows polling status. ClusterRollback has visually distinct red danger theme.
+**Completed:** ✅
+- **DeploymentRollback**: searchable deployment list, expandable detail per deployment, Rollback Now → `POST /rollback/deployment` → `pollCommand()`, success fades card to 0.45 opacity
+- **ConfigurationRollback**: tabbed ConfigMap / Secret layout, key listing for ConfigMaps, secret values hidden with purple warning box, Rollback → `POST /rollback/configuration` → `pollCommand()`
+- **NamespaceRollback**: per-namespace risk badge (extreme/medium/low with colour), 3-step confirm (initiate → warning → type name to confirm), batch polls all `command_ids` in parallel, extreme-risk banner
+- **ClusterRollback**: distinct red-accent danger theme (`#f85149`, `#2d0b0b`), 4-step flow (initiate → warn → type cluster name → select snapshot → execute), ABORT always visible (disabled when idle), snapshot timeline panel, polls all deployments in parallel
+- All 4: `API_BASE_URL`, `DK.*` tokens, TypeScript: 0 errors ✅
 
 ---
 
-### STEP 10 — Sub-Task 8 · Frontend: AI Recommendations (5 pages)
-*(parallel after Step 3)*
+### STEP 10 — Sub-Task 8 · Frontend: AI Recommendations (5 pages) ✅ DONE
 
-**What to build:**
-- CostRecommendations: bar chart (namespaces × cost), ROI-sorted cards, running total sidebar
-- PerformanceRecommendations: performance score ring, 3 categories (Throttling/Stability/Capacity), urgency badges
-- ReliabilityRecommendations: reliability score ring, 2×2 risk matrix plot, fix-type grouping
-- SecurityRecommendations: attack-type grouping, MITRE ATT&CK tags per item, "What attacker could do" text
-- ComplianceRecommendations: framework scorecard banner, "Audit Readiness" header, per-framework sorted list
-
-**Files:** All 5 in `AIRecommendations/`
-
-**Done when:** Every page shows real data, dark theme, unique visual layout. Apply buttons reach the agent.
+**Completed:** ✅
+- **CostRecommendations**: horizontal namespace cost bar chart (width proportional to cost, colour = severity), ROI-sorted rec cards with checkbox batch select, "Apply Selected (N) — save $X/mo" button, running cost counter
+- **PerformanceRecommendations**: SVG `ScoreRing`, 3 categories (THROTTLING/STABILITY/CAPACITY) with distinct icons + colours, grouped section headers with count chips, urgency badge per card, Apply → agent
+- **ReliabilityRecommendations**: SVG `ScoreRing`, 2×2 risk matrix (effort × priority grid), grouped by fix_type (ADD_HEALTH_CHECK / ADD_READINESS_PROBE / ADD_REPLICA), Apply → agent
+- **SecurityRecommendations**: `SevBadge` summary panel (critical/high/medium counts), grouped by severity, MITRE ATT&CK chip auto-derived from title keywords (`T1611`, `T1548`, etc.), "⚠ Attack vector" red box in expand panel
+- **ComplianceRecommendations**: per-framework `FwScoreRing` (CIS/PCI/ISO/GDPR/HIPAA), scrollable framework tabs, Compliance Gap box in expand, Audit Readiness header
+- All 5: `API_BASE_URL + clusterParam`, `DK.*` tokens, TypeScript: 0 errors ✅
 
 ---
 
