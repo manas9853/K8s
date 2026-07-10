@@ -47,32 +47,54 @@ async def _fetch_cluster_context(cluster: Optional[str] = None) -> Dict[str, Any
                     return {}
             return raw
 
+        def _safe_list(raw) -> list:
+            """Return a list of dicts, skipping/de-stringifying non-dict items."""
+            import json as _jj
+            if not isinstance(raw, list):
+                return []
+            out = []
+            for item in raw:
+                if isinstance(item, dict):
+                    out.append(item)
+                elif isinstance(item, str):
+                    try:
+                        parsed = _jj.loads(item)
+                        if isinstance(parsed, dict):
+                            out.append(parsed)
+                        elif isinstance(parsed, list):
+                            out.extend(i for i in parsed if isinstance(i, dict))
+                    except Exception:
+                        pass  # skip non-JSON strings
+            return out
+
         def _extract(metrics: Dict) -> Dict:
-            pods_d  = _safe(metrics.get("pods"))
+            pods_d   = _safe(metrics.get("pods"))
             finops_d = _safe(metrics.get("finops"))
-            stor_d  = _safe(metrics.get("storage"))
-            obs_d   = _safe(metrics.get("observability"))
-            wl_d    = _safe(metrics.get("workloads"))
-            cm_d    = _safe(metrics.get("configmaps"))
-            sec_d   = _safe(metrics.get("secrets_domain"))
-            ns_raw  = _safe(metrics.get("namespaces"))
+            stor_d   = _safe(metrics.get("storage"))
+            obs_d    = _safe(metrics.get("observability"))
+            wl_d     = _safe(metrics.get("workloads"))
+            cm_d     = _safe(metrics.get("configmaps"))
+            sec_d    = _safe(metrics.get("secrets_domain"))
+            ns_raw   = _safe(metrics.get("namespaces"))
+            # namespace_resources can be stored as a list of JSON strings — use _safe_list
+            ns_res_raw = finops_d.get("namespace_resources", [])
             return {
-                "pods":             pods_d.get("items", []),
-                "oom_events":       pods_d.get("oom_events", []),
-                "restart_analysis": pods_d.get("restart_analysis", []),
-                "namespace_resources": finops_d.get("namespace_resources", []),
-                "pvcs":             (_safe(stor_d.get("pvcs"))).get("items", []),
-                "orphaned_pvcs":    (_safe(stor_d.get("pvcs"))).get("orphaned", []),
-                "warning_events":   (_safe(obs_d.get("events"))).get("warning_events", []),
-                "deployments":      (_safe(wl_d.get("deployments"))).get("items", []),
-                "configmaps":       cm_d.get("items", []),
-                "secrets":          sec_d.get("items", []),
-                "namespaces":       ns_raw.get("items", []) if isinstance(ns_raw, dict) else
-                                    (ns_raw if isinstance(ns_raw, list) else []),
-                "finops":           finops_d,
-                "storage":          stor_d,
-                "observability":    obs_d,
-                "workloads":        wl_d,
+                "pods":               _safe_list(pods_d.get("items", [])),
+                "oom_events":         _safe_list(pods_d.get("oom_events", [])),
+                "restart_analysis":   _safe_list(pods_d.get("restart_analysis", [])),
+                "namespace_resources": _safe_list(ns_res_raw),
+                "pvcs":               _safe_list((_safe(stor_d.get("pvcs"))).get("items", [])),
+                "orphaned_pvcs":      _safe_list((_safe(stor_d.get("pvcs"))).get("orphaned", [])),
+                "warning_events":     _safe_list((_safe(obs_d.get("events"))).get("warning_events", [])),
+                "deployments":        _safe_list((_safe(wl_d.get("deployments"))).get("items", [])),
+                "configmaps":         _safe_list(cm_d.get("items", [])),
+                "secrets":            _safe_list(sec_d.get("items", [])),
+                "namespaces":         ns_raw.get("items", []) if isinstance(ns_raw, dict) else
+                                      (ns_raw if isinstance(ns_raw, list) else []),
+                "finops":             finops_d,
+                "storage":            stor_d,
+                "observability":      obs_d,
+                "workloads":          wl_d,
             }
 
         if cluster:
