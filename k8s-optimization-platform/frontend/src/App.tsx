@@ -173,6 +173,7 @@ const SavingsTracker = lazy(() => import('./pages/SavingsTracker'));
 const EnergyConsumption = lazy(() => import('./pages/EnergyConsumption'));
 const SustainabilityScore = lazy(() => import('./pages/SustainabilityScore'));
 const FinancialBenchmarking = lazy(() => import('./pages/FinancialBenchmarking'));
+const CloudDiscovery = lazy(() => import('./pages/CloudDiscovery'));
 
 // Reports & Analytics sub-pages
 const FinOpsReports = lazy(() => import('./pages/FinOpsReports'));
@@ -433,6 +434,7 @@ function App() {
                       <Route path="/energy-consumption" element={<EnergyConsumption />} />
                       <Route path="/sustainability-score" element={<SustainabilityScore />} />
                       <Route path="/financial-benchmarking" element={<FinancialBenchmarking />} />
+                      <Route path="/settings/cloud-discovery" element={<CloudDiscovery />} />
                       <Route path="/benchmarking" element={<Benchmarking />} />
                       <Route path="/reports" element={<Reports />} />
                       <Route path="/reports/finops" element={<FinOpsReports />} />

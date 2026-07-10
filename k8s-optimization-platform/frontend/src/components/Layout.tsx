@@ -92,6 +92,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import BlockIcon from '@mui/icons-material/Block';
 import PowerSettingsNewIcon from '@mui/icons-material/PowerSettingsNew';
 import VpnKeyIcon from '@mui/icons-material/VpnKey';
+import CloudSyncIcon from '@mui/icons-material/CloudSync';
 
 const drawerWidth = 280;
 
@@ -518,6 +519,7 @@ const menuItems: MenuItem[] = [
       { text: 'Energy Consumption', icon: <BoltIcon />, path: '/energy-consumption' },
       { text: 'Sustainability Score', icon: <NatureIcon />, path: '/sustainability-score' },
       { text: 'Financial Benchmarking', icon: <CompareArrowsIcon />, path: '/financial-benchmarking' },
+      { text: 'Cloud Billing Setup', icon: <CloudSyncIcon />, path: '/settings/cloud-discovery' },
     ],
   },
   {
