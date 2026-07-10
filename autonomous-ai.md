@@ -219,19 +219,19 @@ after their prerequisite is done.
 
 ---
 
-### STEP 11 — Sub-Task 9 · Phase 2: LLM Engine
-**Do this last. Do it only after all 20 pages are working in Phase 1.**
+### STEP 11 — Sub-Task 9 · Phase 2: LLM Engine ✅ DONE
 
-**What to build:**
-- `_llm_engine(query, cluster_data)` in `autonomous_ai.py` — calls `openai.AsyncOpenAI()` with `gpt-4o-mini`
-- Cluster data formatted as LLM context prompt (real pod names, costs, events)
-- `RateLimitError` / `APIError` fallback to Phase 1 rule engine
-- `POST /copilot/feedback` endpoint + `nlq_feedback` Postgres table
-- Wire frontend 👍/👎 to feedback endpoint
+**Completed:** ✅
+- `_llm_engine(query, ctx, api_key)` — `gpt-4o-mini`, real pod/OOM context in prompt, auto-activates when `OPENAI_API_KEY` is set, falls back to Phase 1 on any error
+- `nlq_feedback` Postgres table added to `_init_schema()` in `db.py` — stores `query_id`, `query`, `response`, `rating`, `cluster`, `created_at`
+- `POST /autonomous-ai/copilot/feedback` endpoint — validates `rating` ∈ `{up,down}`, inserts to `nlq_feedback`, returns `{status,query_id,rating}`
+- Frontend 👍/👎 buttons wired — `handleFeedback()` optimistic UI (immediate colour change + "Thanks!"/"Noted" text), fires-and-forgets `POST /copilot/feedback`
+- `_safe_list()` helper added to `_fetch_cluster_context()` — de-stringifies any string-encoded JSON items in list fields (fixes `'str' object has no attribute 'get'` 500 on NLQ + Cost endpoints)
+- Phase 1→2 upgrade path: add `OPENAI_API_KEY=sk-...` to `backend/.env` → restart backend → LLM activates automatically. Remove key → instant Phase 1 fallback.
 
-**File:** `k8s-optimization-platform/backend/api/autonomous_ai.py`
-
-**Done when:** Adding `OPENAI_API_KEY=sk-...` to `.env` and restarting the server makes the NaturalLanguageQueries page respond with LLM-generated answers. Removing the key falls back to Phase 1 instantly.
+**Deploy:**
+- Backend: rebuilt from Dockerfile on EC2 (`98.82.224.39`), `docker-compose restart backend` — all 21 autonomous-ai endpoints → **200 OK**
+- Frontend: `npm run build` + `firebase deploy` → 807 files uploaded to `k8s-6d5ba` — 20/20 pages → **200 OK** at `https://k8s-6d5ba.web.app`
 
 ---
 
