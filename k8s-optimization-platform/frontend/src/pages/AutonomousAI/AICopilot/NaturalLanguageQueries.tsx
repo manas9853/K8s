@@ -123,7 +123,9 @@ const UserBubble: React.FC<{ query: string; timestamp: string }> = ({ query, tim
 const AIBubble: React.FC<{
   conv: Conversation;
   onSuggestion: (q: string) => void;
-}> = ({ conv, onSuggestion }) => (
+  onFeedback: (convId: string, query: string, response: string, rating: 'up' | 'down') => void;
+  feedbackDone: Record<string, 'up' | 'down'>;
+}> = ({ conv, onSuggestion, onFeedback, feedbackDone }) => (
   <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2.5, gap: 1 }}>
     <Box sx={{ mt: 0.5, flexShrink: 0 }}>
       <SmartToyOutlinedIcon sx={{ fontSize: 20, color: '#58a6ff' }} />
@@ -198,17 +200,34 @@ const AIBubble: React.FC<{
       )}
 
       {/* Feedback buttons */}
-      <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75 }}>
+      <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75, alignItems: 'center' }}>
         <Tooltip title="Helpful">
-          <IconButton size="small" sx={{ color: DK.muted, '&:hover': { color: '#3fb950' } }}>
+          <IconButton
+            size="small"
+            disabled={!!feedbackDone[conv.id]}
+            onClick={() => onFeedback(conv.id, conv.userQuery, conv.aiResponse, 'up')}
+            sx={{ color: feedbackDone[conv.id] === 'up' ? '#3fb950' : DK.muted,
+                  '&:hover': { color: '#3fb950' } }}
+          >
             <ThumbUpOutlinedIcon sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
         <Tooltip title="Not helpful">
-          <IconButton size="small" sx={{ color: DK.muted, '&:hover': { color: '#f85149' } }}>
+          <IconButton
+            size="small"
+            disabled={!!feedbackDone[conv.id]}
+            onClick={() => onFeedback(conv.id, conv.userQuery, conv.aiResponse, 'down')}
+            sx={{ color: feedbackDone[conv.id] === 'down' ? '#f85149' : DK.muted,
+                  '&:hover': { color: '#f85149' } }}
+          >
             <ThumbDownOutlinedIcon sx={{ fontSize: 14 }} />
           </IconButton>
         </Tooltip>
+        {feedbackDone[conv.id] && (
+          <Typography sx={{ color: DK.muted, fontSize: '0.65rem', ml: 0.25 }}>
+            {feedbackDone[conv.id] === 'up' ? 'Thanks!' : 'Noted'}
+          </Typography>
+        )}
       </Box>
     </Box>
   </Box>
@@ -224,6 +243,7 @@ const NaturalLanguageQueries: React.FC = () => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [history, setHistory]           = useState<HistoryItem[]>([]);
   const [error, setError]               = useState<string | null>(null);
+  const [feedbackDone, setFeedbackDone] = useState<Record<string, 'up' | 'down'>>({});
 
   const threadRef = useRef<HTMLDivElement>(null);
 
@@ -295,6 +315,29 @@ const NaturalLanguageQueries: React.FC = () => {
     submitQuery(query);
   };
 
+  const handleFeedback = useCallback(async (
+    convId: string, query: string, response: string, rating: 'up' | 'down'
+  ) => {
+    // Optimistic UI update — mark immediately
+    setFeedbackDone(p => ({ ...p, [convId]: rating }));
+    try {
+      await fetch(`${API_BASE_URL}/v1/autonomous-ai/copilot/feedback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query_id: convId,
+          query,
+          response,
+          rating,
+          cluster: activeClusterId === 'all' ? null : activeClusterId,
+        }),
+      });
+      // Fire and forget — we already marked optimistically; backend failure is silent
+    } catch {
+      // Silently ignore — the UI already shows "Thanks!" / "Noted"
+    }
+  }, [activeClusterId]);
+
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', gap: 0 }}>
 
@@ -356,7 +399,8 @@ const NaturalLanguageQueries: React.FC = () => {
           {conversations.map((conv) => (
             <React.Fragment key={conv.id}>
               <UserBubble query={conv.userQuery} timestamp={conv.timestamp} />
-              <AIBubble conv={conv} onSuggestion={submitQuery} />
+              <AIBubble conv={conv} onSuggestion={submitQuery}
+                onFeedback={handleFeedback} feedbackDone={feedbackDone} />
             </React.Fragment>
           ))}
 

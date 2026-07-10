@@ -170,6 +170,23 @@ class DatabaseManager:
                 ON cis_control_exceptions(cluster_name, control_id, status)
             """)
 
+            # ── nlq_feedback — NLQ 👍/👎 feedback log ─────────────────────────
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS nlq_feedback (
+                    id          BIGSERIAL PRIMARY KEY,
+                    query_id    TEXT NOT NULL,
+                    query       TEXT NOT NULL,
+                    response    TEXT NOT NULL,
+                    rating      TEXT NOT NULL,   -- 'up' or 'down'
+                    cluster     TEXT,
+                    created_at  TEXT NOT NULL
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_nlq_feedback_query_id
+                ON nlq_feedback(query_id)
+            """)
+
             conn.commit()
             logger.info("Schema init/migration complete")
 

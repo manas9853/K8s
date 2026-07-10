@@ -2152,4 +2152,49 @@ async def get_compliance_recommendations(cluster: Optional[str] = Query(None)):
         logger.error(f"compliance-recommendations error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+# ============================================================================
+# FEEDBACK ENDPOINT
+# ============================================================================
+
+class FeedbackPayload(BaseModel):
+    query_id:  str
+    query:     str
+    response:  str
+    rating:    str                # "up" or "down"
+    cluster:   Optional[str] = None
+
+@router.post("/copilot/feedback")
+async def submit_feedback(payload: FeedbackPayload):
+    """
+    Record 👍/👎 feedback for a NLQ response.
+    Writes to nlq_feedback table in Postgres.
+    Used by Phase 2 to improve LLM fine-tuning data.
+    """
+    if payload.rating not in ("up", "down"):
+        raise HTTPException(status_code=422, detail="rating must be 'up' or 'down'")
+    try:
+        from database.db import db_manager
+        with db_manager._conn() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                """
+                INSERT INTO nlq_feedback (query_id, query, response, rating, cluster, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (
+                    payload.query_id,
+                    payload.query[:1000],
+                    payload.response[:4000],
+                    payload.rating,
+                    payload.cluster,
+                    datetime.utcnow().isoformat() + "Z",
+                ),
+            )
+            conn.commit()
+        logger.info(f"NLQ feedback recorded: {payload.query_id} rating={payload.rating}")
+        return {"status": "ok", "query_id": payload.query_id, "rating": payload.rating}
+    except Exception as e:
+        logger.error(f"submit_feedback error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Made with Bob - Comprehensive Autonomous AI API
