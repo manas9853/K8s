@@ -1,31 +1,39 @@
 """
 Carbon Footprint API - Feature 20
-Tracks carbon emissions and environmental impact of Kubernetes infrastructure
-Calculates savings from optimization recommendations
+Tracks carbon emissions and environmental impact of Kubernetes infrastructure.
+All data comes directly from the database via _fetch_cluster_context and
+compute_energy — no self-HTTP loops.
 """
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 import logging
-import httpx
 
-router = APIRouter()
+from api.autonomous_ai import _fetch_cluster_context
+from utils.cost_engine import compute_energy
+
+router = APIRouter(tags=["Carbon Footprint"])
 logger = logging.getLogger(__name__)
 
 
-# Carbon calculation constants
-# Based on EPA and cloud provider data
-KWH_PER_CPU_CORE_HOUR = 0.012  # Average power consumption per CPU core
-KWH_PER_GB_MEMORY_HOUR = 0.0038  # Average power consumption per GB RAM
-CO2_KG_PER_KWH = 0.385  # Average grid carbon intensity (kg CO2/kWh)
-COST_PER_KWH = 0.12  # Average electricity cost ($/kWh)
+# ---------------------------------------------------------------------------
+# Physics constants (EPA / cloud-provider data)
+# ---------------------------------------------------------------------------
+KWH_PER_CPU_CORE_HOUR = 0.012     # Average power consumption per CPU core
+KWH_PER_GB_MEMORY_HOUR = 0.0038   # Average power consumption per GB RAM
+CO2_KG_PER_KWH = 0.385            # Average grid carbon intensity (kg CO2/kWh)
+COST_PER_KWH = 0.12               # Average electricity cost ($/kWh)
 
 # Environmental equivalents
-KG_CO2_PER_TREE_YEAR = 21  # CO2 absorbed by one tree per year
-KG_CO2_PER_MILE_DRIVEN = 0.404  # CO2 from driving one mile
-KWH_PER_HOME_MONTH = 877  # Average home electricity usage per month
+KG_CO2_PER_TREE_YEAR = 21         # CO2 absorbed by one tree per year
+KG_CO2_PER_MILE_DRIVEN = 0.404    # CO2 from driving one mile
+KWH_PER_HOME_MONTH = 877          # Average US home electricity usage per month
 
+
+# ---------------------------------------------------------------------------
+# Pydantic models
+# ---------------------------------------------------------------------------
 
 class CarbonSummary(BaseModel):
     """Overall carbon footprint summary"""
@@ -70,389 +78,309 @@ class NamespaceCarbon(BaseModel):
     workload_count: int
 
 
+# ---------------------------------------------------------------------------
+# Pure helper functions
+# ---------------------------------------------------------------------------
+
 def calculate_energy_from_resources(
     cpu_cores: float,
     memory_gb: float,
-    hours: float = 730
+    hours: float = 730,
 ) -> float:
-    """Calculate energy consumption in kWh from CPU and memory"""
+    """Calculate energy consumption in kWh from CPU and memory."""
     cpu_kwh = cpu_cores * KWH_PER_CPU_CORE_HOUR * hours
     memory_kwh = memory_gb * KWH_PER_GB_MEMORY_HOUR * hours
     return cpu_kwh + memory_kwh
 
 
 def calculate_carbon_from_energy(energy_kwh: float) -> float:
-    """Calculate CO2 emissions in kg from energy consumption"""
+    """Calculate CO2 emissions in kg from energy consumption."""
     return energy_kwh * CO2_KG_PER_KWH
 
 
-async def fetch_recommendations() -> List[dict]:
-    """Fetch recommendations from API"""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                "http://localhost:8000/api/recommendations/"
-            )
-            if response.status_code == 200:
-                return response.json()
-    except Exception as e:
-        logger.error(f"Error fetching recommendations: {e}")
-    return []
-
-
-async def fetch_cost_savings() -> dict:
-    """Fetch cost savings summary"""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                "http://localhost:8000/api/cost-savings/summary"
-            )
-            if response.status_code == 200:
-                return response.json()
-    except Exception as e:
-        logger.error(f"Error fetching cost savings: {e}")
-    return {}
-
-
-async def fetch_clusters() -> List[dict]:
-    """Fetch cluster data"""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get(
-                "http://localhost:8000/api/clusters/"
-            )
-            if response.status_code == 200:
-                return response.json()
-    except Exception as e:
-        logger.error(f"Error fetching clusters: {e}")
-    return []
-
+# ---------------------------------------------------------------------------
+# Endpoints
+# ---------------------------------------------------------------------------
 
 @router.get("/summary", response_model=CarbonSummary)
-async def get_summary():
+async def get_summary(cluster: Optional[str] = Query(None)):
     """
-    Get comprehensive carbon footprint summary
-    Calculates based on real cluster resource usage and savings
+    Get comprehensive carbon footprint summary.
+    Derives current emissions directly from cluster resources via compute_energy.
+    Optimised emissions = 30 % reduction estimate (right-sizing all pods).
     """
-    
-    # Fetch real data
-    recommendations = await fetch_recommendations()
-    cost_data = await fetch_cost_savings()
-    
-    # Calculate current resource usage
-    total_current_cpu = 0.0
-    total_current_memory = 0.0
-    total_optimized_cpu = 0.0
-    total_optimized_memory = 0.0
-    
-    for rec in recommendations:
-        cpu_data = rec.get('cpu', {})
-        memory_data = rec.get('memory', {})
-        
-        # Current usage
-        total_current_cpu += cpu_data.get('current_request', 0)
-        total_current_memory += memory_data.get('current_request', 0) / 1024
-        
-        # Optimized usage
-        total_optimized_cpu += cpu_data.get('recommended_request', 0)
-        total_optimized_memory += (
-            memory_data.get('recommended_request', 0) / 1024
-        )
-    
-    # Calculate energy consumption (monthly = 730 hours)
-    current_energy = calculate_energy_from_resources(
-        total_current_cpu,
-        total_current_memory,
-        730
-    )
-    optimized_energy = calculate_energy_from_resources(
-        total_optimized_cpu,
-        total_optimized_memory,
-        730
-    )
-    energy_saved = current_energy - optimized_energy
-    
-    # Calculate carbon emissions
-    current_carbon = calculate_carbon_from_energy(current_energy)
-    optimized_carbon = calculate_carbon_from_energy(optimized_energy)
-    carbon_saved = current_carbon - optimized_carbon
-    
-    # Calculate cost savings from energy
-    cost_saved = energy_saved * COST_PER_KWH
-    
-    # Use actual cost savings if available
-    if cost_data:
-        cost_saved = cost_data.get('potential_monthly_savings', cost_saved)
-    
-    # Calculate reduction percentage
+    ctx = await _fetch_cluster_context(cluster)
+    energy = compute_energy(ctx)
+
+    current_kwh = energy.get("monthly_kwh", 0.0)
+    # Optimised estimate: 30 % reduction from right-sizing
+    optimized_kwh = round(current_kwh * 0.70, 2)
+    energy_saved = round(current_kwh - optimized_kwh, 2)
+
+    co2_intensity = energy.get("co2_intensity_kg_per_kwh", CO2_KG_PER_KWH)
+    current_carbon = round(current_kwh * co2_intensity, 2)
+    optimized_carbon = round(optimized_kwh * co2_intensity, 2)
+    carbon_saved = round(current_carbon - optimized_carbon, 2)
+
+    cost_saved = round(energy_saved * COST_PER_KWH, 2)
+
     reduction_pct = 0.0
     if current_carbon > 0:
-        reduction_pct = (carbon_saved / current_carbon) * 100
-    
-    # Calculate environmental equivalents
+        reduction_pct = round((carbon_saved / current_carbon) * 100, 1)
+
     trees_equivalent = int(carbon_saved / KG_CO2_PER_TREE_YEAR * 12)
     miles_not_driven = int(carbon_saved / KG_CO2_PER_MILE_DRIVEN)
     homes_powered = round(energy_saved / KWH_PER_HOME_MONTH, 1)
-    
+
     return CarbonSummary(
-        total_carbon_saved_kg=round(carbon_saved, 2),
-        total_energy_saved_kwh=round(energy_saved, 2),
-        total_cost_saved=round(cost_saved, 2),
-        reduction_percentage=round(reduction_pct, 1),
+        total_carbon_saved_kg=carbon_saved,
+        total_energy_saved_kwh=energy_saved,
+        total_cost_saved=cost_saved,
+        reduction_percentage=reduction_pct,
         trees_equivalent=trees_equivalent,
         miles_not_driven=miles_not_driven,
         homes_powered=homes_powered,
-        current_monthly_emissions_kg=round(current_carbon, 2),
-        optimized_monthly_emissions_kg=round(optimized_carbon, 2)
+        current_monthly_emissions_kg=current_carbon,
+        optimized_monthly_emissions_kg=optimized_carbon,
     )
 
 
 @router.get("/clusters", response_model=List[ClusterCarbon])
-async def get_clusters():
+async def get_clusters(cluster: Optional[str] = Query(None)):
     """
-    Get carbon footprint data by cluster
-    Calculates based on real cluster resources
+    Get carbon footprint data per cluster.
+    Iterates over every registered cluster and computes energy from its latest
+    metrics snapshot.  When `cluster` is supplied only that cluster is returned.
     """
-    
-    recommendations = await fetch_recommendations()
-    clusters_data = await fetch_clusters()
-    
-    # Group recommendations by cluster
-    cluster_stats = {}
-    
-    for rec in recommendations:
-        cluster = rec.get('cluster_id', 'unknown')
-        if cluster == 'unknown':
-            try:
-                from services.k8s_client import k8s_client
-                if k8s_client:
-                    cluster = k8s_client.get_cluster_name()
-            except Exception:
-                cluster = 'xforce-devops'
-        
-        if cluster not in cluster_stats:
-            cluster_stats[cluster] = {
-                'current_cpu': 0.0,
-                'current_memory': 0.0,
-                'optimized_cpu': 0.0,
-                'optimized_memory': 0.0,
-                'count': 0
-            }
-        
-        stats = cluster_stats[cluster]
-        cpu_data = rec.get('cpu', {})
-        memory_data = rec.get('memory', {})
-        
-        stats['current_cpu'] += cpu_data.get('current_request', 0)
-        stats['current_memory'] += memory_data.get('current_request', 0) / 1024
-        stats['optimized_cpu'] += cpu_data.get('recommended_request', 0)
-        stats['optimized_memory'] += (
-            memory_data.get('recommended_request', 0) / 1024
-        )
-        stats['count'] += 1
-    
-    # Calculate carbon for each cluster
-    cluster_carbon = []
-    
-    for cluster, stats in cluster_stats.items():
-        current_energy = calculate_energy_from_resources(
-            stats['current_cpu'],
-            stats['current_memory'],
-            730
-        )
-        optimized_energy = calculate_energy_from_resources(
-            stats['optimized_cpu'],
-            stats['optimized_memory'],
-            730
-        )
-        
-        energy_saved = current_energy - optimized_energy
-        current_carbon = calculate_carbon_from_energy(current_energy)
-        optimized_carbon = calculate_carbon_from_energy(optimized_energy)
-        carbon_saved = current_carbon - optimized_carbon
-        cost_saved = energy_saved * COST_PER_KWH
-        
-        # Calculate efficiency score (0-100)
-        efficiency = 0
+    from database.db import db_manager
+
+    all_clusters = db_manager.get_all_clusters()
+    if not all_clusters:
+        return []
+
+    # Filter to the requested cluster when scoped
+    if cluster:
+        all_clusters = [c for c in all_clusters if c["cluster_name"] == cluster]
+
+    result: List[ClusterCarbon] = []
+    for c in all_clusters:
+        cname = c["cluster_name"]
+        ctx = await _fetch_cluster_context(cname)
+        if not ctx:
+            continue
+        energy = compute_energy(ctx)
+
+        current_kwh = energy.get("monthly_kwh", 0.0)
+        optimized_kwh = round(current_kwh * 0.70, 2)
+        energy_saved = round(current_kwh - optimized_kwh, 2)
+
+        co2_intensity = energy.get("co2_intensity_kg_per_kwh", CO2_KG_PER_KWH)
+        current_carbon = round(current_kwh * co2_intensity, 2)
+        optimized_carbon = round(optimized_kwh * co2_intensity, 2)
+        carbon_saved = round(current_carbon - optimized_carbon, 2)
+        cost_saved = round(energy_saved * COST_PER_KWH, 2)
+
+        # Efficiency score: fraction of current emissions that are NOT wasted
+        # (higher is worse from a waste perspective — we invert it)
+        efficiency = 100
         if current_carbon > 0:
-            efficiency = int((1 - (carbon_saved / current_carbon)) * 100)
-        
-        cluster_carbon.append(ClusterCarbon(
-            cluster=cluster,
-            carbon_saved_kg=round(carbon_saved, 2),
-            energy_saved_kwh=round(energy_saved, 2),
-            cost_saved=round(cost_saved, 2),
+            # how close to optimised we already are (0–100)
+            efficiency = int((optimized_carbon / current_carbon) * 100)
+
+        result.append(ClusterCarbon(
+            cluster=cname,
+            carbon_saved_kg=carbon_saved,
+            energy_saved_kwh=energy_saved,
+            cost_saved=cost_saved,
             efficiency_score=efficiency,
-            current_emissions_kg=round(current_carbon, 2),
-            optimized_emissions_kg=round(optimized_carbon, 2)
+            current_emissions_kg=current_carbon,
+            optimized_emissions_kg=optimized_carbon,
         ))
-    
-    return cluster_carbon
+
+    return result
 
 
 @router.get("/trends", response_model=List[CarbonTrend])
-async def get_trends(months: int = 6):
+async def get_trends(
+    cluster: Optional[str] = Query(None),
+    months: int = 6,
+):
     """
-    Get carbon footprint trends over time
-    Simulates historical data based on current savings
+    Get carbon footprint trends over time.
+    Pulls real agent_metrics history (up to 90 rows), groups by calendar month,
+    and computes energy for each snapshot.  Only months with real data are
+    returned — no fabrication of pre-onboarding history.
     """
-    
-    # Get current summary
-    summary = await get_summary()
-    
-    trends = []
-    base_date = datetime.utcnow()
-    
-    # Generate trend data (simulating gradual improvement)
-    for i in range(months, 0, -1):
-        month_date = base_date - timedelta(days=30 * i)
-        month_name = month_date.strftime("%b")
-        
-        # Simulate gradual reduction in emissions
-        improvement_factor = 1 - (i / months * 0.15)
-        
-        carbon_kg = summary.current_monthly_emissions_kg * improvement_factor
-        energy_kwh = summary.total_energy_saved_kwh / months * (months - i + 1)
-        cost_saved = summary.total_cost_saved / months * (months - i + 1)
-        optimizations = int((months - i + 1) * 3)
-        
+    from database.db import db_manager
+    import json as _json
+
+    all_clusters = db_manager.get_all_clusters()
+    if not all_clusters:
+        return []
+
+    if cluster:
+        target_clusters = [c["cluster_name"] for c in all_clusters
+                           if c["cluster_name"] == cluster]
+    else:
+        target_clusters = [c["cluster_name"] for c in all_clusters]
+
+    # Collect (month_key → accumulated kwh) across all target clusters
+    month_kwh: Dict[str, float] = {}
+    month_opts: Dict[str, int] = {}   # rough "optimizations applied" count
+
+    for cname in target_clusters:
+        rows = db_manager.get_metrics_history(cname, limit=90)
+        for row in rows:
+            ts_raw = row.get("timestamp")
+            if ts_raw is None:
+                continue
+            # timestamp may be a datetime object or a string
+            if isinstance(ts_raw, datetime):
+                ts = ts_raw
+            else:
+                try:
+                    ts = datetime.fromisoformat(str(ts_raw))
+                except Exception:
+                    continue
+
+            month_key = ts.strftime("%Y-%m")   # e.g. "2025-03"
+            # Build a minimal ctx from this snapshot for compute_energy
+            snap_ctx: Dict[str, Any] = {
+                "nodes":               row.get("nodes") or {},
+                "resources":           row.get("resources") or {},
+                "finops":              row.get("finops") or {},
+                "namespace_resources": [],
+            }
+            # namespace_resources may live inside finops
+            finops_d = snap_ctx["finops"]
+            if isinstance(finops_d, dict):
+                nr = finops_d.get("namespace_resources", {})
+                if isinstance(nr, dict):
+                    snap_ctx["namespace_resources"] = [
+                        {"namespace": k, **v} for k, v in nr.items()
+                    ]
+
+            energy = compute_energy(snap_ctx)
+            kwh = energy.get("monthly_kwh", 0.0)
+
+            if month_key not in month_kwh:
+                month_kwh[month_key] = 0.0
+                month_opts[month_key] = 0
+            # Average across multiple snapshots in the same month
+            month_kwh[month_key] = (month_kwh[month_key] + kwh) / 2
+            month_opts[month_key] += 1
+
+    if not month_kwh:
+        return []
+
+    # Sort chronologically and keep only the most recent `months` entries
+    sorted_months = sorted(month_kwh.keys())[-months:]
+
+    trends: List[CarbonTrend] = []
+    for mk in sorted_months:
+        kwh = round(month_kwh[mk], 2)
+        co2 = round(kwh * CO2_KG_PER_KWH, 2)
+        cost_saved = round(kwh * 0.30 * COST_PER_KWH, 2)   # 30 % optimisation saving
+        label = datetime.strptime(mk, "%Y-%m").strftime("%b %Y")
         trends.append(CarbonTrend(
-            month=month_name,
-            carbon_kg=round(carbon_kg, 2),
-            energy_kwh=round(energy_kwh, 2),
-            cost_saved=round(cost_saved, 2),
-            optimizations_applied=optimizations
+            month=label,
+            carbon_kg=co2,
+            energy_kwh=kwh,
+            cost_saved=cost_saved,
+            optimizations_applied=month_opts[mk],
         ))
-    
+
     return trends
 
 
 @router.get("/namespaces", response_model=List[NamespaceCarbon])
-async def get_namespaces():
+async def get_namespaces(cluster: Optional[str] = Query(None)):
     """
-    Get carbon footprint by namespace
-    Shows which namespaces have the highest environmental impact
+    Get carbon footprint broken down by namespace.
+    Uses the namespace_energy list already computed by compute_energy so there
+    is no double-calculation.
     """
-    
-    recommendations = await fetch_recommendations()
-    
-    # Group by namespace
-    namespace_stats = {}
-    
-    for rec in recommendations:
-        namespace = rec.get('namespace', 'default')
-        cluster = rec.get('cluster_id', 'xforce-devops')
-        
-        if cluster == 'unknown':
-            try:
-                from services.k8s_client import k8s_client
-                if k8s_client:
-                    cluster = k8s_client.get_cluster_name()
-            except Exception:
-                cluster = 'xforce-devops'
-        
-        key = f"{cluster}:{namespace}"
-        
-        if key not in namespace_stats:
-            namespace_stats[key] = {
-                'namespace': namespace,
-                'cluster': cluster,
-                'current_cpu': 0.0,
-                'current_memory': 0.0,
-                'optimized_cpu': 0.0,
-                'optimized_memory': 0.0,
-                'count': 0
-            }
-        
-        stats = namespace_stats[key]
-        cpu_data = rec.get('cpu', {})
-        memory_data = rec.get('memory', {})
-        
-        stats['current_cpu'] += cpu_data.get('current_request', 0)
-        stats['current_memory'] += memory_data.get('current_request', 0) / 1024
-        stats['optimized_cpu'] += cpu_data.get('recommended_request', 0)
-        stats['optimized_memory'] += (
-            memory_data.get('recommended_request', 0) / 1024
-        )
-        stats['count'] += 1
-    
-    # Calculate carbon for each namespace
-    namespace_carbon = []
-    
-    for key, stats in namespace_stats.items():
-        current_energy = calculate_energy_from_resources(
-            stats['current_cpu'],
-            stats['current_memory'],
-            730
-        )
-        optimized_energy = calculate_energy_from_resources(
-            stats['optimized_cpu'],
-            stats['optimized_memory'],
-            730
-        )
-        
-        energy_saved = current_energy - optimized_energy
-        carbon_saved = calculate_carbon_from_energy(energy_saved)
-        cost_saved = energy_saved * COST_PER_KWH
-        
-        namespace_carbon.append(NamespaceCarbon(
-            namespace=stats['namespace'],
-            cluster=stats['cluster'],
-            carbon_saved_kg=round(carbon_saved, 2),
-            energy_saved_kwh=round(energy_saved, 2),
-            cost_saved=round(cost_saved, 2),
-            workload_count=stats['count']
+    ctx = await _fetch_cluster_context(cluster)
+    energy = compute_energy(ctx)
+
+    cluster_label = ctx.get("cluster_name", cluster or "unknown")
+    co2_intensity = energy.get("co2_intensity_kg_per_kwh", CO2_KG_PER_KWH)
+
+    # namespace_resources carries workload counts via pod membership
+    ns_res = ctx.get("namespace_resources") or []
+    ns_pod_count: Dict[str, int] = {}
+    for ns in ns_res:
+        name = ns.get("namespace") or "unknown"
+        # agent reports pod_count directly, fallback to 1
+        ns_pod_count[name] = int(ns.get("pod_count") or 1)
+
+    result: List[NamespaceCarbon] = []
+    for ns_e in energy.get("namespace_energy", []):
+        ns_name = ns_e.get("namespace", "unknown")
+        kwh = ns_e.get("kwh", 0.0)
+        ns_co2 = ns_e.get("co2_kg", round(kwh * co2_intensity, 2))
+        ns_optimized_co2 = round(ns_co2 * 0.70, 2)
+        carbon_saved = round(ns_co2 - ns_optimized_co2, 2)
+        energy_saved = round(kwh * 0.30, 2)
+        cost_saved = round(energy_saved * COST_PER_KWH, 2)
+
+        # Determine which cluster this namespace belongs to
+        ns_cluster = cluster_label
+        # In multi-cluster ctx each ns_res item may carry _cluster
+        for ns in ns_res:
+            if ns.get("namespace") == ns_name and ns.get("_cluster"):
+                ns_cluster = ns["_cluster"]
+                break
+
+        result.append(NamespaceCarbon(
+            namespace=ns_name,
+            cluster=ns_cluster,
+            carbon_saved_kg=carbon_saved,
+            energy_saved_kwh=energy_saved,
+            cost_saved=cost_saved,
+            workload_count=ns_pod_count.get(ns_name, 1),
         ))
-    
-    # Sort by carbon saved (highest first)
-    namespace_carbon.sort(key=lambda x: x.carbon_saved_kg, reverse=True)
-    
-    return namespace_carbon
+
+    result.sort(key=lambda x: x.carbon_saved_kg, reverse=True)
+    return result
 
 
 @router.get("/impact")
-async def get_environmental_impact():
+async def get_environmental_impact(cluster: Optional[str] = Query(None)):
     """
-    Get detailed environmental impact metrics
-    Provides various perspectives on carbon savings
+    Get detailed environmental impact metrics.
+    Calls get_summary() internally — no HTTP hop.
     """
-    
-    summary = await get_summary()
-    
+    summary = await get_summary(cluster=cluster)
+
     return {
         "carbon_metrics": {
-            "total_saved_kg": summary.total_carbon_saved_kg,
-            "total_saved_tons": round(summary.total_carbon_saved_kg / 1000, 3),
-            "annual_projection_kg": round(summary.total_carbon_saved_kg * 12, 2),
-            "annual_projection_tons": round(
-                summary.total_carbon_saved_kg * 12 / 1000, 2
-            )
+            "total_saved_kg":         summary.total_carbon_saved_kg,
+            "total_saved_tons":       round(summary.total_carbon_saved_kg / 1000, 3),
+            "annual_projection_kg":   round(summary.total_carbon_saved_kg * 12, 2),
+            "annual_projection_tons": round(summary.total_carbon_saved_kg * 12 / 1000, 2),
         },
         "equivalents": {
-            "trees_planted": summary.trees_equivalent,
-            "miles_not_driven": summary.miles_not_driven,
-            "homes_powered_monthly": summary.homes_powered,
-            "smartphones_charged": int(
-                summary.total_energy_saved_kwh / 0.012
-            ),
-            "led_bulbs_year": int(summary.total_energy_saved_kwh / 8.76)
+            "trees_planted":          summary.trees_equivalent,
+            "miles_not_driven":       summary.miles_not_driven,
+            "homes_powered_monthly":  summary.homes_powered,
+            "smartphones_charged":    int(summary.total_energy_saved_kwh / 0.012),
+            "led_bulbs_year":         int(summary.total_energy_saved_kwh / 8.76),
         },
         "energy_metrics": {
-            "kwh_saved": summary.total_energy_saved_kwh,
-            "mwh_saved": round(summary.total_energy_saved_kwh / 1000, 3),
-            "annual_kwh_projection": round(
-                summary.total_energy_saved_kwh * 12, 2
-            )
+            "kwh_saved":              summary.total_energy_saved_kwh,
+            "mwh_saved":              round(summary.total_energy_saved_kwh / 1000, 3),
+            "annual_kwh_projection":  round(summary.total_energy_saved_kwh * 12, 2),
         },
         "financial_metrics": {
-            "monthly_savings": summary.total_cost_saved,
-            "annual_projection": round(summary.total_cost_saved * 12, 2)
+            "monthly_savings":        summary.total_cost_saved,
+            "annual_projection":      round(summary.total_cost_saved * 12, 2),
         },
         "reduction_metrics": {
-            "percentage": summary.reduction_percentage,
-            "current_emissions_kg": summary.current_monthly_emissions_kg,
-            "optimized_emissions_kg": summary.optimized_monthly_emissions_kg
-        }
+            "percentage":              summary.reduction_percentage,
+            "current_emissions_kg":    summary.current_monthly_emissions_kg,
+            "optimized_emissions_kg":  summary.optimized_monthly_emissions_kg,
+        },
     }
 
 # Made with Bob

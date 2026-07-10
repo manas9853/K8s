@@ -187,6 +187,41 @@ class DatabaseManager:
                 ON nlq_feedback(query_id)
             """)
 
+            # ── cloud_discovery_config — Phase 2 billing API credentials ──────
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cloud_discovery_config (
+                    cluster_name  TEXT PRIMARY KEY REFERENCES agent_clusters(cluster_name),
+                    provider      TEXT NOT NULL,
+                    status        TEXT NOT NULL DEFAULT 'pending',
+                    api_key_enc   TEXT,
+                    account_id    TEXT,
+                    cluster_tag   TEXT,
+                    last_sync_at  TEXT,
+                    last_sync_ok  BOOLEAN DEFAULT FALSE,
+                    last_error    TEXT,
+                    created_at    TEXT NOT NULL,
+                    updated_at    TEXT NOT NULL
+                )
+            """)
+
+            # ── cluster_billing_cache — hourly billing data from cloud APIs ───
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cluster_billing_cache (
+                    cluster_name   TEXT NOT NULL,
+                    billing_month  TEXT NOT NULL,
+                    total_cost     FLOAT NOT NULL,
+                    compute_cost   FLOAT DEFAULT 0,
+                    storage_cost   FLOAT DEFAULT 0,
+                    network_cost   FLOAT DEFAULT 0,
+                    control_plane  FLOAT DEFAULT 0,
+                    currency       TEXT DEFAULT 'USD',
+                    line_items     JSONB DEFAULT '[]',
+                    source         TEXT NOT NULL,
+                    fetched_at     TEXT NOT NULL,
+                    PRIMARY KEY (cluster_name, billing_month)
+                )
+            """)
+
             conn.commit()
             logger.info("Schema init/migration complete")
 
@@ -426,6 +461,34 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting metrics history: {e}")
             return []
+
+    def get_cluster_onboarding_date(self, cluster_name: str) -> str | None:
+        """
+        Returns the first agent_metrics timestamp for a cluster (= onboarding date).
+        Falls back to agent_clusters.registered_at.
+        Used by finops endpoints to show 'cost data available from X'.
+        Never fabricates pre-onboarding history.
+        """
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT MIN(timestamp) AS first_ts FROM agent_metrics WHERE cluster_name = %s",
+                    (cluster_name,),
+                )
+                row = cur.fetchone()
+                if row and row["first_ts"]:
+                    return row["first_ts"]
+                # Fallback: registered_at from clusters table
+                cur.execute(
+                    "SELECT registered_at FROM agent_clusters WHERE cluster_name = %s",
+                    (cluster_name,),
+                )
+                row = cur.fetchone()
+                return row["registered_at"] if row else None
+        except Exception as e:
+            logger.error(f"get_cluster_onboarding_date error: {e}")
+            return None
 
     def _cleanup_old_metrics(self, cluster_name: str, keep_count: int = 1000):
         try:

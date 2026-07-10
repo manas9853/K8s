@@ -47,7 +47,8 @@ from api import (
     compliance,
     intelligence,
     finops,
-    attack_investigation
+    attack_investigation,
+    discovery
 )
 from config.settings import settings
 from utils.logger import setup_logging
@@ -216,6 +217,7 @@ app.include_router(security.router, tags=["Security"])
 app.include_router(compliance.router, tags=["Compliance"])
 app.include_router(intelligence.router, tags=["Intelligence"])
 app.include_router(finops.router, prefix="/api/v1/finops", tags=["FinOps"])
+app.include_router(discovery.router, prefix="/api/v1/discovery", tags=["Cloud Discovery"])
 app.include_router(attack_investigation.router, prefix="/api/v1/attack-investigation", tags=["Attack Investigation"])
 app.include_router(root_cause.router, prefix="/api/v1/root-cause", tags=["Root Cause Analysis"])
 app.include_router(simulation.router, prefix="/api/v1/simulation", tags=["Simulation"])

@@ -76,8 +76,17 @@ async def _fetch_cluster_context(cluster: Optional[str] = None) -> Dict[str, Any
             cm_d     = _safe(metrics.get("configmaps"))
             sec_d    = _safe(metrics.get("secrets_domain"))
             ns_raw   = _safe(metrics.get("namespaces"))
-            # namespace_resources can be stored as a list of JSON strings — use _safe_list
-            ns_res_raw = finops_d.get("namespace_resources", [])
+            nodes_raw = _safe(metrics.get("nodes"))
+
+            # namespace_resources from agent is a DICT keyed by namespace name:
+            # {"rabbitmq": {"cpu_request": 1.5, "memory_request_gb": 4.5, ...}}
+            # Convert to list of dicts with "namespace" key before _safe_list.
+            nr = finops_d.get("namespace_resources", {})
+            if isinstance(nr, dict):
+                ns_res_raw = [{"namespace": k, **v} for k, v in nr.items()]
+            else:
+                ns_res_raw = nr  # already a list (future-proof)
+
             return {
                 "pods":               _safe_list(pods_d.get("items", [])),
                 "oom_events":         _safe_list(pods_d.get("oom_events", [])),
@@ -91,6 +100,10 @@ async def _fetch_cluster_context(cluster: Optional[str] = None) -> Dict[str, Any
                 "secrets":            _safe_list(sec_d.get("items", [])),
                 "namespaces":         ns_raw.get("items", []) if isinstance(ns_raw, dict) else
                                       (ns_raw if isinstance(ns_raw, list) else []),
+                # nodes list — for cost_engine.py node-level cost attribution
+                "nodes":              _safe_list(nodes_raw.get("items", [])),
+                # cluster-level resource totals
+                "resources":          _safe(metrics.get("resources")),
                 "finops":             finops_d,
                 "storage":            stor_d,
                 "observability":      obs_d,

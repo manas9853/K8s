@@ -1,279 +1,306 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Box,
-  Paper,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  IconButton,
-  LinearProgress,
-  Tabs,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
+  Box, Typography, Grid, Card, CardContent, Paper, IconButton,
+  LinearProgress, Table, TableBody, TableCell, TableContainer,
+  TableHead, TableRow, Chip, CircularProgress, Alert,
 } from '@mui/material';
+import EnergySavingsLeafIcon from '@mui/icons-material/EnergySavingsLeaf';
+import { Refresh as RefreshIcon } from '@mui/icons-material';
 import {
-  Refresh as RefreshIcon,
-  Park as EcoIcon,
-  TrendingDown as TrendingDownIcon,
-  Bolt as EnergyIcon,
-} from '@mui/icons-material';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, defs, linearGradient, stop,
+} from 'recharts';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
+import ClusterGuard from '../components/ClusterGuard';
 
-const Carbon: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [summary, setSummary] = useState<any>(null);
-  const [clusters, setClusters] = useState<any[]>([]);
-  const [trends, setTrends] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [tabValue, setTabValue] = useState(0);
+// ── Design tokens ──────────────────────────────────────────────────────────────
+const DK = {
+  bg: '#0d1117', surface: '#161b22', surface2: '#1c2128',
+  border: '#30363d', text: '#e6edf3', muted: '#8b949e',
+};
+const ACCENT = '#58a6ff';
+const GREEN   = '#3fb950';
+const AMBER   = '#d29922';
+const RED     = '#f85149';
 
-  useEffect(() => {
-    fetchData();
-  }, [clusterParam]);
+// ── Types ──────────────────────────────────────────────────────────────────────
+interface CarbonSummary {
+  total_carbon_saved_kg: number; total_energy_saved_kwh: number; total_cost_saved: number;
+  reduction_percentage: number; trees_equivalent: number; miles_not_driven: number;
+  homes_powered: number; current_monthly_emissions_kg: number; optimized_monthly_emissions_kg: number;
+}
+interface CarbonTrend {
+  month: string; carbon_kg: number; energy_kwh: number; cost_saved: number; optimizations_applied: number;
+}
+interface NamespaceCarbon {
+  namespace: string; cluster: string; carbon_saved_kg: number; energy_saved_kwh: number;
+  cost_saved: number; workload_count: number;
+}
 
-  const fetchData = async () => {
-    setLoading(true);
+const tooltipStyle = { backgroundColor: DK.surface, border: `1px solid ${DK.border}`, color: DK.text, fontSize: 12 };
+
+// ── Inner page (rendered inside ClusterGuard) ──────────────────────────────────
+const CarbonInner: React.FC = () => {
+  const { clusterParam, activeClusterName } = useActiveCluster();
+  const [summary, setSummary]       = useState<CarbonSummary | null>(null);
+  const [trends,  setTrends]        = useState<CarbonTrend[]>([]);
+  const [nsRows,  setNsRows]        = useState<NamespaceCarbon[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [error,   setError]         = useState<string | null>(null);
+
+  const fetchAll = async () => {
+    setLoading(true); setError(null);
     try {
-      await Promise.all([
-        fetchSummary(),
-        fetchClusters(),
-        fetchTrends(),
+      const [sumRes, trendRes, nsRes, _impactRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/v1/carbon/summary${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/carbon/trends${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/carbon/namespaces${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/carbon/impact${clusterParam}`),
       ]);
+      if (!sumRes.ok || !trendRes.ok || !nsRes.ok) throw new Error('Failed to fetch carbon data');
+      const [sumData, trendData, nsData] = await Promise.all([
+        sumRes.json(), trendRes.json(), nsRes.json(),
+      ]);
+      setSummary(sumData);
+      setTrends(Array.isArray(trendData) ? trendData : trendData.trends ?? []);
+      setNsRows(
+        (Array.isArray(nsData) ? nsData : nsData.namespaces ?? [])
+          .slice()
+          .sort((a: NamespaceCarbon, b: NamespaceCarbon) => b.carbon_saved_kg - a.carbon_saved_kg),
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unknown error');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchSummary = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/carbon/summary${clusterParam}`);
-    const data = await response.json();
-    setSummary(data);
-  };
+  useEffect(() => { fetchAll(); }, [clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const fetchClusters = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/carbon/clusters${clusterParam}`);
-    const data = await response.json();
-    setClusters(data);
-  };
+  if (loading) return (
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh">
+      <CircularProgress sx={{ color: ACCENT }} />
+    </Box>
+  );
+  if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
 
-  const fetchTrends = async () => {
-    const response = await fetch(`${API_BASE_URL}/v1/carbon/trends${clusterParam}`);
-    const data = await response.json();
-    setTrends(data);
-  };
+  const totalNsCo2 = nsRows.reduce((s, r) => s + r.carbon_saved_kg, 0) || 1;
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Carbon Footprint Dashboard
-        </Typography>
-        <IconButton onClick={fetchData} disabled={loading}>
+    <Box sx={{ p: 3, bgcolor: DK.bg, minHeight: '100vh' }}>
+
+      {/* ── Header ── */}
+      <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+        <Box display="flex" alignItems="center" gap={1.5}>
+          <EnergySavingsLeafIcon sx={{ fontSize: 34, color: GREEN }} />
+          <Box>
+            <Typography variant="h4" fontWeight={700} sx={{ color: DK.text, lineHeight: 1.2 }}>
+              Carbon Footprint
+            </Typography>
+            <Typography variant="body2" sx={{ color: DK.muted }}>{activeClusterName}</Typography>
+          </Box>
+        </Box>
+        <IconButton onClick={fetchAll} sx={{ color: DK.muted, '&:hover': { color: DK.text } }}>
           <RefreshIcon />
         </IconButton>
       </Box>
 
+      {/* ── Physics note ── */}
+      <Chip
+        label="📐 Physics-based calculation from CPU power consumption"
+        size="small"
+        sx={{ mb: 3, bgcolor: DK.surface2, color: DK.muted, border: `1px solid ${DK.border}`, fontSize: 11 }}
+      />
+
+      {/* ── KPI row ── */}
       {summary && (
-        <Grid container spacing={3} sx={{ mb: 3 }}>
-          <Grid item xs={12} md={3}>
-            <Card sx={{ bgcolor: 'success.light' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <EcoIcon sx={{ mr: 1 }} />
-                  <Typography color="textSecondary" gutterBottom>
-                    Carbon Saved
+        <Grid container spacing={2} mb={3}>
+          {[
+            { label: 'Current Monthly Emissions', value: `${summary.current_monthly_emissions_kg.toLocaleString()} kg`, sub: 'CO₂e', color: RED },
+            { label: 'Potential w/ Optimization',  value: `${summary.optimized_monthly_emissions_kg.toLocaleString()} kg`, sub: 'CO₂e optimized', color: GREEN },
+            { label: 'Reduction Possible',         value: `${summary.reduction_percentage}%`, sub: 'Savings potential', color: AMBER },
+            { label: 'Trees Equivalent',           value: `${summary.trees_equivalent.toLocaleString()}`, sub: 'Trees saved/yr', color: GREEN },
+          ].map(({ label, value, sub, color }) => (
+            <Grid item xs={12} sm={6} md={3} key={label}>
+              <Card sx={{ bgcolor: DK.surface, border: `1px solid ${color}33` }}>
+                <CardContent sx={{ pb: '12px !important' }}>
+                  <Typography variant="caption" sx={{ color: DK.muted, textTransform: 'uppercase', fontSize: 10, letterSpacing: 0.8 }}>
+                    {label}
                   </Typography>
-                </Box>
-                <Typography variant="h4">{summary.total_carbon_saved_kg} kg</Typography>
-                <Typography variant="caption">CO₂ equivalent</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <EnergyIcon sx={{ mr: 1 }} />
-                  <Typography color="textSecondary" gutterBottom>
-                    Energy Saved
-                  </Typography>
-                </Box>
-                <Typography variant="h4">{summary.total_energy_saved_kwh} kWh</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <TrendingDownIcon sx={{ mr: 1 }} />
-                  <Typography color="textSecondary" gutterBottom>
-                    Cost Saved
-                  </Typography>
-                </Box>
-                <Typography variant="h4">${summary.total_cost_saved.toLocaleString()}</Typography>
-                <Typography variant="caption">Monthly</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} md={3}>
-            <Card>
-              <CardContent>
-                <Typography color="textSecondary" gutterBottom>
-                  Reduction Rate
-                </Typography>
-                <Typography variant="h4" color="success.main">
-                  {summary.reduction_percentage}%
-                </Typography>
-                <Typography variant="caption">vs last month</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
+                  <Typography variant="h5" fontWeight={700} sx={{ color, mt: 0.5 }}>{value}</Typography>
+                  <Typography variant="caption" sx={{ color: DK.muted }}>{sub}</Typography>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
         </Grid>
       )}
 
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Carbon Footprint Trend
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={trends}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line type="monotone" dataKey="carbon_kg" stroke="#4caf50" name="Carbon (kg)" />
-                <Line type="monotone" dataKey="energy_kwh" stroke="#2196f3" name="Energy (kWh)" />
-              </LineChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-              Savings by Cluster
-            </Typography>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={clusters}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="cluster" />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Bar dataKey="carbon_saved_kg" fill="#4caf50" name="Carbon Saved (kg)" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-      </Grid>
+      {/* ── Environmental equivalents ── */}
+      {summary && (
+        <Box display="flex" gap={2} flexWrap="wrap" mb={3}>
+          {[
+            { emoji: '🌳', label: 'Trees Planted', value: summary.trees_equivalent.toLocaleString() },
+            { emoji: '🚗', label: 'Miles Not Driven', value: summary.miles_not_driven.toLocaleString() },
+            { emoji: '🏠', label: 'Homes Powered',   value: summary.homes_powered.toLocaleString() },
+          ].map(({ emoji, label, value }) => (
+            <Box key={label} sx={{
+              bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 2,
+              px: 2.5, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.5,
+            }}>
+              <Typography sx={{ fontSize: 24 }}>{emoji}</Typography>
+              <Box>
+                <Typography variant="h6" fontWeight={700} sx={{ color: DK.text, lineHeight: 1.1 }}>{value}</Typography>
+                <Typography variant="caption" sx={{ color: DK.muted }}>{label}</Typography>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      )}
 
-      <Paper>
-        <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
-          <Tab label="Cluster Details" />
-          <Tab label="Environmental Impact" />
-        </Tabs>
+      {/* ── Trends AreaChart ── */}
+      {trends.length > 0 && (
+        <Paper sx={{ p: 3, bgcolor: DK.surface, border: `1px solid ${DK.border}`, mb: 3 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ color: DK.text, mb: 2 }}>
+            Carbon Trend (kg CO₂e / month)
+          </Typography>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={trends} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
+              <defs>
+                <linearGradient id="carbonGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={RED}  stopOpacity={0.35} />
+                  <stop offset="95%" stopColor={AMBER} stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={DK.border} />
+              <XAxis dataKey="month" stroke={DK.muted} tick={{ fill: DK.muted, fontSize: 11 }} />
+              <YAxis stroke={DK.muted} tick={{ fill: DK.muted, fontSize: 11 }} tickFormatter={v => `${v} kg`} />
+              <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v} kg`, 'Carbon']} />
+              <Area type="monotone" dataKey="carbon_kg" stroke={RED} strokeWidth={2}
+                fill="url(#carbonGrad)" name="Carbon kg" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Paper>
+      )}
 
-        {tabValue === 0 && (
-          <Box sx={{ p: 2 }}>
-            <TableContainer>
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Cluster</TableCell>
-                    <TableCell>Carbon Saved (kg)</TableCell>
-                    <TableCell>Energy Saved (kWh)</TableCell>
-                    <TableCell>Cost Saved</TableCell>
-                    <TableCell>Efficiency</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {clusters.map((cluster) => (
-                    <TableRow key={cluster.cluster}>
-                      <TableCell>{cluster.cluster}</TableCell>
-                      <TableCell>{cluster.carbon_saved_kg}</TableCell>
-                      <TableCell>{cluster.energy_saved_kwh}</TableCell>
-                      <TableCell>${cluster.cost_saved.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Chip
-                          label={`${cluster.efficiency_score}/100`}
-                          color={cluster.efficiency_score > 80 ? 'success' : 'warning'}
-                          size="small"
-                        />
+      {/* ── Namespace carbon table ── */}
+      {nsRows.length > 0 && (
+        <Paper sx={{ p: 3, bgcolor: DK.surface, border: `1px solid ${DK.border}`, mb: 3 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ color: DK.text, mb: 2 }}>
+            Carbon by Namespace
+          </Typography>
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  {['Namespace', 'CO₂ Saved (kg)', 'Energy (kWh)', 'Workloads', 'Share'].map(h => (
+                    <TableCell key={h} sx={{ color: DK.muted, borderColor: DK.border, fontSize: 11, textTransform: 'uppercase', fontWeight: 600 }}>
+                      {h}
+                    </TableCell>
+                  ))}
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {nsRows.map(row => {
+                  const share = Math.min((row.carbon_saved_kg / totalNsCo2) * 100, 100);
+                  return (
+                    <TableRow key={`${row.cluster}-${row.namespace}`}
+                      sx={{ '&:hover': { bgcolor: DK.surface2 } }}>
+                      <TableCell sx={{ color: DK.text, borderColor: DK.border }}>
+                        <Typography variant="body2" fontWeight={600}>{row.namespace}</Typography>
+                        <Typography variant="caption" sx={{ color: DK.muted }}>{row.cluster}</Typography>
+                      </TableCell>
+                      <TableCell sx={{ color: RED, borderColor: DK.border, fontWeight: 600 }}>
+                        {row.carbon_saved_kg.toFixed(1)}
+                      </TableCell>
+                      <TableCell sx={{ color: DK.text, borderColor: DK.border }}>
+                        {row.energy_saved_kwh.toLocaleString()}
+                      </TableCell>
+                      <TableCell sx={{ borderColor: DK.border }}>
+                        <Chip label={row.workload_count} size="small"
+                          sx={{ bgcolor: DK.surface2, color: DK.muted, fontSize: 11 }} />
+                      </TableCell>
+                      <TableCell sx={{ borderColor: DK.border, minWidth: 140 }}>
+                        <Box display="flex" alignItems="center" gap={1}>
+                          <LinearProgress variant="determinate" value={share}
+                            sx={{
+                              flex: 1, height: 6, borderRadius: 1,
+                              bgcolor: DK.border,
+                              '& .MuiLinearProgress-bar': { bgcolor: RED },
+                            }} />
+                          <Typography variant="caption" sx={{ color: DK.muted, width: 34 }}>
+                            {share.toFixed(0)}%
+                          </Typography>
+                        </Box>
                       </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Box>
-        )}
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
 
-        {tabValue === 1 && summary && (
-          <Box sx={{ p: 3 }}>
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Environmental Equivalents
-                    </Typography>
-                    <Box sx={{ mt: 2 }}>
-                      <Typography variant="body2" gutterBottom>
-                        🌳 Trees planted equivalent: <strong>{summary.trees_equivalent}</strong>
-                      </Typography>
-                      <Typography variant="body2" gutterBottom>
-                        🚗 Miles not driven: <strong>{summary.miles_not_driven.toLocaleString()}</strong>
-                      </Typography>
-                      <Typography variant="body2" gutterBottom>
-                        💡 Homes powered for a day: <strong>{summary.homes_powered}</strong>
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Card>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Sustainability Goals
-                    </Typography>
-                    <Box sx={{ mt: 2 }}>
-                      <Typography variant="body2" gutterBottom>
-                        Monthly Target: <strong>500 kg CO₂</strong>
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={(summary.total_carbon_saved_kg / 500) * 100}
-                        sx={{ mb: 2 }}
-                      />
-                      <Typography variant="body2" color="success.main">
-                        {((summary.total_carbon_saved_kg / 500) * 100).toFixed(0)}% of monthly goal achieved
-                      </Typography>
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
+      {/* ── Reduction opportunity box ── */}
+      {summary && (
+        <Paper sx={{ p: 3, bgcolor: DK.surface2, border: `1px solid ${GREEN}44`, borderRadius: 2 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ color: DK.text, mb: 2 }}>
+            Reduction Opportunity
+          </Typography>
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} sm={4} textAlign="center">
+              <Typography variant="caption" sx={{ color: DK.muted, textTransform: 'uppercase', fontSize: 10 }}>
+                Current Emissions
+              </Typography>
+              <Typography variant="h4" fontWeight={700} sx={{ color: RED }}>
+                {summary.current_monthly_emissions_kg.toLocaleString()} kg
+              </Typography>
+              <Typography variant="caption" sx={{ color: DK.muted }}>per month</Typography>
             </Grid>
+            <Grid item xs={12} sm={4} textAlign="center">
+              <Box sx={{ fontSize: 36, lineHeight: 1 }}>→</Box>
+              <Chip
+                label={`−${summary.reduction_percentage}% possible`}
+                sx={{ bgcolor: `${GREEN}22`, color: GREEN, border: `1px solid ${GREEN}55`, mt: 0.5 }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4} textAlign="center">
+              <Typography variant="caption" sx={{ color: DK.muted, textTransform: 'uppercase', fontSize: 10 }}>
+                Optimized Emissions
+              </Typography>
+              <Typography variant="h4" fontWeight={700} sx={{ color: GREEN }}>
+                {summary.optimized_monthly_emissions_kg.toLocaleString()} kg
+              </Typography>
+              <Typography variant="caption" sx={{ color: DK.muted }}>per month</Typography>
+            </Grid>
+          </Grid>
+          <Box mt={2}>
+            <Box display="flex" justifyContent="space-between" mb={0.5}>
+              <Typography variant="caption" sx={{ color: DK.muted }}>Savings potential</Typography>
+              <Typography variant="caption" sx={{ color: GREEN }}>
+                {(summary.current_monthly_emissions_kg - summary.optimized_monthly_emissions_kg).toFixed(1)} kg CO₂e/mo
+              </Typography>
+            </Box>
+            <LinearProgress variant="determinate" value={summary.reduction_percentage}
+              sx={{
+                height: 8, borderRadius: 1, bgcolor: DK.border,
+                '& .MuiLinearProgress-bar': { bgcolor: GREEN },
+              }} />
           </Box>
-        )}
-      </Paper>
-
-      {loading && <LinearProgress />}
+        </Paper>
+      )}
     </Box>
   );
 };
+
+// ── Default export wrapped in ClusterGuard ─────────────────────────────────────
+const Carbon: React.FC = () => (
+  <ClusterGuard>
+    <CarbonInner />
+  </ClusterGuard>
+);
 
 export default Carbon;
 

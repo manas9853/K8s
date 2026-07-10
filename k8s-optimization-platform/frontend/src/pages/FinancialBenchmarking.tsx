@@ -1,284 +1,344 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, Typography, Grid, CircularProgress, Alert, Chip, Paper,
-  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  Card, CardContent, Divider, LinearProgress
+  Card, CardContent, IconButton, Tooltip,
 } from '@mui/material';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import TrendingDownIcon from '@mui/icons-material/TrendingDown';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis } from 'recharts';
+import LeaderboardIcon from '@mui/icons-material/Leaderboard';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import {
+  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  Tooltip as RTooltip, Legend, ResponsiveContainer,
+} from 'recharts';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
 
-const fmt = (n: number) => `$${Number(n).toLocaleString()}`;
-const pctBadge = (pct: number) => pct >= 70 ? 'success' : pct >= 50 ? 'warning' : 'error';
+// ── Design tokens ────────────────────────────────────────────────────────────
+const DK = {
+  bg: '#0d1117', surface: '#161b22', surface2: '#1c2128',
+  border: '#30363d', text: '#e6edf3', muted: '#8b949e',
+};
+const ACCENT = '#58a6ff';
+const GREEN  = '#3fb950';
+const AMBER  = '#d29922';
+const RED    = '#f85149';
 
-const FinancialBenchmarking: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [data, setData] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// ── Types ────────────────────────────────────────────────────────────────────
+interface BenchmarkMetric {
+  your_value: number;
+  industry_average: number;
+  best_in_class: number;
+  percentile: number;
+  status: string;
+}
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [clusterParam]);
-
-  const fetchData = async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/v1/finops/financial-benchmarking${clusterParam}`);
-      if (!response.ok) throw new Error('Failed to fetch data');
-      const result = await response.json();
-      setData(result);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
+interface BenchmarkData {
+  your_metrics: {
+    cost_per_pod_per_month: number;
+    cost_per_cpu_core_per_month: number;
+    cost_per_gb_memory_per_month: number;
+    cost_per_gb_storage_per_month: number;
+    total_monthly_cost: number;
+    cluster_count: number;
+    pod_count: number;
   };
+  industry_benchmarks: {
+    cost_per_pod_per_month: BenchmarkMetric;
+    cost_per_cpu_core_per_month: BenchmarkMetric;
+    cost_per_gb_memory_per_month: BenchmarkMetric;
+    cost_per_gb_storage_per_month: BenchmarkMetric;
+  };
+  cluster_benchmarks?: any[];
+  cost_source: string;
+  accuracy: string;
+  last_updated: string;
+}
 
-  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
-  if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
-  if (!data) return null;
+// ── Helpers ──────────────────────────────────────────────────────────────────
+const fmtDollar = (n: number, decimals = 2) =>
+  n >= 1000 ? `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}` :
+  `$${n.toFixed(decimals)}`;
 
-  const ym = data.your_metrics;
-  const ib = data.industry_benchmarks;
-  const em = data.efficiency_metrics;
-  const cos = data.cost_optimization_score;
-  const ta = data.trend_analysis;
+const pctColor = (p: number) => p >= 70 ? GREEN : p >= 50 ? AMBER : RED;
+const statusAccentColor = (s: string) => s === 'above_average' ? GREEN : AMBER;
 
-  const benchmarkRows = ib ? Object.entries(ib).map(([key, val]: [string, any]) => ({
-    metric:  key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-    yours:   val.your_value,
-    avg:     val.industry_average,
-    best:    val.best_in_class,
-    pct:     val.percentile,
-    status:  val.status,
-  })) : [];
+// ── KPI Card ─────────────────────────────────────────────────────────────────
+const KpiCard: React.FC<{ label: string; value: string; color: string; sub?: string }> = ({ label, value, color, sub }) => (
+  <Card sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, height: '100%' }}>
+    <CardContent sx={{ pb: '12px !important' }}>
+      <Typography sx={{ color: DK.muted, fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+        {label}
+      </Typography>
+      <Typography sx={{ color, fontSize: '1.75rem', fontWeight: 700, mt: 0.5, lineHeight: 1.2 }}>
+        {value}
+      </Typography>
+      {sub && <Typography sx={{ color: DK.muted, fontSize: '0.72rem', mt: 0.5 }}>{sub}</Typography>}
+    </CardContent>
+  </Card>
+);
 
-  const efficiencyRows = em ? Object.entries(em).map(([key, val]: [string, any]) => ({
-    metric: key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-    yours:  val.your_value,
-    avg:    val.industry_average,
-    best:   val.best_in_class,
-    pct:    val.percentile,
-  })) : [];
-
-  const radarData = em ? [
-    { name: 'Utilization',   you: em.resource_utilization.your_value,  avg: em.resource_utilization.industry_average },
-    { name: 'Low Waste',     you: 100 - em.waste_percentage.your_value, avg: 100 - em.waste_percentage.industry_average },
-    { name: 'Optimization',  you: em.optimization_coverage.your_value,  avg: em.optimization_coverage.industry_average },
-  ] : [];
+// ── Benchmark comparison card ─────────────────────────────────────────────────
+const BenchmarkCard: React.FC<{ label: string; metric: BenchmarkMetric }> = ({ label, metric }) => {
+  const { your_value, industry_average, best_in_class, percentile, status } = metric;
+  const valueColor = statusAccentColor(status);
+  const barColor   = pctColor(percentile);
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <CompareArrowsIcon sx={{ fontSize: 38, mr: 2, color: 'primary.main' }} />
+    <Paper sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2.5, height: '100%' }}>
+      {/* Metric name */}
+      <Typography sx={{ color: DK.muted, fontSize: '0.73rem', fontWeight: 600, textTransform: 'uppercase',
+        letterSpacing: '0.06em', mb: 1 }}>
+        {label}
+      </Typography>
+
+      {/* Your value */}
+      <Typography sx={{ color: valueColor, fontSize: '1.9rem', fontWeight: 700, lineHeight: 1.15, mb: 0.5 }}>
+        {fmtDollar(your_value)}
+      </Typography>
+
+      {/* Industry / Best-in-class */}
+      <Box display="flex" gap={2.5} mb={1.75}>
         <Box>
-          <Typography variant="h4" fontWeight="bold">Financial Benchmarking</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Compare your Kubernetes costs against industry benchmarks
-          </Typography>
+          <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>Industry avg</Typography>
+          <Typography sx={{ color: DK.text, fontSize: '0.82rem', fontWeight: 600 }}>{fmtDollar(industry_average)}</Typography>
         </Box>
-        <Box ml="auto" display="flex" gap={1}>
-          {cos && <Chip label={`Grade: ${cos.grade} (${cos.percentile}th pct)`} color={cos.percentile >= 70 ? 'success' : 'warning'} />}
-          {ta && (
-            <>
-              <Chip icon={ta.cost_trend === 'decreasing' ? <TrendingDownIcon /> : <TrendingUpIcon />}
-                    label={`Cost: ${ta.cost_trend}`} size="small"
-                    color={ta.cost_trend === 'decreasing' ? 'success' : 'warning'} />
-              <Chip icon={<TrendingUpIcon />} label={`Efficiency: ${ta.efficiency_trend}`} size="small" color="success" />
-            </>
-          )}
+        <Box>
+          <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>Best-in-class</Typography>
+          <Typography sx={{ color: GREEN, fontSize: '0.82rem', fontWeight: 600 }}>{fmtDollar(best_in_class)}</Typography>
         </Box>
       </Box>
 
-      {/* Your Metrics KPI row */}
-      {ym && (
-        <Grid container spacing={2} mb={3}>
-          {[
-            { label: 'Total Monthly Cost',    value: fmt(ym.total_monthly_cost),          color: '#3b82d4' },
-            { label: 'Cost / Pod / Month',    value: `$${ym.cost_per_pod_per_month}`,     color: '#7c5cd8' },
-            { label: 'Cost / CPU Core',       value: `$${ym.cost_per_cpu_core_per_month}`,color: '#f59e0b' },
-            { label: 'Cost / GB Memory',      value: `$${ym.cost_per_gb_memory_per_month}`,color: '#10b981' },
-          ].map(c => (
-            <Grid item xs={12} sm={6} md={3} key={c.label}>
-              <Card>
-                <CardContent sx={{ pb: '12px !important' }}>
-                  <Typography variant="body2" color="text.secondary">{c.label}</Typography>
-                  <Typography variant="h5" fontWeight="bold" sx={{ color: c.color }}>{c.value}</Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
+      {/* Percentile bar */}
+      <Box>
+        <Box display="flex" justifyContent="space-between" mb={0.5}>
+          <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>Percentile position</Typography>
+          <Typography sx={{ color: barColor, fontSize: '0.68rem', fontWeight: 700 }}>{percentile}th</Typography>
+        </Box>
+        <Box sx={{ position: 'relative', height: 6, bgcolor: DK.surface2, borderRadius: 3, overflow: 'hidden' }}>
+          <Box sx={{
+            position: 'absolute', left: 0, top: 0, bottom: 0,
+            width: `${Math.min(percentile, 100)}%`, bgcolor: barColor,
+            borderRadius: 3, transition: 'width 0.5s ease',
+          }} />
+        </Box>
+        <Box display="flex" justifyContent="space-between" mt={0.4}>
+          <Typography sx={{ color: DK.muted, fontSize: '0.62rem' }}>0</Typography>
+          <Typography sx={{ color: DK.muted, fontSize: '0.62rem' }}>100</Typography>
+        </Box>
+      </Box>
+
+      {/* Status chip */}
+      <Box mt={1.25}>
+        <Chip
+          label={status === 'above_average' ? 'Above Average' : 'Below Average'}
+          size="small"
+          sx={{
+            bgcolor: `${valueColor}1a`, color: valueColor,
+            border: `1px solid ${valueColor}44`,
+            fontSize: '0.68rem', fontWeight: 700, height: 20,
+          }}
+        />
+      </Box>
+    </Paper>
+  );
+};
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+const FinancialBenchmarkingInner: React.FC = () => {
+  const { activeClusterId, clusterParam } = useActiveCluster();
+  const [data, setData]       = useState<BenchmarkData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError]     = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchData = useCallback(async (isManual = false) => {
+    if (isManual) setRefreshing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/v1/finops/financial-benchmarking${clusterParam}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(await res.json());
+      setError(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load benchmarking data');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, [clusterParam]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchData();
+    const t = setInterval(fetchData, 30_000);
+    return () => clearInterval(t);
+  }, [fetchData]);
+
+  if (loading) return (
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+      <CircularProgress sx={{ color: ACCENT }} />
+    </Box>
+  );
+  if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
+  if (!data)  return null;
+
+  const ym = data.your_metrics;
+  const ib = data.industry_benchmarks;
+
+  // ── Radar normalization: 100 = best_in_class value ───────────────────────
+  // For cost metrics, lower is better, so score = best_in_class / your_value * 100 (capped 100)
+  const normalize = (your: number, best: number) =>
+    best > 0 ? Math.min(100, Math.round((best / your) * 100)) : 0;
+  const normAvg = (avg: number, best: number) =>
+    best > 0 ? Math.min(100, Math.round((best / avg) * 100)) : 0;
+
+  const radarData = [
+    {
+      subject: 'Cost/Pod',
+      You:      normalize(ib.cost_per_pod_per_month.your_value,       ib.cost_per_pod_per_month.best_in_class),
+      Industry: normAvg(ib.cost_per_pod_per_month.industry_average,   ib.cost_per_pod_per_month.best_in_class),
+      Best:     100,
+    },
+    {
+      subject: 'Cost/CPU',
+      You:      normalize(ib.cost_per_cpu_core_per_month.your_value,   ib.cost_per_cpu_core_per_month.best_in_class),
+      Industry: normAvg(ib.cost_per_cpu_core_per_month.industry_average, ib.cost_per_cpu_core_per_month.best_in_class),
+      Best:     100,
+    },
+    {
+      subject: 'Cost/GB Mem',
+      You:      normalize(ib.cost_per_gb_memory_per_month.your_value,  ib.cost_per_gb_memory_per_month.best_in_class),
+      Industry: normAvg(ib.cost_per_gb_memory_per_month.industry_average, ib.cost_per_gb_memory_per_month.best_in_class),
+      Best:     100,
+    },
+    {
+      subject: 'Cost/GB Storage',
+      You:      normalize(ib.cost_per_gb_storage_per_month.your_value, ib.cost_per_gb_storage_per_month.best_in_class),
+      Industry: normAvg(ib.cost_per_gb_storage_per_month.industry_average, ib.cost_per_gb_storage_per_month.best_in_class),
+      Best:     100,
+    },
+  ];
+
+  const METRIC_LABELS: Record<string, string> = {
+    cost_per_pod_per_month:        'Cost / Pod / Month',
+    cost_per_cpu_core_per_month:   'Cost / CPU Core / Month',
+    cost_per_gb_memory_per_month:  'Cost / GB Memory / Month',
+    cost_per_gb_storage_per_month: 'Cost / GB Storage / Month',
+  };
+
+  return (
+    <Box sx={{ p: 3, bgcolor: DK.bg, minHeight: '100vh' }}>
+      {/* ── Header ── */}
+      <Box display="flex" alignItems="center" mb={2} gap={1.5}>
+        <LeaderboardIcon sx={{ fontSize: 34, color: ACCENT }} />
+        <Box flex={1}>
+          <Typography sx={{ color: DK.text, fontSize: '1.55rem', fontWeight: 700, lineHeight: 1.2 }}>
+            Financial Benchmarking
+          </Typography>
+          <Typography sx={{ color: DK.muted, fontSize: '0.8rem' }}>
+            Compare your Kubernetes unit economics against industry peers
+          </Typography>
+        </Box>
+        <Tooltip title="Refresh">
+          <span>
+            <IconButton onClick={() => fetchData(true)} size="small" disabled={refreshing}
+              sx={{ color: DK.muted, '&:hover': { color: DK.text } }}>
+              <RefreshIcon sx={{ fontSize: 20, animation: refreshing ? 'spin 1s linear infinite' : 'none',
+                '@keyframes spin': { '0%': { transform: 'rotate(0deg)' }, '100%': { transform: 'rotate(360deg)' } } }} />
+            </IconButton>
+          </span>
+        </Tooltip>
+      </Box>
+
+      {/* ── Accuracy Banner ── */}
+      <CostAccuracyBanner clusterName={activeClusterId} />
+
+      {/* ── Your Cluster Stats KPI row ── */}
+      <Grid container spacing={2} mb={3}>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard label="Total Monthly Cost" value={fmtDollar(ym.total_monthly_cost, 0)}
+            color={ACCENT} sub={`${ym.cluster_count} cluster${ym.cluster_count !== 1 ? 's' : ''}`} />
         </Grid>
-      )}
-
-      <Grid container spacing={3} mb={3}>
-        {/* Benchmark comparison table */}
-        <Grid item xs={12} md={7}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Industry Benchmark Comparison</Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Metric</TableCell>
-                    <TableCell align="right">Yours</TableCell>
-                    <TableCell align="right">Industry Avg</TableCell>
-                    <TableCell align="right">Best-in-Class</TableCell>
-                    <TableCell>Percentile</TableCell>
-                    <TableCell>Status</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {benchmarkRows.map((row) => (
-                    <TableRow key={row.metric} hover>
-                      <TableCell><Typography variant="body2">{row.metric}</Typography></TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>
-                        {typeof row.yours === 'number' && row.yours < 10 ? row.yours : Number(row.yours).toLocaleString()}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: 'text.secondary' }}>
-                        {typeof row.avg === 'number' && row.avg < 10 ? row.avg : Number(row.avg).toLocaleString()}
-                      </TableCell>
-                      <TableCell align="right" sx={{ color: 'success.main' }}>
-                        {typeof row.best === 'number' && row.best < 10 ? row.best : Number(row.best).toLocaleString()}
-                      </TableCell>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <LinearProgress variant="determinate" value={row.pct}
-                            color={pctBadge(row.pct)} sx={{ width: 60, height: 6, borderRadius: 1 }} />
-                          <Typography variant="caption">{row.pct}th</Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Chip label={row.status === 'above_average' ? 'Above Avg' : 'Below Avg'} size="small"
-                              color={row.status === 'above_average' ? 'success' : 'warning'} />
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard label="Pod Count" value={ym.pod_count.toLocaleString()}
+            color={DK.text} sub="Running pods" />
         </Grid>
-
-        {/* Radar + Optimization Score */}
-        <Grid item xs={12} md={5}>
-          <Paper sx={{ p: 3, mb: 2 }}>
-            <Typography variant="h6" gutterBottom>Efficiency vs Industry</Typography>
-            <ResponsiveContainer width="100%" height={200}>
-              <RadarChart data={radarData}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="name" />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                <Radar name="You" dataKey="you" stroke="#3b82d4" fill="#3b82d4" fillOpacity={0.4} />
-                <Radar name="Industry" dataKey="avg" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.2} />
-                <Tooltip />
-                <Legend />
-              </RadarChart>
-            </ResponsiveContainer>
-          </Paper>
-
-          {cos && (
-            <Paper sx={{ p: 3 }}>
-              <Typography variant="h6" gutterBottom>Cost Optimization Score</Typography>
-              <Divider sx={{ mb: 2 }} />
-              {[
-                ['Your Score',      `${cos.your_score} / 100`],
-                ['Industry Avg',    String(cos.industry_average)],
-                ['Best-in-Class',   String(cos.best_in_class)],
-                ['Your Grade',      cos.grade],
-                ['Your Percentile', `${cos.percentile}th`],
-              ].map(([k, v]) => (
-                <Box key={k} display="flex" justifyContent="space-between" py={0.75} borderBottom="1px solid #e5e7eb">
-                  <Typography variant="body2" color="text.secondary">{k}</Typography>
-                  <Typography variant="body2" fontWeight="bold">{v}</Typography>
-                </Box>
-              ))}
-            </Paper>
-          )}
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard label="Cost / Pod" value={fmtDollar(ym.cost_per_pod_per_month)}
+            color={statusAccentColor(ib.cost_per_pod_per_month.status)} sub="Per month" />
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <KpiCard label="Cost / CPU Core" value={fmtDollar(ym.cost_per_cpu_core_per_month)}
+            color={statusAccentColor(ib.cost_per_cpu_core_per_month.status)} sub="Per month" />
         </Grid>
       </Grid>
 
-      {/* Per-cluster benchmarks */}
-      {data.cluster_benchmarks?.length > 0 && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>Per-Cluster Benchmarks</Typography>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Cluster</TableCell>
-                  <TableCell>Environment</TableCell>
-                  <TableCell align="right">Monthly Cost</TableCell>
-                  <TableCell align="right">Cost / Pod</TableCell>
-                  <TableCell>Efficiency</TableCell>
-                  <TableCell>Waste</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {data.cluster_benchmarks.map((c: any) => (
-                  <TableRow key={c.cluster} hover>
-                    <TableCell><Typography variant="body2" fontWeight="medium">{c.cluster}</Typography></TableCell>
-                    <TableCell>
-                      <Chip label={c.environment} size="small"
-                            color={c.environment === 'production' ? 'error' : c.environment === 'staging' ? 'warning' : 'default'} />
-                    </TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 'bold' }}>{fmt(c.monthly_cost)}</TableCell>
-                    <TableCell align="right">${c.cost_per_pod}</TableCell>
-                    <TableCell>
-                      <Chip label={`${c.efficiency_score}/100`} size="small"
-                            color={c.efficiency_score >= 70 ? 'success' : c.efficiency_score >= 60 ? 'warning' : 'error'} />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" color={c.waste_percentage > 20 ? 'error.main' : 'text.secondary'}>
-                        {c.waste_percentage}%
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
+      {/* ── 2×2 Benchmark Cards ── */}
+      <Typography sx={{ color: DK.text, fontWeight: 700, fontSize: '1rem', mb: 1.5 }}>
+        Industry Comparison
+      </Typography>
+      <Grid container spacing={2} mb={3}>
+        {(Object.keys(ib) as Array<keyof typeof ib>).map((key) => (
+          <Grid item xs={12} sm={6} key={key}>
+            <BenchmarkCard label={METRIC_LABELS[key] ?? key} metric={ib[key]} />
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* ── RadarChart ── */}
+      <Paper sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 3, mb: 3 }}>
+        <Typography sx={{ color: DK.text, fontWeight: 700, fontSize: '1rem', mb: 0.5 }}>
+          Benchmark Radar
+        </Typography>
+        <Typography sx={{ color: DK.muted, fontSize: '0.75rem', mb: 2 }}>
+          Normalized to 0–100 (100 = best-in-class). Higher = more efficient spend.
+        </Typography>
+        <ResponsiveContainer width="100%" height={320}>
+          <RadarChart data={radarData} margin={{ top: 8, right: 40, bottom: 8, left: 40 }}>
+            <PolarGrid stroke={DK.border} />
+            <PolarAngleAxis dataKey="subject" tick={{ fill: DK.muted, fontSize: 12 }} />
+            <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: DK.muted, fontSize: 10 }} />
+            <Radar name="You" dataKey="You" stroke={ACCENT} fill={ACCENT} fillOpacity={0.2} strokeWidth={2} />
+            <Radar name="Industry Avg" dataKey="Industry" stroke={AMBER} fill={AMBER} fillOpacity={0.1} strokeWidth={1.5} strokeDasharray="4 2" />
+            <Radar name="Best-in-class" dataKey="Best" stroke={GREEN} fill="none" strokeWidth={1.5} strokeDasharray="6 3" />
+            <RTooltip
+              contentStyle={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 8 }}
+              labelStyle={{ color: DK.text, fontWeight: 600 }}
+              formatter={(v: number) => [`${v}`, undefined]}
+            />
+            <Legend wrapperStyle={{ color: DK.muted, fontSize: 12 }} />
+          </RadarChart>
+        </ResponsiveContainer>
+      </Paper>
+
+      {/* ── Estimated accuracy note ── */}
+      {data.accuracy === 'estimated' && (
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, bgcolor: `${AMBER}0d`,
+          border: `1px solid ${AMBER}33`, borderRadius: 2, p: 2, mb: 2 }}>
+          <InfoOutlinedIcon sx={{ color: AMBER, fontSize: 18, mt: '2px', flexShrink: 0 }} />
+          <Typography sx={{ color: DK.muted, fontSize: '0.8rem', lineHeight: 1.6 }}>
+            Benchmarks compared against{' '}
+            <span style={{ color: DK.text }}>on-demand public rates</span>. Connect your cloud account for
+            accurate comparison against your actual spend — including Enterprise Agreement &amp; partner discounts.
+          </Typography>
+        </Box>
       )}
 
-      {/* Peer comparison */}
-      {data.peer_comparison && (
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>Peer Comparison</Typography>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data.peer_comparison.map((p: any) => ({
-              name: p.segment?.split(' ').slice(0,2).join(' ') ?? 'Peer',
-              'Peer Avg': p.avg_monthly_cost,
-              'Yours': p.your_cost,
-            }))}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v: number) => fmt(v)} />
-              <Legend />
-              <Bar dataKey="Peer Avg" fill="#e5e7eb" />
-              <Bar dataKey="Yours"    fill="#3b82d4" />
-            </BarChart>
-          </ResponsiveContainer>
-        </Paper>
-      )}
-
-      {/* Improvement opportunities */}
-      {data.improvement_opportunities?.map((o: any, i: number) => (
-        <Alert key={i} severity="info" sx={{ mb: 1 }}>
-          <strong>{o.metric}:</strong> Current {o.current} → Target {o.target} —{' '}
-          Potential savings: {fmt(o.potential_savings)} · Actions: {o.actions?.join(', ')}
-        </Alert>
-      ))}
+      {/* ── Footer meta ── */}
+      <Typography sx={{ color: DK.muted, fontSize: '0.72rem', mt: 1 }}>
+        Source: {data.cost_source} · Accuracy: {data.accuracy} · Last updated: {new Date(data.last_updated).toLocaleString()}
+      </Typography>
     </Box>
   );
 };
 
+const FinancialBenchmarking: React.FC = () => (
+  <ClusterGuard>
+    <FinancialBenchmarkingInner />
+  </ClusterGuard>
+);
+
 export default FinancialBenchmarking;
+
+// Made with Bob

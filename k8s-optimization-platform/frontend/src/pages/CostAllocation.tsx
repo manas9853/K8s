@@ -1,183 +1,445 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Card, CardContent, Typography, Grid, CircularProgress, Alert,
-  Chip, Paper, Table, TableBody, TableCell, TableContainer, TableHead,
-  TableRow, LinearProgress, Divider
+  Box, Typography, Grid, Card, CardContent, Paper, Table, TableBody,
+  TableCell, TableContainer, TableHead, TableRow, Chip, CircularProgress,
+  Alert, IconButton, Tabs, Tab, LinearProgress,
 } from '@mui/material';
-import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
-import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import AccountTreeIcon from '@mui/icons-material/AccountTree';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import {
+  ResponsiveContainer, PieChart, Pie, Cell, Tooltip as RTooltip,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
+} from 'recharts';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import ClusterGuard from '../components/ClusterGuard';
 
-const COLORS = ['#3b82d4', '#7c5cd8', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6'];
-const fmt = (n: number) => `$${n.toLocaleString()}`;
+// ─── Design tokens ───────────────────────────────────────────────────────────
+const DK = {
+  bg: '#0d1117', surface: '#161b22', surface2: '#1c2128',
+  border: '#30363d', text: '#e6edf3', muted: '#8b949e',
+};
+const ACCENT = '#58a6ff';
+const GREEN  = '#3fb950';
+const AMBER  = '#d29922';
+const RED    = '#f85149';
 
-const CostAllocation: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [data, setData] = useState<any>(null);
+const PIE_PALETTE = [
+  '#58a6ff', '#3fb950', '#d29922', '#f85149',
+  '#a371f7', '#79c0ff', '#56d364', '#ffa657',
+];
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+interface NamespaceRow {
+  namespace:     string;
+  cluster:       string;
+  cost:          number;
+  cpu_share_pct: number;
+  pod_count:     number;
+  teams:         string[];
+}
+interface TeamRow {
+  team:       string;
+  total_cost: number;
+  percentage: number;
+  projects?:  any[];
+}
+interface CostAllocationData {
+  allocation_by_namespace: NamespaceRow[];
+  allocation_by_team:      TeamRow[];
+  allocation_accuracy:     number;
+  cost_source:             string;
+  accuracy:                string;
+  last_updated:            string;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const fmt  = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const fmtK = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1)}k` : `$${n.toFixed(0)}`;
+
+const tooltipStyle = {
+  backgroundColor: DK.surface2,
+  border: `1px solid ${DK.border}`,
+  color: DK.text,
+  borderRadius: 6,
+  fontSize: 12,
+};
+
+// ─── Main component ───────────────────────────────────────────────────────────
+const CostAllocationInner: React.FC = () => {
+  const { clusterParam, activeClusterId, activeClusterName } = useActiveCluster();
+  const [data, setData]       = useState<CostAllocationData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError]     = useState<string | null>(null);
+  const [tab, setTab]         = useState(0);
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, [clusterParam]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/v1/finops/cost-allocation${clusterParam}`);
-      if (!response.ok) throw new Error('Failed to fetch data');
-      const result = await response.json();
-      setData(result);
+      setLoading(true);
       setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const r = await fetch(`${API_BASE_URL}/v1/finops/cost-allocation${clusterParam}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to fetch');
     } finally {
       setLoading(false);
     }
-  };
+  }, [clusterParam]);
 
-  if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
-  if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"
+        sx={{ bgcolor: DK.bg }}>
+        <CircularProgress sx={{ color: ACCENT }} />
+      </Box>
+    );
+  }
+  if (error) return <Box p={3} sx={{ bgcolor: DK.bg }}><Alert severity="error">{error}</Alert></Box>;
   if (!data) return null;
 
-  const teams: any[] = data.allocation_by_team ?? [];
-  const namespaces: any[] = data.allocation_by_namespace ?? [];
-  const labels: any[] = data.allocation_by_label ?? [];
-  const totalCost = teams.reduce((s: number, t: any) => s + t.total_cost, 0);
+  const namespaces = [...(data.allocation_by_namespace ?? [])].sort((a, b) => b.cost - a.cost);
+  const teams      = data.allocation_by_team ?? [];
+  const totalCost  = namespaces.reduce((s, n) => s + n.cost, 0);
+  const topNs      = namespaces[0];
+
+  // Top-8 namespaces for pie
+  const pieData = namespaces.slice(0, 8).map(n => ({
+    name: n.namespace,
+    value: n.cost,
+  }));
+
+  // Bar chart data for teams
+  const teamBarData = [...teams]
+    .sort((a, b) => b.total_cost - a.total_cost)
+    .slice(0, 10)
+    .map(t => ({ team: t.team.length > 14 ? t.team.slice(0, 13) + '…' : t.team, cost: t.total_cost }));
+
+  const hasTeamData = teams.length > 0 && teams.some(t => t.total_cost > 0);
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box display="flex" alignItems="center" mb={3}>
-        <AccountBalanceIcon sx={{ fontSize: 38, mr: 2, color: 'primary.main' }} />
-        <Box>
-          <Typography variant="h4" fontWeight="bold">Cost Allocation</Typography>
-          <Typography variant="body2" color="text.secondary">
-            Cost allocation across teams, namespaces, and resource labels
-          </Typography>
+    <Box sx={{ p: 3, bgcolor: DK.bg, minHeight: '100vh' }}>
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2.5}>
+        <Box display="flex" alignItems="center" gap={1.5}>
+          <AccountTreeIcon sx={{ color: ACCENT, fontSize: 32 }} />
+          <Box>
+            <Typography variant="h4" sx={{ color: DK.text, fontWeight: 700, lineHeight: 1.2 }}>
+              Cost Allocation
+            </Typography>
+            <Typography variant="body2" sx={{ color: DK.muted, mt: 0.25 }}>
+              Namespace &amp; team cost attribution · {activeClusterName}
+            </Typography>
+          </Box>
         </Box>
-        <Box ml="auto" display="flex" gap={1}>
-          <Chip label={`Accuracy: ${data.allocation_accuracy}%`} color="success" size="small" />
-          <Chip label={`Unallocated: ${fmt(data.unallocated_costs?.amount ?? 0)}`} color="warning" size="small" />
-        </Box>
+        <IconButton onClick={fetchData} sx={{ color: DK.muted, '&:hover': { color: ACCENT } }}>
+          <RefreshIcon />
+        </IconButton>
       </Box>
 
-      <Grid container spacing={3} mb={3}>
-        {/* Team Allocation Pie */}
-        <Grid item xs={12} md={5}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Cost by Team</Typography>
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie data={teams} dataKey="total_cost" nameKey="team"
-                     cx="50%" cy="50%" outerRadius={90}
-                     label={({ team, percentage }) => `${team.split(' ')[0]}: ${percentage}%`}>
-                  {teams.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={(v: number) => fmt(v)} />
-              </PieChart>
-            </ResponsiveContainer>
+      {/* ── Accuracy banner ─────────────────────────────────────────────────── */}
+      <CostAccuracyBanner clusterName={activeClusterId} />
+
+      {/* ── KPI row ─────────────────────────────────────────────────────────── */}
+      <Grid container spacing={2} mb={3}>
+        {[
+          {
+            label: 'Total Allocated Cost',
+            value: fmt(totalCost),
+            sub:   data.cost_source || 'Across all namespaces',
+            color: GREEN,
+          },
+          {
+            label: 'Allocation Accuracy',
+            value: `${(data.allocation_accuracy ?? 0).toFixed(1)}%`,
+            sub:   data.accuracy || 'Label coverage',
+            color: (data.allocation_accuracy ?? 0) >= 80 ? GREEN : AMBER,
+          },
+          {
+            label: 'Namespaces',
+            value: String(namespaces.length),
+            sub:   'Active namespaces with cost',
+            color: ACCENT,
+          },
+          {
+            label: 'Top Namespace',
+            value: topNs ? topNs.namespace : '—',
+            sub:   topNs ? fmt(topNs.cost) : 'No data',
+            color: DK.text,
+          },
+        ].map(({ label, value, sub, color }) => (
+          <Grid item xs={12} sm={6} md={3} key={label}>
+            <Card sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}` }}>
+              <CardContent sx={{ pb: '14px !important' }}>
+                <Typography sx={{ color: DK.muted, fontSize: '0.7rem', textTransform: 'uppercase', letterSpacing: '0.06em', mb: 0.75 }}>
+                  {label}
+                </Typography>
+                <Typography sx={{ color, fontSize: label === 'Top Namespace' ? '1.1rem' : '1.6rem', fontWeight: 700, lineHeight: 1.15, wordBreak: 'break-all' }}>
+                  {value}
+                </Typography>
+                <Typography sx={{ color: DK.muted, fontSize: '0.75rem', mt: 0.5 }}>{sub}</Typography>
+              </CardContent>
+            </Card>
+          </Grid>
+        ))}
+      </Grid>
+
+      {/* ── Main content: tabs + pie side by side ───────────────────────────── */}
+      <Grid container spacing={2}>
+        {/* Left: tabs */}
+        <Grid item xs={12} lg={8}>
+          <Paper sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}` }}>
+            <Tabs
+              value={tab}
+              onChange={(_, v) => setTab(v)}
+              sx={{
+                borderBottom: `1px solid ${DK.border}`,
+                '& .MuiTab-root': { color: DK.muted, textTransform: 'none', fontWeight: 500, fontSize: '0.85rem' },
+                '& .Mui-selected': { color: ACCENT },
+                '& .MuiTabs-indicator': { backgroundColor: ACCENT },
+              }}
+            >
+              <Tab label="By Namespace" />
+              <Tab label="By Team" />
+            </Tabs>
+
+            {/* ── Namespace tab ─────────────────────────────────────────────── */}
+            {tab === 0 && (
+              <Box sx={{ p: 0 }}>
+                <TableContainer sx={{ maxHeight: 480 }}>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        {['Namespace', 'Cost', 'CPU Share %', 'Pods', 'Cluster'].map(h => (
+                          <TableCell key={h} sx={{
+                            color: DK.muted, bgcolor: DK.surface, borderColor: DK.border,
+                            fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em',
+                          }}
+                            align={h === 'Namespace' ? 'left' : 'right'}>
+                            {h}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {namespaces.map((ns, i) => {
+                        const share = totalCost > 0 ? (ns.cost / totalCost) * 100 : 0;
+                        return (
+                          <TableRow key={i} sx={{ '&:hover': { bgcolor: DK.surface2 } }}>
+                            <TableCell sx={{ borderColor: DK.border }}>
+                              <Box display="flex" alignItems="center" gap={1.5}>
+                                <Chip
+                                  label={ns.namespace}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: `${ACCENT}18`, color: ACCENT,
+                                    fontFamily: '"Fira Code", "JetBrains Mono", monospace',
+                                    fontSize: '0.72rem', border: `1px solid ${ACCENT}33`, height: 22,
+                                  }}
+                                />
+                                {ns.teams?.length > 0 && (
+                                  <Typography sx={{ color: DK.muted, fontSize: '0.7rem' }}>
+                                    {ns.teams.slice(0, 2).join(', ')}{ns.teams.length > 2 ? ` +${ns.teams.length - 2}` : ''}
+                                  </Typography>
+                                )}
+                              </Box>
+                              <Box sx={{ mt: 0.75 }}>
+                                <LinearProgress
+                                  variant="determinate"
+                                  value={Math.min(share, 100)}
+                                  sx={{
+                                    height: 3, borderRadius: 2, bgcolor: DK.border,
+                                    '& .MuiLinearProgress-bar': { bgcolor: PIE_PALETTE[i % PIE_PALETTE.length] },
+                                  }}
+                                />
+                              </Box>
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: DK.text, borderColor: DK.border, fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                              {fmt(ns.cost)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: DK.muted, borderColor: DK.border }}>
+                              {ns.cpu_share_pct.toFixed(1)}%
+                            </TableCell>
+                            <TableCell align="right" sx={{ color: DK.muted, borderColor: DK.border }}>
+                              {ns.pod_count}
+                            </TableCell>
+                            <TableCell align="right" sx={{ borderColor: DK.border }}>
+                              <Typography sx={{ color: DK.muted, fontSize: '0.78rem' }}>{ns.cluster || '—'}</Typography>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
+
+            {/* ── Team tab ──────────────────────────────────────────────────── */}
+            {tab === 1 && (
+              <Box sx={{ p: 2.5 }}>
+                {!hasTeamData ? (
+                  /* No-team-data info box */
+                  <Box sx={{
+                    display: 'flex', alignItems: 'flex-start', gap: 1.25,
+                    bgcolor: `${ACCENT}11`, border: `1px solid ${ACCENT}33`,
+                    borderRadius: 1.5, p: 2,
+                  }}>
+                    <InfoOutlinedIcon sx={{ color: ACCENT, fontSize: 18, mt: '1px', flexShrink: 0 }} />
+                    <Box>
+                      <Typography sx={{ color: ACCENT, fontWeight: 600, fontSize: '0.83rem', mb: 0.25 }}>
+                        Team allocation requires namespace labels
+                      </Typography>
+                      <Typography sx={{ color: DK.muted, fontSize: '0.78rem' }}>
+                        Add one of the following labels to your namespaces to enable team-level cost attribution:
+                      </Typography>
+                      <Box component="ul" sx={{ color: DK.muted, fontSize: '0.78rem', mt: 0.5, pl: 2, mb: 0 }}>
+                        <li><code style={{ color: ACCENT }}>team: &lt;name&gt;</code></li>
+                        <li><code style={{ color: ACCENT }}>app.kubernetes.io/part-of: &lt;team&gt;</code></li>
+                      </Box>
+                    </Box>
+                  </Box>
+                ) : (
+                  <>
+                    {/* Horizontal bar chart */}
+                    <Box sx={{ height: 280, mb: 3 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={teamBarData}
+                          layout="vertical"
+                          margin={{ top: 4, right: 16, left: 8, bottom: 4 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke={DK.border} horizontal={false} />
+                          <XAxis type="number" tickFormatter={fmtK} stroke={DK.border} tick={{ fill: DK.muted, fontSize: 11 }} />
+                          <YAxis type="category" dataKey="team" width={110} stroke={DK.border} tick={{ fill: DK.muted, fontSize: 11 }} />
+                          <RTooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
+                          <Legend wrapperStyle={{ color: DK.muted, fontSize: 12 }} />
+                          <Bar dataKey="cost" name="Team Cost" fill={ACCENT} radius={[0, 4, 4, 0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Box>
+
+                    {/* Team table */}
+                    <TableContainer>
+                      <Table size="small">
+                        <TableHead>
+                          <TableRow>
+                            {['Team', 'Cost', 'Share %'].map(h => (
+                              <TableCell key={h} sx={{ color: DK.muted, borderColor: DK.border, fontSize: 11, textTransform: 'uppercase' }}
+                                align={h === 'Team' ? 'left' : 'right'}>
+                                {h}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {[...teams].sort((a, b) => b.total_cost - a.total_cost).map((t, i) => (
+                            <TableRow key={i} sx={{ '&:hover': { bgcolor: DK.surface2 } }}>
+                              <TableCell sx={{ borderColor: DK.border }}>
+                                <Chip
+                                  label={t.team}
+                                  size="small"
+                                  sx={{ bgcolor: `${PIE_PALETTE[i % PIE_PALETTE.length]}22`, color: PIE_PALETTE[i % PIE_PALETTE.length], height: 22, fontSize: '0.75rem' }}
+                                />
+                              </TableCell>
+                              <TableCell align="right" sx={{ color: DK.text, borderColor: DK.border, fontWeight: 600 }}>
+                                {fmt(t.total_cost)}
+                              </TableCell>
+                              <TableCell align="right" sx={{ borderColor: DK.border }}>
+                                <Box display="flex" alignItems="center" justifyContent="flex-end" gap={1}>
+                                  <LinearProgress
+                                    variant="determinate"
+                                    value={Math.min(t.percentage, 100)}
+                                    sx={{
+                                      width: 60, height: 5, borderRadius: 2, bgcolor: DK.border,
+                                      '& .MuiLinearProgress-bar': { bgcolor: PIE_PALETTE[i % PIE_PALETTE.length] },
+                                    }}
+                                  />
+                                  <Typography sx={{ color: DK.muted, fontSize: '0.78rem', minWidth: 36 }}>
+                                    {t.percentage.toFixed(1)}%
+                                  </Typography>
+                                </Box>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  </>
+                )}
+              </Box>
+            )}
           </Paper>
         </Grid>
 
-        {/* Team Allocation Table */}
-        <Grid item xs={12} md={7}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Team Breakdown</Typography>
-            <TableContainer>
-              <Table size="small">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Team</TableCell>
-                    <TableCell align="right">Monthly Cost</TableCell>
-                    <TableCell>Share</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {teams.map((t: any, i: number) => (
-                    <TableRow key={t.team} hover>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: COLORS[i % COLORS.length] }} />
-                          <Typography variant="body2" fontWeight="medium">{t.team}</Typography>
-                        </Box>
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{fmt(t.total_cost)}</TableCell>
-                      <TableCell sx={{ minWidth: 140 }}>
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <LinearProgress variant="determinate" value={t.percentage}
-                            sx={{ flex: 1, height: 6, borderRadius: 1 }}
-                            color={i === 0 ? 'primary' : i === 1 ? 'secondary' : 'success'} />
-                          <Typography variant="caption">{t.percentage}%</Typography>
-                        </Box>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
+        {/* Right: pie chart */}
+        <Grid item xs={12} lg={4}>
+          <Paper sx={{ p: 2.5, bgcolor: DK.surface, border: `1px solid ${DK.border}`, height: '100%' }}>
+            <Typography sx={{ color: DK.text, fontWeight: 600, mb: 1.5, fontSize: '0.9rem' }}>
+              Top 8 Namespaces by Cost
+            </Typography>
+            {pieData.length === 0 ? (
+              <Box display="flex" alignItems="center" justifyContent="center" minHeight={200}>
+                <Typography sx={{ color: DK.muted, fontSize: '0.8rem' }}>No namespace data</Typography>
+              </Box>
+            ) : (
+              <Box sx={{ height: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%" cy="45%"
+                      innerRadius={55}
+                      outerRadius={95}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {pieData.map((_, i) => (
+                        <Cell key={i} fill={PIE_PALETTE[i % PIE_PALETTE.length]} />
+                      ))}
+                    </Pie>
+                    <RTooltip
+                      formatter={(v: number, name: string) => [fmt(v), name]}
+                      contentStyle={tooltipStyle}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </Box>
+            )}
+            {/* Legend */}
+            <Box sx={{ mt: 1 }}>
+              {pieData.map((d, i) => (
+                <Box key={i} display="flex" alignItems="center" justifyContent="space-between" py={0.35}>
+                  <Box display="flex" alignItems="center" gap={0.75}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: PIE_PALETTE[i % PIE_PALETTE.length], flexShrink: 0 }} />
+                    <Typography sx={{ color: DK.muted, fontSize: '0.72rem', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 110 }}>
+                      {d.name}
+                    </Typography>
+                  </Box>
+                  <Typography sx={{ color: DK.text, fontSize: '0.72rem', fontWeight: 600 }}>
+                    {fmtK(d.value)}
+                  </Typography>
+                </Box>
+              ))}
+            </Box>
           </Paper>
         </Grid>
       </Grid>
-
-      <Grid container spacing={3} mb={3}>
-        {/* Label Allocation */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Cost by Label</Typography>
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={labels} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="label" width={160} tick={{ fontSize: 11 }} />
-                <Tooltip formatter={(v: number) => fmt(v)} />
-                <Bar dataKey="cost" fill="#3b82d4" name="Cost" />
-              </BarChart>
-            </ResponsiveContainer>
-          </Paper>
-        </Grid>
-
-        {/* Namespace Allocation */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h6" gutterBottom>Namespace Allocation</Typography>
-            <TableContainer sx={{ maxHeight: 280 }}>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>Namespace</TableCell>
-                    <TableCell>Cluster</TableCell>
-                    <TableCell align="right">Cost</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {namespaces.slice(0, 12).map((ns: any, i: number) => (
-                    <TableRow key={i} hover>
-                      <TableCell>{ns.namespace}</TableCell>
-                      <TableCell>
-                        <Typography variant="caption" color="text.secondary">{ns.cluster}</Typography>
-                      </TableCell>
-                      <TableCell align="right" sx={{ fontWeight: 'bold' }}>{fmt(ns.cost)}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* Unallocated banner */}
-      {data.unallocated_costs && (
-        <Alert severity="warning" sx={{ mt: 1 }}>
-          <strong>Unallocated Costs: {fmt(data.unallocated_costs.amount)}</strong> ({data.unallocated_costs.percentage}%) —{' '}
-          {data.unallocated_costs.reason}
-        </Alert>
-      )}
     </Box>
   );
 };
 
+// ─── Default export with ClusterGuard ────────────────────────────────────────
+const CostAllocation: React.FC = () => (
+  <ClusterGuard>
+    <CostAllocationInner />
+  </ClusterGuard>
+);
+
 export default CostAllocation;
+
+// Made with Bob
