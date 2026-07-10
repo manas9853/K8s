@@ -22,6 +22,26 @@ import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import { API_BASE_URL } from '../../../config/api';
 
+// ─── Inline markdown renderer ─────────────────────────────────────────────────
+// No external deps. Handles **bold**, newlines, bullet/numbered lists.
+function renderMarkdown(text: string): React.ReactNode {
+  const lines = text.split('\n');
+  return lines.map((line, i) => {
+    const parts = line.split(/\*\*(.+?)\*\*/g);
+    const rendered = parts.map((part, j) =>
+      j % 2 === 1
+        ? <strong key={j} style={{ color: '#e6edf3', fontWeight: 700 }}>{part}</strong>
+        : part
+    );
+    return (
+      <React.Fragment key={i}>
+        {rendered}
+        {i < lines.length - 1 && <br />}
+      </React.Fragment>
+    );
+  });
+}
+
 // ─── Design tokens (matches Incidents.tsx) ───────────────────────────────────
 
 const DK = {
@@ -142,11 +162,10 @@ const AIBubble: React.FC<{
           color: DK.text,
           fontSize: '0.88rem',
           lineHeight: 1.75,
-          whiteSpace: 'pre-wrap',
           wordBreak: 'break-word',
         }}
       >
-        {conv.aiResponse}
+        {renderMarkdown(conv.aiResponse)}
       </Box>
 
       {/* Meta row: confidence + timestamp */}

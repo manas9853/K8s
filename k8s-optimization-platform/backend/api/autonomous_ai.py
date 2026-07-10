@@ -239,22 +239,34 @@ def _build_cost_answer(ctx: Dict, beginner: bool) -> Dict:
     pods = ctx.get("pod_cost_analysis", ctx.get("pods", []))
     orphaned = ctx.get("orphaned_pvcs", [])
 
-    CPU_PER_CORE_MONTH = 0.031 * 24 * 30
-    MEM_PER_GB_MONTH   = 0.0035 * 24 * 30
+    # Agent sends cpu_request in cores and memory_request_gb in GB (not milliCPU/MB)
+    CPU_PER_CORE_MONTH = 0.031 * 24 * 30    # $/core/month (IBM fallback)
+    MEM_PER_GB_MONTH   = 0.0035 * 24 * 30   # $/GB/month
 
     ns_costs = []
     for ns in ns_resources:
-        cpu_cores = (ns.get("total_cpu_request_m") or 0) / 1000
-        mem_gb    = (ns.get("total_memory_request_mb") or 0) / 1024
-        cost      = round(cpu_cores * CPU_PER_CORE_MONTH + mem_gb * MEM_PER_GB_MONTH, 2)
+        # Prefer direct core/GB fields; fall back to milliCPU/MB variants if present
+        cpu_cores = (
+            ns.get("cpu_request") or
+            (ns.get("total_cpu_request_m") or 0) / 1000
+        )
+        mem_gb = (
+            ns.get("memory_request_gb") or
+            (ns.get("total_memory_request_mb") or 0) / 1024
+        )
+        cost = round(float(cpu_cores) * CPU_PER_CORE_MONTH + float(mem_gb) * MEM_PER_GB_MONTH, 2)
         ns_costs.append({"namespace": ns.get("namespace", "?"), "_cluster": ns.get("_cluster", ""), "cost": cost})
     ns_costs.sort(key=lambda x: x["cost"], reverse=True)
 
     total_cost = sum(n["cost"] for n in ns_costs)
     top_ns = ns_costs[:3]
 
-    # Over-provisioned pods (cpu_request > 3× rough threshold)
-    over_prov = [p for p in pods if (p.get("cpu_request_m") or 0) > 1000][:5]
+    # Over-provisioned pods — agent can store cpu_request (cores) or cpu_request_m (milliCPU)
+    over_prov = [
+        p for p in pods
+        if (float(p.get("cpu_request") or 0) > 1.0 or
+            (p.get("cpu_request_m") or 0) > 1000)
+    ][:5]
 
     resources = [{"type": "Namespace", "name": n["namespace"], "namespace": ""} for n in top_ns]
     lines = []
@@ -298,9 +310,15 @@ def _build_cost_answer(ctx: Dict, beginner: bool) -> Dict:
 def _build_memory_answer(ctx: Dict, beginner: bool) -> Dict:
     oom = ctx.get("oom_events", [])
     pods = ctx.get("pods", [])
+    # Agent sends memory_request_gb (GB) or memory_request_mb (MB)
+    def _mem_gb(p: Dict) -> float:
+        return (
+            float(p.get("memory_request_gb") or 0) or
+            float(p.get("memory_request_mb") or 0) / 1024
+        )
     high_mem = sorted(
-        [p for p in pods if (p.get("memory_request_mb") or 0) > 512],
-        key=lambda x: x.get("memory_request_mb", 0), reverse=True
+        [p for p in pods if _mem_gb(p) > 0.5],
+        key=_mem_gb, reverse=True
     )[:5]
 
     resources = []
@@ -313,8 +331,9 @@ def _build_memory_answer(ctx: Dict, beginner: bool) -> Dict:
     if high_mem:
         lines.append("**Highest memory consumers:**")
         for p in high_mem:
+            mem = _mem_gb(p)
             lines.append(f"  - {p.get('name','?')} ({p.get('namespace','')}) — "
-                         f"{p.get('memory_request_mb',0):.0f} Mi requested")
+                         f"{mem:.2f} GB requested")
             resources.append({"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")})
 
     if not lines:
@@ -344,19 +363,26 @@ def _build_memory_answer(ctx: Dict, beginner: bool) -> Dict:
 
 def _build_cpu_answer(ctx: Dict, beginner: bool) -> Dict:
     pods = ctx.get("pods", [])
+    # Agent sends cpu_request in cores (float) or cpu_request_m in milliCPU (int)
+    def _cpu_cores(p: Dict) -> float:
+        return (
+            float(p.get("cpu_request") or 0) or
+            float(p.get("cpu_request_m") or 0) / 1000
+        )
     high_cpu = sorted(
-        [p for p in pods if (p.get("cpu_request_m") or 0) > 500],
-        key=lambda x: x.get("cpu_request_m", 0), reverse=True
+        [p for p in pods if _cpu_cores(p) > 0.5],
+        key=_cpu_cores, reverse=True
     )[:5]
-    no_limit = [p for p in pods if not p.get("cpu_limit_m")][:3]
+    no_limit = [p for p in pods if not p.get("cpu_limit") and not p.get("cpu_limit_m")][:3]
 
     resources = []
     lines = []
     if high_cpu:
         lines.append("**Top CPU consumers (by request):**")
         for p in high_cpu:
+            cpu = _cpu_cores(p)
             lines.append(f"  - {p.get('name','?')} ({p.get('namespace','')}) — "
-                         f"{p.get('cpu_request_m',0)}m CPU requested")
+                         f"{cpu:.2f} cores requested")
             resources.append({"type": "Pod", "name": p.get("name","?"), "namespace": p.get("namespace","")})
     if no_limit:
         lines.append(f"**No CPU limit set:** {len(no_limit)} pods have no cpu limit — "
@@ -560,7 +586,8 @@ async def _llm_engine(query: str, ctx: Dict, api_key: str) -> Dict:
 
     pod_summary = "\n".join(
         f"  - {p.get('name','?')} ns={p.get('namespace','?')} "
-        f"cpu={p.get('cpu_request_m',0)}m mem={p.get('memory_request_mb',0)}Mi "
+        f"cpu={p.get('cpu_request') or p.get('cpu_request_m',0)} "
+        f"mem={p.get('memory_request_gb') or p.get('memory_request_mb',0)} "
         f"restarts={p.get('restart_count',0)} phase={p.get('phase','?')}"
         for p in (ctx.get("pods") or [])[:20]
     ) or "  (no pod data)"
