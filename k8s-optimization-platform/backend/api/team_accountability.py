@@ -328,7 +328,7 @@ async def get_team_costs():
     except Exception as e:
         logger.error(f"Error calculating team costs: {e}")
         raise HTTPException(
-            status_code=500,
+            status_code=503,
             detail=f"Failed to calculate team costs: {str(e)}"
         )
 
@@ -595,7 +595,7 @@ async def get_accountability_summary():
     except Exception as e:
         logger.error(f"Error generating accountability summary: {e}")
         raise HTTPException(
-            status_code=500,
+            status_code=503,
             detail=f"Failed to generate summary: {str(e)}"
         )
 
