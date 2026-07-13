@@ -1,0 +1,23 @@
+{
+  "run_time": "2026-07-13 17:03:08",
+  "backend": {
+    "passed": 253,
+    "failed": 0,
+    "errors": 0,
+    "total": 253
+  },
+  "frontend": {
+    "passed": 403,
+    "failed": 0,
+    "total": 403,
+    "suites": [
+      {
+        "file": "src/__tests__/theme_and_data_integrity.test.tsx",
+        "outcome": "PASS"
+      }
+    ]
+  },
+  "total_pages": 214,
+  "real_data_pages": 213,
+  "stub_pages": 1
+}

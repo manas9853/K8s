@@ -1,0 +1,444 @@
+npm warn Unknown user config "machine eu.artifactory.swg-devops.com". This will stop working in the next major version of npm.
+npm warn Unknown user config "login xfti-build@ibm.com". This will stop working in the next major version of npm.
+npm warn Unknown user config "password REDACTED". This will stop working in the next major version of npm.
+npm warn Unknown user config "email". This will stop working in the next major version of npm.
+
+> k8s-optimization-platform-frontend@1.0.0 test
+> react-scripts test --watchAll=false --verbose --forceExit --ci
+
+PASS src/__tests__/theme_and_data_integrity.test.tsx
+  Theme Design Tokens — Structural Integrity
+    ✓ palette.mode is dark (1 ms)
+    ✓ background.default is deep navy #050d1a
+    ✓ background.paper is #0b1628
+    ✓ primary.main is cyan #00d4ff (1 ms)
+    ✓ primary.light is #33ddff
+    ✓ primary.dark is #00a8cc
+    ✓ primary.contrastText is #050d1a (dark bg on cyan badge)
+    ✓ secondary.main is blue #2563eb
+    ✓ secondary.contrastText is #ffffff
+    ✓ success.main is neon green #39ff14
+    ✓ warning.main is amber #f59e0b
+    ✓ error.main is red #ef4444
+    ✓ info.main is cyan #00d4ff (same as primary)
+    ✓ divider is #1e3a5f (dark blue)
+    ✓ text.primary is #e2f0ff (not pure white)
+    ✓ text.secondary is #7ca5cc (muted blue-grey)
+    ✓ text.disabled is #3d6080 (1 ms)
+    ✓ action.hover is rgba(0,212,255,0.06)
+    ✓ action.selected is rgba(0,212,255,0.12)
+    ✓ fontFamily contains -apple-system
+    ✓ fontFamily contains Segoe UI
+    ✓ h1 fontWeight is 700
+    ✓ h2 fontWeight is 700
+    ✓ h3 fontWeight is 600
+    ✓ h4 fontWeight is 600 (1 ms)
+    ✓ h5 fontWeight is 600
+    ✓ h6 fontWeight is 600
+    ✓ borderRadius is 8
+    ✓ no palette color is pure white #ffffff (except secondary.contrastText)
+    ✓ no palette color is pure black #000000
+  MUI Theme Application — Component Rendering
+    ✓ renders a div with theme background color set (16 ms)
+    ✓ renders Typography text without losing theme font stack (2 ms)
+    ✓ success color chip is not pure green
+    ✓ action hover overlay is translucent (not opaque)
+    ✓ selected state overlay alpha > hover alpha (selected is more visible)
+  CSS Theme Override Detection
+    ✓ text.primary is not pure white (design system uses #e2f0ff)
+    ✓ background.default is not pure black (design system uses #050d1a)
+    ✓ MuiCard background uses gradient, not flat grey (1 ms)
+    ✓ MuiPaper background is dark (#0b1628), not light
+    ✓ AppBar uses gradient that starts from #071022
+    ✓ scrollbar thumb color is #1e3a5f (matches divider)
+  API Configuration — Endpoint URL Construction
+    ✓ API_BASE_URL uses REACT_APP_API_URL env var when set (2 ms)
+    ✓ API_BASE_URL strips trailing slash
+    ✓ all dashboard endpoints contain /api/ (1 ms)
+    ✓ all cluster endpoints contain /api/
+    ✓ all incident endpoints contain /api/ (1 ms)
+    ✓ all command-center endpoints contain /api/
+    ✓ tokens.revoke is a function producing a URL with the token hash
+    ✓ getApiUrl prepends API_BASE_URL when path does not start with /api (1 ms)
+    ✓ getApiUrl returns path unchanged when it already starts with /api
+    ✓ default prod backend is bookmyturff.com (not localhost)
+  Static Placeholder Text — No Lorem Ipsum / Generic Copy
+    ✓ no forbidden static strings in a plain MUI render (2 ms)
+    ✓ ExecutiveDashboard.tsx contains "Coming soon" stub (known issue — FLAG) (1 ms)
+    ✓ ArgoCD DUMMY_DATA has been removed (Fix 3)
+    ✓ CloudDiscovery placeholder fields are INPUT hints (not rendered content)
+  Application Route Inventory — Core Pages
+    ✓ registers 90 core routes
+    ✓ core route "/" is present in route inventory
+    ✓ core route "/command-center" is present in route inventory
+    ✓ core route "/executive" is present in route inventory
+    ✓ core route "/clusters" is present in route inventory
+    ✓ core route "/cluster-health" is present in route inventory
+    ✓ core route "/cluster-nodes" is present in route inventory
+    ✓ core route "/worker-pools" is present in route inventory
+    ✓ core route "/resource-utilization" is present in route inventory
+    ✓ core route "/cluster-benchmarking" is present in route inventory
+    ✓ core route "/cluster-onboarding" is present in route inventory
+    ✓ core route "/deployments" is present in route inventory
+    ✓ core route "/statefulsets" is present in route inventory
+    ✓ core route "/daemonsets" is present in route inventory
+    ✓ core route "/jobs" is present in route inventory (1 ms)
+    ✓ core route "/cronjobs" is present in route inventory
+    ✓ core route "/cpu-analysis" is present in route inventory
+    ✓ core route "/memory-analysis" is present in route inventory
+    ✓ core route "/restart-analysis" is present in route inventory
+    ✓ core route "/oom-events" is present in route inventory
+    ✓ core route "/pod-health" is present in route inventory
+    ✓ core route "/pvcs" is present in route inventory
+    ✓ core route "/pvs" is present in route inventory
+    ✓ core route "/storage-consumption" is present in route inventory
+    ✓ core route "/orphaned-volumes" is present in route inventory
+    ✓ core route "/storage-forecasting" is present in route inventory (1 ms)
+    ✓ core route "/pvc-file-analysis" is present in route inventory
+    ✓ core route "/services" is present in route inventory
+    ✓ core route "/ingress" is present in route inventory
+    ✓ core route "/traffic-analysis" is present in route inventory
+    ✓ core route "/external-exposure" is present in route inventory
+    ✓ core route "/network-policies" is present in route inventory
+    ✓ core route "/metrics" is present in route inventory
+    ✓ core route "/logs" is present in route inventory
+    ✓ core route "/events" is present in route inventory
+    ✓ core route "/traces" is present in route inventory (1 ms)
+    ✓ core route "/service-health" is present in route inventory
+    ✓ core route "/recommendations" is present in route inventory
+    ✓ core route "/cpu-rightsizing" is present in route inventory
+    ✓ core route "/memory-rightsizing" is present in route inventory
+    ✓ core route "/resource-allocation" is present in route inventory
+    ✓ core route "/pods" is present in route inventory
+    ✓ core route "/cost-savings" is present in route inventory
+    ✓ core route "/monthly-savings" is present in route inventory
+    ✓ core route "/annual-savings" is present in route inventory (1 ms)
+    ✓ core route "/cost-breakdown" is present in route inventory
+    ✓ core route "/savings-trends" is present in route inventory
+    ✓ core route "/cleanup" is present in route inventory
+    ✓ core route "/zombie-resources" is present in route inventory
+    ✓ core route "/unused-deployments" is present in route inventory
+    ✓ core route "/stale-configmaps" is present in route inventory
+    ✓ core route "/stale-secrets" is present in route inventory
+    ✓ core route "/old-replicasets" is present in route inventory
+    ✓ core route "/unattached-pvcs" is present in route inventory
+    ✓ core route "/idle-namespaces" is present in route inventory
+    ✓ core route "/cluster-waste" is present in route inventory (1 ms)
+    ✓ core route "/namespace-waste" is present in route inventory
+    ✓ core route "/team-waste" is present in route inventory
+    ✓ core route "/application-waste" is present in route inventory
+    ✓ core route "/cluster-score" is present in route inventory
+    ✓ core route "/namespace-score" is present in route inventory
+    ✓ core route "/team-score" is present in route inventory
+    ✓ core route "/scoring" is present in route inventory
+    ✓ core route "/team-accountability" is present in route inventory (1 ms)
+    ✓ core route "/heatmap" is present in route inventory
+    ✓ core route "/root-cause" is present in route inventory
+    ✓ core route "/simulation" is present in route inventory
+    ✓ core route "/guardrails" is present in route inventory
+    ✓ core route "/incidents" is present in route inventory
+    ✓ core route "/predictive" is present in route inventory
+    ✓ core route "/predictive-failures" is present in route inventory
+    ✓ core route "/capacity-forecasting" is present in route inventory
+    ✓ core route "/anomaly-detection" is present in route inventory
+    ✓ core route "/dependency-mapping" is present in route inventory
+    ✓ core route "/cost-forecasting" is present in route inventory
+    ✓ core route "/ai-insights" is present in route inventory
+    ✓ core route "/carbon" is present in route inventory
+    ✓ core route "/energy-consumption" is present in route inventory
+    ✓ core route "/sustainability-score" is present in route inventory
+    ✓ core route "/financial-benchmarking" is present in route inventory
+    ✓ core route "/benchmarking" is present in route inventory
+    ✓ core route "/reports" is present in route inventory
+    ✓ core route "/audit" is present in route inventory
+    ✓ core route "/autofix" is present in route inventory
+    ✓ core route "/rollback" is present in route inventory
+    ✓ core route "/ai-copilot" is present in route inventory
+    ✓ core route "/autonomous" is present in route inventory
+    ✓ core route "/real-time-alerts" is present in route inventory
+    ✓ core route "/global-search" is present in route inventory
+    ✓ core route "/storage-optimization" is present in route inventory
+    ✓ core route "/node-optimization" is present in route inventory
+  Application Route Inventory — Security Pages
+    ✓ registers 23 security routes
+    ✓ security route "/security-command-center" is catalogued
+    ✓ security route "/security-score" is catalogued
+    ✓ security route "/cve-dashboard" is catalogued (1 ms)
+    ✓ security route "/image-scanning" is catalogued
+    ✓ security route "/dependency-scanning" is catalogued
+    ✓ security route "/patch-recommendations" is catalogued
+    ✓ security route "/runtime-security" is catalogued
+    ✓ security route "/privileged-containers" is catalogued
+    ✓ security route "/root-containers" is catalogued
+    ✓ security route "/image-trust" is catalogued
+    ✓ security route "/secret-exposure" is catalogued
+    ✓ security route "/secret-rotation" is catalogued
+    ✓ security route "/certificate-management" is catalogued
+    ✓ security route "/credential-audit" is catalogued
+    ✓ security route "/excessive-permissions" is catalogued
+    ✓ security route "/cluster-admin-review" is catalogued
+    ✓ security route "/service-accounts-analysis" is catalogued
+    ✓ security route "/least-privilege-review" is catalogued
+    ✓ security route "/east-west-traffic" is catalogued
+    ✓ security route "/zero-trust-review" is catalogued
+    ✓ security route "/baseline-comparison" is catalogued
+    ✓ security route "/drift-alerts" is catalogued
+    ✓ security route "/auto-remediation-security" is catalogued
+  Application Route Inventory — Compliance Pages
+    ✓ registers 15 compliance routes (1 ms)
+    ✓ compliance route "/compliance/dashboard" is catalogued
+    ✓ compliance route "/compliance/score" is catalogued
+    ✓ compliance route "/compliance/cis-benchmark" is catalogued
+    ✓ compliance route "/compliance/soc2" is catalogued
+    ✓ compliance route "/compliance/pci-dss" is catalogued
+    ✓ compliance route "/compliance/iso27001" is catalogued
+    ✓ compliance route "/compliance/hipaa" is catalogued
+    ✓ compliance route "/compliance/gdpr" is catalogued
+    ✓ compliance route "/compliance/nist" is catalogued
+    ✓ compliance route "/compliance/policy-engine" is catalogued
+    ✓ compliance route "/compliance/governance-rules" is catalogued
+    ✓ compliance route "/compliance/security-guardrails" is catalogued
+    ✓ compliance route "/compliance/cicd-guardrails" is catalogued
+    ✓ compliance route "/compliance/audit-center" is catalogued
+    ✓ compliance route "/compliance/change-management" is catalogued
+  Application Route Inventory — Reports Pages
+    ✓ registers 9 reports routes
+    ✓ reports route "/reports" is catalogued
+    ✓ reports route "/reports/finops" is catalogued
+    ✓ reports route "/reports/security" is catalogued (1 ms)
+    ✓ reports route "/reports/compliance" is catalogued
+    ✓ reports route "/reports/optimization" is catalogued
+    ✓ reports route "/reports/incidents" is catalogued
+    ✓ reports route "/reports/scheduled" is catalogued
+    ✓ reports route "/reports/pdf-export" is catalogued
+    ✓ reports route "/reports/excel-export" is catalogued
+  Application Route Inventory — AutonomousAI Pages
+    ✓ registers 20 AutonomousAI sub-routes
+    ✓ autonomous route "/autonomous-ai/ai-copilot/natural-language-queries" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-copilot/optimization-advisor" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-copilot/security-advisor" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-copilot/incident-investigator" is catalogued
+    ✓ autonomous route "/autonomous-ai/autonomous-operations/manual-mode" is catalogued
+    ✓ autonomous route "/autonomous-ai/autonomous-operations/assisted-mode" is catalogued
+    ✓ autonomous route "/autonomous-ai/autonomous-operations/autonomous-mode" is catalogued
+    ✓ autonomous route "/autonomous-ai/autofix-center/resource-fixes" is catalogued
+    ✓ autonomous route "/autonomous-ai/autofix-center/security-fixes" is catalogued
+    ✓ autonomous route "/autonomous-ai/autofix-center/compliance-fixes" is catalogued
+    ✓ autonomous route "/autonomous-ai/autofix-center/bulk-fixes" is catalogued
+    ✓ autonomous route "/autonomous-ai/rollback-center/deployment-rollback" is catalogued
+    ✓ autonomous route "/autonomous-ai/rollback-center/configuration-rollback" is catalogued
+    ✓ autonomous route "/autonomous-ai/rollback-center/namespace-rollback" is catalogued
+    ✓ autonomous route "/autonomous-ai/rollback-center/cluster-rollback" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-recommendations/cost" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-recommendations/performance" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-recommendations/reliability" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-recommendations/security" is catalogued
+    ✓ autonomous route "/autonomous-ai/ai-recommendations/compliance" is catalogued
+  Application Route Inventory — AttackInvestigation Pages
+    ✓ registers 24 AttackInvestigation sub-routes
+    ✓ attack-investigation route "/attack-investigation/incident-center" is catalogued
+    ✓ attack-investigation route "/attack-investigation/active-threats" is catalogued (1 ms)
+    ✓ attack-investigation route "/attack-investigation/incident-timeline" is catalogued
+    ✓ attack-investigation route "/attack-investigation/attack-path" is catalogued
+    ✓ attack-investigation route "/attack-investigation/blast-radius" is catalogued
+    ✓ attack-investigation route "/attack-investigation/suspicious-pods" is catalogued
+    ✓ attack-investigation route "/attack-investigation/suspicious-processes" is catalogued
+    ✓ attack-investigation route "/attack-investigation/suspicious-users" is catalogued
+    ✓ attack-investigation route "/attack-investigation/threat-queries" is catalogued
+    ✓ attack-investigation route "/attack-investigation/pod-evidence" is catalogued
+    ✓ attack-investigation route "/attack-investigation/audit-logs" is catalogued
+    ✓ attack-investigation route "/attack-investigation/process-history" is catalogued
+    ✓ attack-investigation route "/attack-investigation/network-evidence" is catalogued (1 ms)
+    ✓ attack-investigation route "/attack-investigation/data-exfiltration" is catalogued
+    ✓ attack-investigation route "/attack-investigation/crypto-miner" is catalogued
+    ✓ attack-investigation route "/attack-investigation/insider-threat" is catalogued
+    ✓ attack-investigation route "/attack-investigation/mitre-attack" is catalogued
+    ✓ attack-investigation route "/attack-investigation/playbooks" is catalogued
+    ✓ attack-investigation route "/attack-investigation/playbook-execution" is catalogued
+    ✓ attack-investigation route "/attack-investigation/quarantine" is catalogued
+    ✓ attack-investigation route "/attack-investigation/kill-pod" is catalogued
+    ✓ attack-investigation route "/attack-investigation/block-traffic" is catalogued
+    ✓ attack-investigation route "/attack-investigation/rotate-secrets" is catalogued
+    ✓ attack-investigation route "/attack-investigation/emergency-rollback" is catalogued
+  Application Route Inventory — People & Admin Pages
+    ✓ registers 5 People routes
+    ✓ registers 8 Administration routes
+    ✓ registers 11 PlatformEngineering routes
+    ✓ route "/people/team-cost-analysis" is catalogued
+    ✓ route "/people/team-optimization-score" is catalogued
+    ✓ route "/people/team-security-score" is catalogued
+    ✓ route "/people/ownership-mapping" is catalogued (1 ms)
+    ✓ route "/people/access-reviews" is catalogued
+    ✓ route "/admin/user-management" is catalogued
+    ✓ route "/admin/rbac" is catalogued
+    ✓ route "/admin/sso-saml" is catalogued
+    ✓ route "/admin/integrations" is catalogued
+    ✓ route "/admin/notifications" is catalogued
+    ✓ route "/admin/api-keys" is catalogued
+    ✓ route "/admin/backup-recovery" is catalogued
+    ✓ route "/admin/platform-settings" is catalogued
+    ✓ route "/platform/gitops/argocd" is catalogued
+    ✓ route "/platform/gitops/fluxcd" is catalogued
+    ✓ route "/platform/gitops/drift-detection" is catalogued
+    ✓ route "/platform/cicd/jenkins" is catalogued
+    ✓ route "/platform/cicd/github-actions" is catalogued
+    ✓ route "/platform/cicd/gitlab-ci" is catalogued
+    ✓ route "/platform/cicd/tekton" is catalogued
+    ✓ route "/platform/policy-as-code" is catalogued
+    ✓ route "/platform/infra-as-code" is catalogued
+    ✓ route "/platform/deployment-intelligence" is catalogued
+    ✓ route "/platform/platform-standards" is catalogued
+  PlatformEngineering Pages — Real API Integration (Fix 3)
+    ✓ all 11 PlatformEngineering pages migrated to real APIs
+    ✓ no DUMMY_DATA constant remains in any PlatformEngineering page (Fix 3 applied)
+    ✓ [DATA: REAL] PlatformEngineering/ArgoCD.tsx → useEffect + axios → /api/v1/platform/argocd/apps
+    ✓ [DATA: REAL] PlatformEngineering/FluxCD.tsx → useEffect + axios → /api/v1/platform/fluxcd/kustomizations (3 ms)
+    ✓ [DATA: REAL] PlatformEngineering/GitopsDriftDetection.tsx → useEffect + axios → /api/v1/platform/gitops/drift
+    ✓ [DATA: REAL] PlatformEngineering/GitHubActions.tsx → useEffect + axios → /api/v1/platform/pipelines/github-actions
+    ✓ [DATA: REAL] PlatformEngineering/GitLabCI.tsx → useEffect + axios → /api/v1/platform/pipelines/gitlab-ci
+    ✓ [DATA: REAL] PlatformEngineering/JenkinsIntegration.tsx → useEffect + axios → /api/v1/platform/pipelines/jenkins
+    ✓ [DATA: REAL] PlatformEngineering/TektonPipelines.tsx → useEffect + axios → /api/v1/platform/pipelines/tekton (1 ms)
+    ✓ [DATA: REAL] PlatformEngineering/PlatformStandards.tsx → useEffect + axios → /api/v1/platform/policy/standards
+    ✓ [DATA: REAL] PlatformEngineering/PolicyAsCode.tsx → useEffect + axios → /api/v1/platform/policy/code
+    ✓ [DATA: REAL] PlatformEngineering/InfraAsCode.tsx → useEffect + axios → /api/v1/platform/iac
+    ✓ [DATA: REAL] PlatformEngineering/DeploymentIntelligence.tsx → useEffect + axios → /api/v1/platform/deployment-intelligence
+    ✓ PlatformEngineering backend router registered at /api/v1/platform in main.py
+    ✓ all PlatformEngineering pages pass cluster_id query param to backend
+  Administration Pages — Real API Data Status (Fix 4)
+    ✓ all 8 Administration pages use real APIs
+    ✓ no DUMMY_DATA constant remains in any Administration page
+    ✓ UserManagement BUG-F01 fixed — hardcoded email guard removed
+    ✓ [DATA: REAL] Administration/UserManagement.tsx → /api/v1/users/
+    ✓ [DATA: REAL] Administration/RBACAdmin.tsx → /api/v1/users/ (RBAC-scoped) (1 ms)
+    ✓ [DATA: REAL] Administration/SSOSaml.tsx → /api/v1/admin/sso-providers
+    ✓ [DATA: REAL] Administration/Integrations.tsx → /api/v1/admin/integrations
+    ✓ [DATA: REAL] Administration/Notifications.tsx → /api/v1/admin/notification-channels
+    ✓ [DATA: REAL] Administration/APIKeys.tsx → /api/v1/tokens/list
+    ✓ [DATA: REAL] Administration/BackupRecovery.tsx → /api/v1/admin/backups
+    ✓ [DATA: REAL] Administration/PlatformSettings.tsx → /api/v1/admin/settings
+  Backend Dummy-Data Fallback — Fixed Endpoints (Fix 7)
+    ✓ 5 backend dummy fallbacks were eliminated in Fix 7
+    ✓ 1 dummy fallback remains (acceptable UX-only fallback)
+    ✓ [FIXED] GET /api/v1/network/services: removed get_dummy_data("services") — returns []
+    ✓ [FIXED] GET /api/v1/network/ingresses: removed get_dummy_data("ingresses") — returns [] (1 ms)
+    ✓ [FIXED] GET /api/v1/network/traffic: removed _build_traffic_from_dummy() — returns []
+    ✓ [FIXED] GET /api/v1/observability/events: removed get_dummy_data("events") — returns []
+    ✓ [FIXED] GET /api/v1/observability/service-health: removed dummy service fallback — returns []
+    ✓ benchmarking.py BUG-B01 fixed — real cluster scores instead of 3 fake clusters
+    ✓ intelligence.py BUG-B02 fixed — real pod-based analysis replaces random fake data
+    ✓ incidents.py BUG-B03 fixed — DEMO_INCIDENTS / DEMO_CORRELATIONS / DEMO_PATTERNS cleared to []
+    ✓ executive.py BUG-B08 fixed — cost_trend_percent is 0.0, not hardcoded -8.0
+    ✓ heatmap.py and predictive.py BUG-B06 fixed — use INTERNAL_API_BASE env var, not hardcoded localhost
+    ✓ autofix.py BUG-B09 fixed — applied_actions/failed_actions computed from real action.status
+    ✓ command_center.py BUG-B10 fixed — uptime + response_time fields populated from real data
+  Real Data Pages — Cluster & Infrastructure
+    ✓ 10 cluster/infrastructure pages use real data
+    ✓ [REAL] Dashboard (/) → /api/v1/clusters/summary + /api/v1/simulation
+    ✓ [REAL] Executive (/executive) → /api/v1/executive/overview + /api/v1/dashboard/kpis
+    ✓ [REAL] CommandCenter (/command-center) → /api/v1/command-center/status|metrics|alerts
+    ✓ [REAL] Clusters (/clusters) → /api/v1/clusters (X-Clerk-User-Id scoped)
+    ✓ [REAL] ClusterHealth (/cluster-health) → /api/v1/clusters/health
+    ✓ [REAL] ClusterNodes (/cluster-nodes) → /api/v1/clusters/nodes (agent metrics)
+    ✓ [REAL] WorkerPools (/worker-pools) → /api/v1/clusters/worker-pools
+    ✓ [REAL] ResourceUtilization (/resource-utilization) → /api/v1/clusters/utilization
+    ✓ [REAL] ClusterBenchmarking (/cluster-benchmarking) → /api/v1/clusters/benchmarking
+    ✓ [REAL] Benchmarking (/benchmarking) → /api/v1/v1/benchmarking/clusters|comparison
+  Real Data Pages — Workloads & Pods
+    ✓ 11 workload/pod pages use real data
+    ✓ [REAL] Pods (/pods) → /api/v1/pods
+    ✓ [REAL] CPUAnalysis (/cpu-analysis) → /api/v1/pods/cpu-analysis
+    ✓ [REAL] MemoryAnalysis (/memory-analysis) → /api/v1/pods/memory-analysis (1 ms)
+    ✓ [REAL] RestartAnalysis (/restart-analysis) → /api/v1/pods/restart-analysis
+    ✓ [REAL] OOMEvents (/oom-events) → /api/v1/pods/oom-events
+    ✓ [REAL] PodHealth (/pod-health) → /api/v1/pods/pod-health
+    ✓ [REAL] Deployments (/deployments) → /api/v1/workloads/deployments
+    ✓ [REAL] StatefulSets (/statefulsets) → /api/v1/workloads/statefulsets
+    ✓ [REAL] DaemonSets (/daemonsets) → /api/v1/workloads/daemonsets
+    ✓ [REAL] Jobs (/jobs) → /api/v1/workloads/jobs
+    ✓ [REAL] CronJobs (/cronjobs) → /api/v1/workloads/cronjobs
+  Real Data Pages — Storage & Network
+    ✓ 10 storage/network pages use real data
+    ✓ [REAL] PVCs (/pvcs) → /api/v1/storage/pvcs
+    ✓ [REAL] PVs (/pvs) → /api/v1/storage/pvs
+    ✓ [REAL] StorageConsumption (/storage-consumption) → /api/v1/storage/consumption
+    ✓ [REAL] OrphanedVolumes (/orphaned-volumes) → /api/v1/storage/orphaned-pvcs (1 ms)
+    ✓ [REAL] StorageForecasting (/storage-forecasting) → /api/v1/storage/forecasting
+    ✓ [REAL] StorageOptimization (/storage-optimization) → /api/v1/storage/orphaned-pvcs + consumption
+    ✓ [REAL] Services (/services) → /api/v1/network/services
+    ✓ [REAL] Ingress (/ingress) → /api/v1/network/ingresses
+    ✓ [REAL] NetworkPolicies (/network-policies) → /api/v1/network/network-policies
+    ✓ [REAL] TrafficAnalysis (/traffic-analysis) → /api/v1/network/traffic
+  Real Data Pages — Cost, FinOps & Analytics
+    ✓ 15 cost/finops/analytics pages use real data
+    ✓ [REAL] CostSavings (/cost-savings) → /api/v1/cost-savings/summary
+    ✓ [REAL] Recommendations (/recommendations) → /api/v1/recommendations
+    ✓ [REAL] Carbon (/carbon) → /api/v1/carbon/footprint
+    ✓ [REAL] Heatmap (/heatmap) → /api/v1/heatmap
+    ✓ [REAL] Scoring (/scoring) → /api/v1/scoring/cluster+namespace (1 ms)
+    ✓ [REAL] TeamAccountability (/team-accountability) → /api/v1/team-accountability/teams
+    ✓ [REAL] Simulation (/simulation) → /api/v1/simulation
+    ✓ [REAL] Guardrails (/guardrails) → /api/v1/guardrails
+    ✓ [REAL] Incidents (/incidents) → /api/v1/incidents/incidents
+    ✓ [REAL] Predictive (/predictive) → /api/v1/predictive
+    ✓ [REAL] RootCause (/root-cause) → /api/v1/root-cause
+    ✓ [REAL] TeamCostAnalysis (/people/team-cost-analysis) → /api/v1/team-accountability/teams
+    ✓ [REAL] TeamOptimizationScore (/people/team-optimization-score) → /api/v1/scoring/namespace + teams
+    ✓ [REAL] TeamSecurityScore (/people/team-security-score) → /api/v1/team-accountability/teams
+    ✓ [REAL] OwnershipMapping (/people/ownership-mapping) → /api/v1/clusters/namespaces + workloads
+  Real Data Pages — Security & Compliance
+    ✓ 10 security/compliance/report pages use real data
+    ✓ [REAL] ComplianceDashboard (/compliance/dashboard) → /api/v1/compliance/ (db_manager pods)
+    ✓ [REAL] Audit (/audit) → /api/v1/audit (1 ms)
+    ✓ [REAL] RuntimeSecurity (/runtime-security) → /api/v1/security/runtime
+    ✓ [REAL] Reports (/reports) → /api/v1/reports
+    ✓ [REAL] PDFExport (/reports/pdf-export) → /api/v1/reports/generate/{type}?format=json
+    ✓ [REAL] ExcelExport (/reports/excel-export) → /api/v1/reports/generate/{type}?format=csv
+    ✓ [REAL] FinOpsReports (/reports/finops) → /api/v1/reports
+    ✓ [REAL] GlobalSearch (/global-search) → /api/v1/pods + workloads + recommendations
+    ✓ [REAL] RealTimeAlerts (/real-time-alerts) → /api/v1/observability/events?event_type=Warning
+    ✓ [REAL] NodeOptimization (/node-optimization) → /api/v1/clusters/nodes
+  Dummy Data Regression Baseline
+    ✓ zero pages have DUMMY_DATA constant remaining after all fixes
+    ✓ 1 known stub page(s) exist and are NOT registered in routes
+    ✓ Fix 1 applied: TeamCostAnalysis, TeamOptimizationScore, TeamSecurityScore → real APIs
+    ✓ Fix 2 applied: OwnershipMapping → real cluster/workloads APIs
+    ✓ Fix 3 applied: all 11 PlatformEngineering pages → real /api/v1/platform/* APIs
+    ✓ Fix 4 applied: all 6 previously-dummy Administration pages → real APIs
+    ✓ Fix 5 applied: RealTimeAlerts, GlobalSearch → real observability/pods APIs
+    ✓ Fix 6 applied: StorageOptimization, NodeOptimization, PDFExport, ExcelExport → real APIs
+    ✓ Fix 7 applied: network.py + observability.py dummy fallbacks removed
+  ClusterNodes Page — Code Comment Audit
+    ✓ ClusterNodes.tsx comment about dummy node naming is documentation only (not data)
+    ✓ ClusterNodes.tsx uses real fetch from /api/v1/clusters/nodes
+  Media & Asset Checks
+    ✓ no placeholder image CDN domains appear in mock component output (1 ms)
+    ✓ K8sWheelIcon in Layout.tsx is a custom inline SVG (no external src)
+    ✓ no data:image/png placeholder base64 stub in page source (only real SVGs)
+  Frontend Bug Fixes — Button & Interaction Wiring
+    ✓ 9 frontend button/interaction bugs fixed
+    ✓ [FIXED] OrphanedVolumes: Delete button wired with handleDelete() + DELETE /api/v1/storage/pvcs/{name}
+    ✓ [FIXED] CommandCenter: Quick Action buttons wired; uptime/response_time from API
+    ✓ [FIXED] Executive: Take Action button navigates to insight.action_url || /recommendations
+    ✓ [FIXED] FinOpsReports: Export PDF button navigates to /reports/pdf-export
+    ✓ [FIXED] AICopilot: Rewritten: COMING SOON stub → 4-card hub linking to real copilot sub-pages
+    ✓ [FIXED] DaemonSets: handleAutoFix navigates to /recommendations?resource=daemonsets
+    ✓ [FIXED] CronJobs: handleAutoFix navigates to /recommendations?resource=cronjobs
+    ✓ [FIXED] Jobs: handleAutoFix navigates to /recommendations?resource=jobs
+    ✓ [FIXED] Cleanup: Delete button wired with handleDeleteResource() + DELETE API call
+    ✓ CPUAnalysis, MemoryAnalysis, RestartAnalysis, OOMEvents, PodHealth — response.ok checks added
+    ✓ Heatmap, Predictive, Scoring — response.ok checks on all sub-fetches
+    ✓ Audit, RuntimeSecurity, Reports — error handling added or improved
+  Total Route Count — Regression Guard
+    ✓ total route count is at least 200 (got 203)
+    ✓ core routes count is >= 85
+    ✓ AttackInvestigation has exactly 24 routes (1 ms)
+    ✓ AutonomousAI has exactly 20 routes
+    ✓ PlatformEngineering has exactly 11 routes
+    ✓ Administration has exactly 8 routes
+
+Test Suites: 1 passed, 1 total
+Tests:       403 passed, 403 total
+Snapshots:   0 total
+Time:        1.86 s
+Ran all test suites.
+Force exiting Jest: Have you considered using `--detectOpenHandles` to detect async operations that kept running after all tests finished?
