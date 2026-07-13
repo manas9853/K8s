@@ -76,6 +76,7 @@ const PodHealth: React.FC = () => {
     try {
       const param = clusterId && clusterId !== 'all' ? `?cluster_id=${encodeURIComponent(clusterId)}` : '';
       const response = await fetch(`${API_BASE_URL}/v1/pods/pod-health${param}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data = await response.json();
       setPods(data);
     } catch (err) {

@@ -63,8 +63,9 @@ const Reports: React.FC = () => {
 
       if (listRes.ok) setReports(await listRes.json());
       if (summaryRes.ok) setSummary(await summaryRes.json());
-    } catch {
-      // network errors handled gracefully
+    } catch (err) {
+      console.error('Reports fetch failed:', err);
+      // BUG-F09: network errors are now logged; no error state here because Reports shows empty-state gracefully
     } finally {
       setLoading(false);
     }

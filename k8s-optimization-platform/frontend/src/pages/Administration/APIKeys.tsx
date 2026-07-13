@@ -1,23 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Chip,
+  TableHead, TableRow, Chip, LinearProgress, Alert,
 } from '@mui/material';
+import axios from 'axios';
 
-const DUMMY_DATA = [
-  { keyName: 'ci-pipeline-key', createdBy: 'bob.martin', createdAt: '2024-03-01', lastUsed: '2025-07-14', expiresAt: '2026-03-01', permissions: 'Read/Write', status: 'Active' },
-  { keyName: 'monitoring-reader', createdBy: 'alice.chen', createdAt: '2024-04-10', lastUsed: '2025-07-14', expiresAt: '2026-04-10', permissions: 'Read', status: 'Active' },
-  { keyName: 'grafana-datasource', createdBy: 'grace.liu', createdAt: '2024-02-20', lastUsed: '2025-07-13', expiresAt: '2025-08-20', permissions: 'Read', status: 'Active' },
-  { keyName: 'admin-automation', createdBy: 'alice.chen', createdAt: '2023-12-01', lastUsed: '2025-06-30', expiresAt: '2024-12-01', permissions: 'Admin', status: 'Expired' },
-  { keyName: 'legacy-deploy-key', createdBy: 'david.kim', createdAt: '2023-06-15', lastUsed: '2024-11-01', expiresAt: '2024-06-15', permissions: 'Read/Write', status: 'Revoked' },
-  { keyName: 'security-scanner', createdBy: 'carol.james', createdAt: '2024-05-05', lastUsed: '2025-07-12', expiresAt: '2026-05-05', permissions: 'Read', status: 'Active' },
-  { keyName: 'backup-service', createdBy: 'henry.patel', createdAt: '2024-06-01', lastUsed: '2025-07-14', expiresAt: '2026-06-01', permissions: 'Read/Write', status: 'Active' },
-  { keyName: 'temp-audit-access', createdBy: 'emma.rodriguez', createdAt: '2025-06-01', lastUsed: '2025-06-20', expiresAt: '2025-07-01', permissions: 'Read', status: 'Expired' },
-  { keyName: 'webhook-publisher', createdBy: 'frank.nguyen', createdAt: '2024-07-10', lastUsed: '2025-07-10', expiresAt: '2026-07-10', permissions: 'Write', status: 'Revoked' },
-  { keyName: 'platform-admin-key', createdBy: 'grace.liu', createdAt: '2024-01-15', lastUsed: '2025-07-14', expiresAt: '2027-01-15', permissions: 'Admin', status: 'Active' },
-];
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+interface ApiKeyRow {
+  keyName: string;
+  createdBy: string;
+  createdAt: string;
+  lastUsed: string;
+  expiresAt: string;
+  permissions: string;
+  status: string;
+}
+
+function mapToken(raw: Record<string, unknown>): ApiKeyRow {
+  const active = !raw.revoked && (!raw.expires_at || new Date(String(raw.expires_at)) > new Date());
+  const expired = !raw.revoked && raw.expires_at && new Date(String(raw.expires_at)) <= new Date();
+  return {
+    keyName: String(raw.name ?? raw.token_name ?? raw.key_name ?? '—'),
+    createdBy: String(raw.created_by ?? raw.user_id ?? '—'),
+    createdAt: String(raw.created_at ?? '—').slice(0, 10),
+    lastUsed: String(raw.last_used_at ?? raw.last_used ?? '—').slice(0, 10),
+    expiresAt: raw.expires_at ? String(raw.expires_at).slice(0, 10) : 'Never',
+    permissions: String(raw.permissions ?? raw.scopes ?? 'Read'),
+    status: raw.revoked ? 'Revoked' : expired ? 'Expired' : 'Active',
+  };
+}
 
 const permColor: Record<string, 'info' | 'warning' | 'error'> = {
   Read: 'info',
@@ -34,7 +48,23 @@ const statusColor: Record<string, 'success' | 'default' | 'error'> = {
 
 const APIKeys: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [data] = useState(DUMMY_DATA);
+  const [data, setData] = useState<ApiKeyRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    axios.get(`${API_BASE}/api/v1/tokens/list`)
+      .then((r) => {
+        const rows: ApiKeyRow[] = Array.isArray(r.data)
+          ? (r.data as Record<string, unknown>[]).map(mapToken)
+          : [];
+        setData(rows);
+      })
+      .catch((e) => setError(axios.isAxiosError(e) ? e.response?.data?.detail ?? e.message : String(e)))
+      .finally(() => setLoading(false));
+  }, [clusterParam]);
 
   const activeKeys = data.filter((d) => d.status === 'Active').length;
   const expiredKeys = data.filter((d) => d.status === 'Expired').length;
@@ -45,6 +75,9 @@ const APIKeys: React.FC = () => {
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 700 }}>
         API Key Management
       </Typography>
+
+      {loading && <LinearProgress sx={{ mb: 2 }} />}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={4}>

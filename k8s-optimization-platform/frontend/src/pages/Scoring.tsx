@@ -145,6 +145,8 @@ const Scoring: React.FC = () => {
         fetch(`${API_BASE_URL}/v1/scoring/trends${clusterParam}`),
         fetch(`${API_BASE_URL}/v1/scoring/summary${clusterParam}`),
       ]);
+      if (!scoresRes.ok || !trendsRes.ok || !summaryRes.ok)
+        throw new Error(`Scoring API error (${scoresRes.status}/${trendsRes.status}/${summaryRes.status})`);
       const scores: ClusterScore[] = await scoresRes.json();
       const trendData: ScoreTrend[] = await trendsRes.json();
       const summaryData: Summary = await summaryRes.json();

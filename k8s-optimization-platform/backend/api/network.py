@@ -165,9 +165,7 @@ async def get_services(
         items = (net.get("services") or {}).get("items", [])
 
         if not items:
-            # Fall back to dummy data so the UI is never empty
-            raw = get_dummy_data("services", cluster_id)
-            return [ServiceModel(**d) for d in raw]
+            return []
 
         result = []
         for svc in items:
@@ -209,8 +207,7 @@ async def get_ingress(
         items = (net.get("ingresses") or {}).get("items", [])
 
         if not items:
-            raw = get_dummy_data("ingresses", cluster_id)
-            return [IngressModel(**d) for d in raw]
+            return []
 
         result = []
         for ing in items:
@@ -487,54 +484,6 @@ async def get_external_exposure(cluster_id: Optional[str] = Query(None)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def _build_traffic_from_dummy(cluster_id: Optional[str] = None) -> List[TrafficAnalysisModel]:
-    """Build TrafficAnalysisModel list from dummy service/network-policy data."""
-    services = get_dummy_data("services", cluster_id)
-    ingresses = get_dummy_data("ingresses", cluster_id)
-    policies = get_dummy_data("network_policies", cluster_id)
-
-    ns_data: Dict[str, Dict[str, int]] = {}
-    for svc in services:
-        ns = svc["namespace"]
-        ns_data.setdefault(ns, {"service_count": 0, "external_services": 0,
-                                 "internal_services": 0, "ingress_count": 0, "network_policies": 0})
-        ns_data[ns]["service_count"] += 1
-        if svc.get("type") in ("LoadBalancer", "NodePort"):
-            ns_data[ns]["external_services"] += 1
-        else:
-            ns_data[ns]["internal_services"] += 1
-    for ing in ingresses:
-        ns = ing["namespace"]
-        ns_data.setdefault(ns, {"service_count": 0, "external_services": 0,
-                                 "internal_services": 0, "ingress_count": 0, "network_policies": 0})
-        ns_data[ns]["ingress_count"] += 1
-    for pol in policies:
-        ns = pol["namespace"]
-        if ns in ns_data:
-            ns_data[ns]["network_policies"] += 1
-
-    result = []
-    for ns, d in ns_data.items():
-        score = 50
-        if d["network_policies"] > 0:
-            score += 30
-        if d["external_services"] > 0:
-            score -= 20
-        if d["ingress_count"] > 0:
-            score += 20
-        score = max(0, min(100, score))
-        result.append(TrafficAnalysisModel(
-            namespace=ns,
-            service_count=d["service_count"],
-            ingress_count=d["ingress_count"],
-            external_services=d["external_services"],
-            internal_services=d["internal_services"],
-            network_policies=d["network_policies"],
-            security_score=score,
-        ))
-    return sorted(result, key=lambda x: x.service_count, reverse=True)
-
-
 @router.get("/traffic-analysis", response_model=List[TrafficAnalysisModel])
 async def get_traffic_analysis(cluster_id: Optional[str] = Query(None)):
     """Analyze network traffic patterns by namespace from agent_metrics."""
@@ -545,7 +494,7 @@ async def get_traffic_analysis(cluster_id: Optional[str] = Query(None)):
         policies = (net.get("network_policies") or {}).get("items", [])
 
         if not services:
-            return _build_traffic_from_dummy(cluster_id)
+            return []
 
         namespace_data: Dict[str, Dict[str, int]] = {}
 

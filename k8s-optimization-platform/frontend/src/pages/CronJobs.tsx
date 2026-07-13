@@ -526,7 +526,7 @@ const CronJobs: React.FC = () => {
   };
 
   const handleAutoFix = (cronJob: CronJob, issue: string) => {
-    showSnack(`Auto-fix for "${issue}" is not yet automated — see Recommendations for manual steps.`, 'error');
+    navigate(`/recommendations?resource=${encodeURIComponent(cronJob.name)}&namespace=${encodeURIComponent(cronJob.namespace)}&issue=${encodeURIComponent(issue)}`);
   };
 
   const filteredCronJobs = cronJobs.filter(cronJob =>

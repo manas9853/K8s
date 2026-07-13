@@ -182,6 +182,8 @@ const ComplianceReports = lazy(() => import('./pages/ComplianceReports'));
 const OptimizationReports = lazy(() => import('./pages/OptimizationReports'));
 const IncidentReports = lazy(() => import('./pages/IncidentReports'));
 const ScheduledReports = lazy(() => import('./pages/ScheduledReports'));
+const PDFExport = lazy(() => import('./pages/Reports/PDFExport'));
+const ExcelExport = lazy(() => import('./pages/Reports/ExcelExport'));
 
 // People & Teams
 const TeamCostAnalysis = lazy(() => import('./pages/TeamCostAnalysis'));
@@ -189,6 +191,12 @@ const TeamOptimizationScore = lazy(() => import('./pages/TeamOptimizationScore')
 const TeamSecurityScore = lazy(() => import('./pages/TeamSecurityScore'));
 const OwnershipMapping = lazy(() => import('./pages/OwnershipMapping'));
 const AccessReviews = lazy(() => import('./pages/AccessReviews'));
+
+// Search & Alerts
+const RealTimeAlerts = lazy(() => import('./pages/RealTimeAlerts'));
+const GlobalSearch = lazy(() => import('./pages/GlobalSearch'));
+const StorageOptimization = lazy(() => import('./pages/StorageOptimization'));
+const NodeOptimization = lazy(() => import('./pages/NodeOptimization'));
 
 // Platform Engineering - GitOps
 const ArgoCD = lazy(() => import('./pages/PlatformEngineering/ArgoCD'));
@@ -443,7 +451,15 @@ function App() {
                       <Route path="/reports/optimization" element={<OptimizationReports />} />
                       <Route path="/reports/incidents" element={<IncidentReports />} />
                       <Route path="/reports/scheduled" element={<ScheduledReports />} />
+                      <Route path="/reports/pdf-export" element={<PDFExport />} />
+                      <Route path="/reports/excel-export" element={<ExcelExport />} />
                       <Route path="/audit" element={<Audit />} />
+
+                      {/* Search & Alerts */}
+                      <Route path="/real-time-alerts" element={<RealTimeAlerts />} />
+                      <Route path="/global-search" element={<GlobalSearch />} />
+                      <Route path="/storage-optimization" element={<StorageOptimization />} />
+                      <Route path="/node-optimization" element={<NodeOptimization />} />
 
                       {/* People & Teams */}
                       <Route path="/people/team-cost-analysis" element={<TeamCostAnalysis />} />

@@ -48,6 +48,7 @@ const Cleanup: React.FC = () => {
   const [filterCluster, setFilterCluster] = useState<string>('');
   const [filterType, setFilterType] = useState<string>('');
   const [filterRisk, setFilterRisk] = useState<string>('');
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -69,6 +70,28 @@ const Cleanup: React.FC = () => {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteResource = async (resource: CleanupResource) => {
+    const key = `${resource.namespace}/${resource.resource_name}`;
+    if (!window.confirm(`Delete ${resource.resource_type} "${resource.resource_name}" in namespace "${resource.namespace}"?\nThis action cannot be undone.`)) return;
+    setDeleting(key);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/cleanup/${encodeURIComponent(resource.resource_type.toLowerCase())}/${encodeURIComponent(resource.resource_name)}?namespace=${encodeURIComponent(resource.namespace)}${clusterParam ? `&cluster=${clusterParam.replace('?cluster_id=', '')}` : ''}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setData(prev => prev ? {
+        ...prev,
+        resources: prev.resources.filter(r => !(r.resource_name === resource.resource_name && r.namespace === resource.namespace)),
+        summary: { ...prev.summary, total_resources: prev.summary.total_resources - 1 },
+      } : null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Delete failed');
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -158,7 +181,16 @@ const Cleanup: React.FC = () => {
                   <TableCell><Typography variant="body2" sx={{ maxWidth: 250 }}>{resource.reason}</Typography></TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Button variant="outlined" size="small" color="error" startIcon={<Delete />} disabled={!resource.can_delete}>Delete</Button>
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        color="error"
+                        startIcon={<Delete />}
+                        disabled={!resource.can_delete || deleting === `${resource.namespace}/${resource.resource_name}`}
+                        onClick={() => handleDeleteResource(resource)}
+                      >
+                        {deleting === `${resource.namespace}/${resource.resource_name}` ? 'Deleting…' : 'Delete'}
+                      </Button>
                       <Button variant="outlined" size="small" startIcon={<Schedule />}>Schedule</Button>
                     </Box>
                   </TableCell>

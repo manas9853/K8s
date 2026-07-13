@@ -95,18 +95,21 @@ const Heatmap: React.FC = () => {
 
   const fetchHeatmap = async () => {
     const response = await fetch(`${API_BASE_URL}/v1/heatmap/heatmap${clusterParam}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     setHeatmapData(data);
   };
 
   const fetchResourceWaste = async () => {
     const response = await fetch(`${API_BASE_URL}/v1/heatmap/resources${clusterParam}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     setResourceWaste(data);
   };
 
   const fetchSummary = async () => {
     const response = await fetch(`${API_BASE_URL}/v1/heatmap/summary${clusterParam}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     setSummary(data);
   };

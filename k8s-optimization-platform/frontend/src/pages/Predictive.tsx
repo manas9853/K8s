@@ -89,24 +89,28 @@ const PredictiveInner: React.FC = () => {
 
   const fetchPredictions = async () => {
     const response = await fetch(`${API_BASE_URL}/v1/predictive/predictions${clusterParam}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     setPredictions(data);
   };
 
   const fetchActions = async () => {
     const response = await fetch(`${API_BASE_URL}/v1/predictive/actions${clusterParam}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     setActions(data);
   };
 
   const fetchAlerts = async () => {
     const response = await fetch(`${API_BASE_URL}/v1/predictive/alerts${clusterParam}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     setAlerts(data);
   };
 
   const fetchSummary = async () => {
     const response = await fetch(`${API_BASE_URL}/v1/predictive/summary${clusterParam}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
     setSummary(data);
   };

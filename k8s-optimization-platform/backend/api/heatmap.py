@@ -17,10 +17,12 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# API endpoints for data fetching
-PODS_API_URL = "http://localhost:8000/api/v1/pods"
-RECOMMENDATIONS_API_URL = "http://localhost:8000/api/v1/recommendations"
-CLEANUP_API_URL = "http://localhost:8000/api/v1/cleanup"
+# BUG-B06: Use environment variable instead of hardcoded localhost.
+import os
+_BASE = os.getenv("INTERNAL_API_BASE", "http://localhost:8000")
+PODS_API_URL = f"{_BASE}/api/v1/pods"
+RECOMMENDATIONS_API_URL = f"{_BASE}/api/v1/recommendations"
+CLEANUP_API_URL = f"{_BASE}/api/v1/cleanup"
 
 
 class HeatmapCell(BaseModel):

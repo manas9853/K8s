@@ -407,7 +407,7 @@ const Jobs: React.FC = () => {
   };
 
   const handleAutoFix = (job: Job, issue: string) => {
-    showSnack(`Auto-fix for "${issue}" is not yet automated — see Recommendations for manual steps.`, 'error');
+    navigate(`/recommendations?resource=${encodeURIComponent(job.name)}&namespace=${encodeURIComponent(job.namespace)}&issue=${encodeURIComponent(issue)}`);
   };
 
   const filteredJobs = jobs.filter(job =>

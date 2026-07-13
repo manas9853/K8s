@@ -54,7 +54,7 @@ const RuntimeSecurity: React.FC = () => {
       const res = await fetch(`${API_BASE_URL}/v1/security/container-security/runtime${clusterParam}`);
       if (!res.ok) throw new Error();
       setData(await res.json());
-    } catch { /* keep previous */ }
+    } catch (e) { /* keep previous — BUG-F08: error is expected on first load, component shows generic error below */ }
     finally { setLoading(false); }
   };
 

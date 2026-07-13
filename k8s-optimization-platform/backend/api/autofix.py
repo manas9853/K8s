@@ -447,8 +447,9 @@ async def get_fix_summary():
         return {
             "total_actions": len(actions),
             "pending_actions": len([a for a in actions if a.status == "ready"]),
-            "applied_actions": 0,  # TODO: Track applied actions in database
-            "failed_actions": 0,   # TODO: Track failed actions in database
+            # BUG-B09: applied/failed counts tracked via action status field
+            "applied_actions": len([a for a in actions if a.status == "applied"]),
+            "failed_actions": len([a for a in actions if a.status == "failed"]),
             "total_potential_savings": round(total_savings, 2),
             "low_risk_count": by_risk.get("Low", 0),
             "medium_risk_count": by_risk.get("Medium", 0),

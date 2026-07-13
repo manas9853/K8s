@@ -17,10 +17,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
-# API endpoints for data fetching
-PODS_API_URL = "http://localhost:8000/api/v1/pods"
-INCIDENTS_API_URL = "http://localhost:8000/api/v1/incidents"
-RECOMMENDATIONS_API_URL = "http://localhost:8000/api/v1/recommendations"
+# BUG-B06: Use environment variable instead of hardcoded localhost.
+# Falls back to localhost only in single-process development.
+import os
+_BASE = os.getenv("INTERNAL_API_BASE", "http://localhost:8000")
+PODS_API_URL = f"{_BASE}/api/v1/pods"
+INCIDENTS_API_URL = f"{_BASE}/api/v1/incidents"
+RECOMMENDATIONS_API_URL = f"{_BASE}/api/v1/recommendations"
 
 
 # Pydantic Models

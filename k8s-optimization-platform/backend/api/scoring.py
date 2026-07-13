@@ -353,7 +353,8 @@ async def calculate_cluster_score() -> dict:
         }
 
 
-# Demo data (kept for backwards compatibility)
+# BUG-B04: Demo data removed from fallback paths — real data computed from agent_metrics.
+# Retained as module-level constant only so any stray references don't cause NameError.
 CLUSTER_SCORES = [
     {
         "cluster_name": "prod-us-east-1",

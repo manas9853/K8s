@@ -18,6 +18,7 @@ import {
   IconButton,
   Avatar,
   Tooltip,
+  Alert,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -45,84 +46,130 @@ interface OwnershipRow {
   owner_team: string;
   owner_contact: string;
   owner_name: string;
-  environment: 'Production' | 'Staging' | 'Development';
+  environment: string;
   last_updated: string;
 }
 
-// Static K8s resource map — owner_team links to registered users
-const BASE_RESOURCES: Omit<OwnershipRow, 'owner_contact' | 'owner_name'>[] = [
-  { resource_name: 'payments-prod',     resource_type: 'Namespace',   owner_team: 'Payments',        environment: 'Production',  last_updated: '2024-07-10' },
-  { resource_name: 'payment-gateway',   resource_type: 'Deployment',  owner_team: 'Payments',        environment: 'Production',  last_updated: '2024-07-12' },
-  { resource_name: 'payment-svc',       resource_type: 'Service',     owner_team: 'Payments',        environment: 'Production',  last_updated: '2024-07-12' },
-  { resource_name: 'analytics-prod',    resource_type: 'Namespace',   owner_team: 'Analytics',       environment: 'Production',  last_updated: '2024-07-08' },
-  { resource_name: 'data-pipeline',     resource_type: 'Deployment',  owner_team: 'Analytics',       environment: 'Production',  last_updated: '2024-07-09' },
-  { resource_name: 'analytics-staging', resource_type: 'Namespace',   owner_team: 'Analytics',       environment: 'Staging',     last_updated: '2024-07-01' },
-  { resource_name: 'frontend-prod',     resource_type: 'Namespace',   owner_team: 'Frontend',        environment: 'Production',  last_updated: '2024-07-11' },
-  { resource_name: 'web-app',           resource_type: 'Deployment',  owner_team: 'Frontend',        environment: 'Production',  last_updated: '2024-07-13' },
-  { resource_name: 'ml-training',       resource_type: 'Namespace',   owner_team: 'ML/AI',           environment: 'Production',  last_updated: '2024-06-28' },
-  { resource_name: 'model-training-job',resource_type: 'Deployment',  owner_team: 'ML/AI',           environment: 'Development', last_updated: '2024-07-05' },
-  { resource_name: 'monitoring',        resource_type: 'Namespace',   owner_team: 'Infrastructure',  environment: 'Production',  last_updated: '2024-07-14' },
-  { resource_name: 'prometheus',        resource_type: 'Deployment',  owner_team: 'Infrastructure',  environment: 'Production',  last_updated: '2024-07-14' },
-  { resource_name: 'ci-cd',            resource_type: 'Namespace',   owner_team: 'DevOps',          environment: 'Production',  last_updated: '2024-07-13' },
-  { resource_name: 'argo-cd',          resource_type: 'Deployment',  owner_team: 'DevOps',          environment: 'Production',  last_updated: '2024-07-13' },
-  { resource_name: 'data-eng-dev',     resource_type: 'Namespace',   owner_team: 'Data Engineering',environment: 'Development', last_updated: '2024-07-06' },
-  { resource_name: 'kafka-cluster-svc',resource_type: 'Service',     owner_team: 'Data Engineering',environment: 'Production',  last_updated: '2024-07-10' },
-  { resource_name: 'security-staging', resource_type: 'Namespace',   owner_team: 'Security',        environment: 'Staging',     last_updated: '2024-07-12' },
-  { resource_name: 'sre-tooling',      resource_type: 'Namespace',   owner_team: 'SRE',             environment: 'Production',  last_updated: '2024-07-11' },
-];
+/** Derive environment from namespace labels or name convention */
+function inferEnvironment(ns: Record<string, unknown>): string {
+  const labels = (ns.labels as Record<string, string>) || {};
+  const env =
+    labels['environment'] ||
+    labels['env'] ||
+    labels['app.kubernetes.io/environment'] ||
+    '';
+  if (env) return env;
+  const name = String(ns.name || ns.namespace || '');
+  if (name.includes('prod')) return 'Production';
+  if (name.includes('staging') || name.includes('stg')) return 'Staging';
+  if (name.includes('dev') || name.includes('development')) return 'Development';
+  return 'Production';
+}
 
-// Fallback contacts when no registered user found for a team
-const FALLBACK_CONTACTS: Record<string, { name: string; email: string }> = {
-  Payments:          { name: 'michael.chen',   email: 'michael.chen@company.com' },
-  Analytics:         { name: 'sarah.johnson',  email: 'sarah.johnson@company.com' },
-  Frontend:          { name: 'emily.r',        email: 'emily.r@company.com' },
-  'ML/AI':           { name: 'lisa.wang',      email: 'lisa.wang@company.com' },
-  Infrastructure:    { name: 'david.kim',      email: 'david.kim@company.com' },
-  DevOps:            { name: 'james.wilson',   email: 'james.wilson@company.com' },
-  'Data Engineering':{ name: 'raj.patel',      email: 'raj.patel@company.com' },
-  Security:          { name: 'alex.morgan',    email: 'alex.morgan@company.com' },
-  SRE:               { name: 'ops.lead',       email: 'sre@company.com' },
-};
+/** Extract team from namespace labels */
+function inferTeam(ns: Record<string, unknown>): string {
+  const labels = (ns.labels as Record<string, string>) || {};
+  return (
+    labels['app.kubernetes.io/part-of'] ||
+    labels['team'] ||
+    labels['owner'] ||
+    String(ns.name || ns.namespace || 'platform')
+  );
+}
 
-const RESOURCE_TYPE_ICONS: Record<OwnershipRow['resource_type'], React.ReactElement> = {
-  Namespace:  <StorageIcon   fontSize="small" color="primary" />,
+const RESOURCE_TYPE_ICONS: Record<string, React.ReactElement> = {
+  Namespace: <StorageIcon fontSize="small" color="primary" />,
   Deployment: <CloudQueueIcon fontSize="small" color="secondary" />,
-  Service:    <LinkIcon       fontSize="small" color="action" />,
+  Service: <LinkIcon fontSize="small" color="action" />,
 };
 
 const OwnershipMapping: React.FC = () => {
   const { activeClusterName } = useActiveCluster();
   const [data, setData] = useState<OwnershipRow[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const buildRows = useCallback(async () => {
     setLoading(true);
-    let users: PlatformUser[] = [];
+    setError(null);
     try {
-      const res = await axios.get(`${API_BASE}/api/v1/users/?status_filter=approved`);
-      users = res.data;
-    } catch {
-      // backend unreachable — no live users, fallback contacts will be used
+      // Fetch live resources in parallel
+      const [usersRes, workloadsRes, namespacesRes] = await Promise.allSettled([
+        axios.get<PlatformUser[]>(`${API_BASE}/api/v1/users/?status_filter=approved`),
+        axios.get<Record<string, unknown>[]>(`${API_BASE}/api/v1/workloads/?cluster_id=${encodeURIComponent(activeClusterName || '')}`),
+        axios.get<Record<string, unknown>[]>(`${API_BASE}/api/v1/clusters/namespaces?cluster_id=${encodeURIComponent(activeClusterName || '')}`),
+      ]);
+
+      // Build team → contact map from registered users
+      const teamContact: Record<string, { name: string; email: string }> = {};
+      if (usersRes.status === 'fulfilled') {
+        usersRes.value.data.forEach((u) => {
+          u.teams.forEach((team) => {
+            if (!teamContact[team]) {
+              teamContact[team] = { name: u.username, email: u.email };
+            }
+          });
+        });
+      }
+
+      const rows: OwnershipRow[] = [];
+
+      // Add namespace rows from live cluster data
+      if (namespacesRes.status === 'fulfilled') {
+        const namespaces = namespacesRes.value.data;
+        namespaces.forEach((ns) => {
+          const name = String(ns.name || ns.namespace || '');
+          if (!name || name.startsWith('kube-')) return;
+          const team = inferTeam(ns);
+          const contact = teamContact[team] ?? { name: 'unassigned', email: '' };
+          rows.push({
+            resource_name: name,
+            resource_type: 'Namespace',
+            owner_team: team,
+            owner_contact: contact.email,
+            owner_name: contact.name,
+            environment: inferEnvironment(ns),
+            last_updated: String(ns.created_at || ns.created || '—'),
+          });
+        });
+      }
+
+      // Add deployment rows from workloads API
+      if (workloadsRes.status === 'fulfilled') {
+        const deployments = workloadsRes.value.data;
+        deployments.forEach((dep) => {
+          const name = String(dep.name || '');
+          const ns = String(dep.namespace || 'default');
+          if (!name) return;
+          const nsLabels = (dep.labels as Record<string, string>) || {};
+          const team =
+            nsLabels['app.kubernetes.io/part-of'] ||
+            nsLabels['team'] ||
+            nsLabels['owner'] ||
+            ns.split('-')[0];
+          const contact = teamContact[team] ?? { name: 'unassigned', email: '' };
+          rows.push({
+            resource_name: name,
+            resource_type: 'Deployment',
+            owner_team: team,
+            owner_contact: contact.email,
+            owner_name: contact.name,
+            environment: ns.includes('prod') ? 'Production' : ns.includes('staging') ? 'Staging' : 'Development',
+            last_updated: String(dep.created_at || dep.created || '—'),
+          });
+        });
+      }
+
+      setData(rows);
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err)
+        ? err.response?.data?.detail ?? err.message
+        : String(err);
+      setError(String(msg));
+    } finally {
+      setLoading(false);
     }
-
-    // Build a team → primary contact map from registered users
-    const teamContact: Record<string, { name: string; email: string }> = {};
-    users.forEach((u) => {
-      u.teams.forEach((team) => {
-        if (!teamContact[team]) {
-          teamContact[team] = { name: u.username, email: u.email };
-        }
-      });
-    });
-
-    const rows: OwnershipRow[] = BASE_RESOURCES.map((r) => {
-      const contact = teamContact[r.owner_team] ?? FALLBACK_CONTACTS[r.owner_team] ?? { name: 'unassigned', email: '' };
-      return { ...r, owner_contact: contact.email, owner_name: contact.name };
-    });
-
-    setData(rows);
-    setLoading(false);
-  }, []);
+  }, [activeClusterName]);
 
   useEffect(() => { buildRows(); }, [buildRows]);
 
@@ -131,13 +178,14 @@ const OwnershipMapping: React.FC = () => {
   const serviceCount    = data.filter((r) => r.resource_type === 'Service').length;
   const uniqueTeams     = new Set(data.map((r) => r.owner_team)).size;
 
-  const getEnvColor = (env: OwnershipRow['environment']): 'error' | 'warning' | 'info' => {
+  const getEnvColor = (env: string): 'error' | 'warning' | 'info' | 'default' => {
     if (env === 'Production')  return 'error';
     if (env === 'Staging')     return 'warning';
-    return 'info';
+    if (env === 'Development') return 'info';
+    return 'default';
   };
 
-  const getTypeColor = (type: OwnershipRow['resource_type']): 'primary' | 'secondary' | 'default' => {
+  const getTypeColor = (type: string): 'primary' | 'secondary' | 'default' => {
     if (type === 'Namespace')  return 'primary';
     if (type === 'Deployment') return 'secondary';
     return 'default';
@@ -151,7 +199,7 @@ const OwnershipMapping: React.FC = () => {
             Ownership Mapping
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Resource ownership registry — contacts come from registered platform users — {activeClusterName}
+            Resource ownership registry — contacts from registered platform users — {activeClusterName}
           </Typography>
         </Box>
         <IconButton disabled={loading} onClick={buildRows}>
@@ -160,6 +208,12 @@ const OwnershipMapping: React.FC = () => {
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={3}>
@@ -223,73 +277,82 @@ const OwnershipMapping: React.FC = () => {
         <Typography variant="h6" gutterBottom>
           Resource Ownership Registry
         </Typography>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Resource Name</TableCell>
-                <TableCell>Resource Type</TableCell>
-                <TableCell>Owner Team</TableCell>
-                <TableCell>Owner (Registered User)</TableCell>
-                <TableCell>Contact Email</TableCell>
-                <TableCell align="center">Environment</TableCell>
-                <TableCell>Last Updated</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.map((row, idx) => (
-                <TableRow key={`${row.resource_name}-${idx}`} hover>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      {RESOURCE_TYPE_ICONS[row.resource_type]}
-                      <Typography variant="body2" fontWeight="medium">
-                        {row.resource_name}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={row.resource_type}
-                      color={getTypeColor(row.resource_type)}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{row.owner_team}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ width: 22, height: 22, fontSize: '0.65rem', bgcolor: 'primary.light' }}>
-                        {row.owner_name.charAt(0).toUpperCase()}
-                      </Avatar>
-                      <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>
-                        {row.owner_name}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="primary.main" sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>
-                      {row.owner_contact || '—'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={row.environment}
-                      color={getEnvColor(row.environment)}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {row.last_updated}
-                    </Typography>
-                  </TableCell>
+        {data.length === 0 && !loading && !error && (
+          <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+            No resources found. Ensure the K8s agent is connected and reporting.
+          </Typography>
+        )}
+        {data.length > 0 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Resource Name</TableCell>
+                  <TableCell>Resource Type</TableCell>
+                  <TableCell>Owner Team</TableCell>
+                  <TableCell>Owner (Registered User)</TableCell>
+                  <TableCell>Contact Email</TableCell>
+                  <TableCell align="center">Environment</TableCell>
+                  <TableCell>Last Updated</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {data.map((row, idx) => (
+                  <TableRow key={`${row.resource_name}-${idx}`} hover>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {RESOURCE_TYPE_ICONS[row.resource_type] ?? RESOURCE_TYPE_ICONS.Namespace}
+                        <Typography variant="body2" fontWeight="medium">
+                          {row.resource_name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Chip
+                        label={row.resource_type}
+                        color={getTypeColor(row.resource_type)}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{row.owner_team}</Typography>
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 22, height: 22, fontSize: '0.65rem', bgcolor: 'primary.light' }}>
+                          {row.owner_name.charAt(0).toUpperCase()}
+                        </Avatar>
+                        <Tooltip title={row.owner_name}>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                            {row.owner_name}
+                          </Typography>
+                        </Tooltip>
+                      </Box>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="primary.main" sx={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                        {row.owner_contact || '—'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={row.environment}
+                        color={getEnvColor(row.environment)}
+                        size="small"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {row.last_updated}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
     </Box>
   );

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
   Box,
@@ -17,6 +17,7 @@ import {
   LinearProgress,
   IconButton,
   Avatar,
+  Alert,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -26,6 +27,9 @@ import {
   Security as SecurityIcon,
   GppBad as GppBadIcon,
 } from '@mui/icons-material';
+import axios from 'axios';
+
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface TeamSecurityRow {
   team_name: string;
@@ -37,26 +41,62 @@ interface TeamSecurityRow {
   last_scan: string;
 }
 
-const DUMMY_DATA: TeamSecurityRow[] = [
-  { team_name: 'Infrastructure Team', security_score: 96, grade: 'A', critical_issues: 0, high_issues: 1, medium_issues:  3, last_scan: '2024-07-14 08:30' },
-  { team_name: 'DevOps Team',         security_score: 91, grade: 'A', critical_issues: 0, high_issues: 2, medium_issues:  5, last_scan: '2024-07-14 07:15' },
-  { team_name: 'Payments Team',       security_score: 87, grade: 'B', critical_issues: 1, high_issues: 3, medium_issues:  6, last_scan: '2024-07-13 22:00' },
-  { team_name: 'Frontend Team',       security_score: 83, grade: 'B', critical_issues: 0, high_issues: 4, medium_issues:  9, last_scan: '2024-07-13 21:45' },
-  { team_name: 'Security Team',       security_score: 80, grade: 'B', critical_issues: 1, high_issues: 4, medium_issues: 10, last_scan: '2024-07-14 06:00' },
-  { team_name: 'Data Engineering',    security_score: 68, grade: 'C', critical_issues: 2, high_issues: 7, medium_issues: 14, last_scan: '2024-07-13 18:30' },
-  { team_name: 'Analytics Team',      security_score: 61, grade: 'D', critical_issues: 3, high_issues: 9, medium_issues: 18, last_scan: '2024-07-13 12:00' },
-  { team_name: 'ML/AI Team',          security_score: 52, grade: 'F', critical_issues: 5, high_issues: 12, medium_issues: 22, last_scan: '2024-07-12 09:00' },
-];
+function scoreToGrade(score: number): string {
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  return 'F';
+}
+
+/**
+ * Maps /api/v1/scoring/namespace (per-namespace security) into per-team rows.
+ * Falls back to /api/v1/team-accountability/teams if the scoring endpoint is empty.
+ */
+function mapScoringRow(raw: Record<string, unknown>): TeamSecurityRow {
+  const score = Number(raw.security_score ?? raw.score ?? 0);
+  const ns = String(raw.namespace ?? raw.team_name ?? '—');
+  return {
+    team_name: ns,
+    security_score: score,
+    grade: scoreToGrade(score),
+    critical_issues: Number(raw.critical_issues ?? 0),
+    high_issues: Number(raw.high_issues ?? 0),
+    medium_issues: Number(raw.medium_issues ?? 0),
+    last_scan: String(raw.last_updated ?? raw.last_scan ?? new Date().toISOString()),
+  };
+}
 
 const TeamSecurityScore: React.FC = () => {
   const { activeClusterName } = useActiveCluster();
-  const [data] = useState<TeamSecurityRow[]>(DUMMY_DATA);
-  const [loading] = useState(false);
+  const [data, setData] = useState<TeamSecurityRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const avgScore       = data.reduce((s, r) => s + r.security_score, 0) / data.length;
-  const totalCritical  = data.reduce((s, r) => s + r.critical_issues, 0);
-  const totalHigh      = data.reduce((s, r) => s + r.high_issues,     0);
-  const secureTeams    = data.filter((r) => r.security_score >= 90).length;
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Primary: per-namespace security scores from scoring API
+      const res = await axios.get(`${API_BASE}/api/v1/scoring/namespace`);
+      const rows: TeamSecurityRow[] = (res.data as Record<string, unknown>[]).map(mapScoringRow);
+      setData(rows);
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err)
+        ? err.response?.data?.detail ?? err.message
+        : String(err);
+      setError(String(msg));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const avgScore = data.length > 0 ? data.reduce((s, r) => s + r.security_score, 0) / data.length : 0;
+  const totalCritical = data.reduce((s, r) => s + r.critical_issues, 0);
+  const totalHigh = data.reduce((s, r) => s + r.high_issues, 0);
+  const secureTeams = data.filter((r) => r.security_score >= 90).length;
 
   const getScoreColor = (score: number): 'success' | 'info' | 'warning' | 'error' => {
     if (score >= 90) return 'success';
@@ -80,15 +120,21 @@ const TeamSecurityScore: React.FC = () => {
             Team Security Score
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Security posture ratings and vulnerability summary per team — {activeClusterName}
+            Security posture ratings and vulnerability summary per namespace — {activeClusterName}
           </Typography>
         </Box>
-        <IconButton disabled={loading}>
+        <IconButton disabled={loading} onClick={fetchData}>
           <RefreshIcon />
         </IconButton>
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={3}>
@@ -113,7 +159,7 @@ const TeamSecurityScore: React.FC = () => {
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <ShieldIcon color="success" />
-                <Typography color="text.secondary">Secure Teams</Typography>
+                <Typography color="text.secondary">Secure Namespaces</Typography>
               </Box>
               <Typography variant="h4" color="success.main">{secureTeams}</Typography>
               <Typography variant="body2" color="text.secondary">Score ≥ 90</Typography>
@@ -150,84 +196,91 @@ const TeamSecurityScore: React.FC = () => {
 
       <Paper sx={{ p: 3 }}>
         <Typography variant="h6" gutterBottom>
-          Team Security Details
+          Namespace Security Details
         </Typography>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Team Name</TableCell>
-                <TableCell align="center">Security Score (0–100)</TableCell>
-                <TableCell align="center">Grade</TableCell>
-                <TableCell align="center">Critical Issues</TableCell>
-                <TableCell align="center">High Issues</TableCell>
-                <TableCell align="center">Medium Issues</TableCell>
-                <TableCell>Last Scan</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.map((row) => (
-                <TableRow key={row.team_name} hover>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                        <GroupIcon fontSize="small" />
-                      </Avatar>
-                      <Typography variant="body2" fontWeight="medium">
-                        {row.team_name}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box>
-                      <Typography variant="body2" gutterBottom fontWeight="bold">
-                        {row.security_score}
-                      </Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={row.security_score}
-                        color={getScoreColor(row.security_score)}
-                        sx={{ borderRadius: 1 }}
-                      />
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip label={row.grade} color={getGradeColor(row.grade)} size="small" />
-                  </TableCell>
-                  <TableCell align="center">
-                    {row.critical_issues > 0 ? (
-                      <Chip label={row.critical_issues} color="error" size="small" />
-                    ) : (
-                      <Chip label="0" color="success" size="small" variant="outlined" />
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    {row.high_issues > 5 ? (
-                      <Chip label={row.high_issues} color="error" size="small" variant="outlined" />
-                    ) : row.high_issues > 0 ? (
-                      <Chip label={row.high_issues} color="warning" size="small" variant="outlined" />
-                    ) : (
-                      <Chip label="0" color="success" size="small" variant="outlined" />
-                    )}
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={row.medium_issues}
-                      color={row.medium_issues > 15 ? 'warning' : 'default'}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {row.last_scan}
-                    </Typography>
-                  </TableCell>
+        {data.length === 0 && !loading && !error && (
+          <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+            No security score data available. Ensure the K8s agent is reporting metrics.
+          </Typography>
+        )}
+        {data.length > 0 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Namespace / Team</TableCell>
+                  <TableCell align="center">Security Score (0–100)</TableCell>
+                  <TableCell align="center">Grade</TableCell>
+                  <TableCell align="center">Critical Issues</TableCell>
+                  <TableCell align="center">High Issues</TableCell>
+                  <TableCell align="center">Medium Issues</TableCell>
+                  <TableCell>Last Scan</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {data.map((row) => (
+                  <TableRow key={row.team_name} hover>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                          <GroupIcon fontSize="small" />
+                        </Avatar>
+                        <Typography variant="body2" fontWeight="medium">
+                          {row.team_name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Box>
+                        <Typography variant="body2" gutterBottom fontWeight="bold">
+                          {row.security_score}
+                        </Typography>
+                        <LinearProgress
+                          variant="determinate"
+                          value={row.security_score}
+                          color={getScoreColor(row.security_score)}
+                          sx={{ borderRadius: 1 }}
+                        />
+                      </Box>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip label={row.grade} color={getGradeColor(row.grade)} size="small" />
+                    </TableCell>
+                    <TableCell align="center">
+                      {row.critical_issues > 0 ? (
+                        <Chip label={row.critical_issues} color="error" size="small" />
+                      ) : (
+                        <Chip label="0" color="success" size="small" variant="outlined" />
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      {row.high_issues > 5 ? (
+                        <Chip label={row.high_issues} color="error" size="small" variant="outlined" />
+                      ) : row.high_issues > 0 ? (
+                        <Chip label={row.high_issues} color="warning" size="small" variant="outlined" />
+                      ) : (
+                        <Chip label="0" color="success" size="small" variant="outlined" />
+                      )}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={row.medium_issues}
+                        color={row.medium_issues > 15 ? 'warning' : 'default'}
+                        size="small"
+                        variant="outlined"
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2" color="text.secondary">
+                        {row.last_scan}
+                      </Typography>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
     </Box>
   );

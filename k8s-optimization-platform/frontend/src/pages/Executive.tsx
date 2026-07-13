@@ -48,6 +48,7 @@ interface ExecutiveInsight {
   category: string;
   action_required: boolean;
   estimated_savings: number | null;
+  action_url?: string;
 }
 
 interface CostTrend {
@@ -408,7 +409,13 @@ const Executive: React.FC = () => {
                       )}
                     </Box>
                     {insight.action_required && (
-                      <Button variant="contained" color="primary" size="small" sx={{ ml: 2 }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        size="small"
+                        sx={{ ml: 2 }}
+                        onClick={() => navigate(insight.action_url || '/recommendations')}
+                      >
                         Take Action
                       </Button>
                     )}

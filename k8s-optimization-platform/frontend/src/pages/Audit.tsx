@@ -43,8 +43,12 @@ const Audit: React.FC = () => {
         fetch(`${API_BASE_URL}/v1/audit/logs${clusterParam}`),
         fetch(`${API_BASE_URL}/v1/audit/summary${clusterParam}`),
       ]);
+      if (!logsRes.ok || !summaryRes.ok)
+        throw new Error(`Audit API error (${logsRes.status}/${summaryRes.status})`);
       setLogs(await logsRes.json());
       setSummary(await summaryRes.json());
+    } catch (err) {
+      console.error('Audit fetch failed:', err);
     } finally {
       setLoading(false);
     }

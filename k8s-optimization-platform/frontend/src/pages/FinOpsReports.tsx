@@ -4,10 +4,11 @@
  * then renders a consolidated report view.  Dark GitHub theme.
  */
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Grid, CircularProgress, Alert, Chip, Paper,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
-  LinearProgress, Button, IconButton, Tooltip,
+  LinearProgress, Button, IconButton,
 } from '@mui/material';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -60,6 +61,7 @@ const card = (accent?: string) => ({
 
 // ── Component ────────────────────────────────────────────────────────────────
 const FinOpsReportsInner: React.FC = () => {
+  const navigate = useNavigate();
   const { clusterParam, activeClusterId, activeClusterName } = useActiveCluster();
 
   const [costData,   setCostData]   = useState<any>(null);
@@ -148,22 +150,15 @@ const FinOpsReportsInner: React.FC = () => {
           <IconButton onClick={fetchAll} size="small" sx={{ color: DK.muted, '&:hover': { color: DK.text } }}>
             <RefreshIcon fontSize="small" />
           </IconButton>
-          <Tooltip title="PDF export coming soon" arrow>
-            <span>
-              <Button
-                variant="outlined"
-                size="small"
-                disabled
-                startIcon={<PictureAsPdfIcon />}
-                sx={{
-                  borderColor: DK.border, color: DK.muted, textTransform: 'none',
-                  fontSize: '0.78rem', '&.Mui-disabled': { borderColor: DK.border, color: DK.muted },
-                }}
-              >
-                Export PDF
-              </Button>
-            </span>
-          </Tooltip>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<PictureAsPdfIcon />}
+            onClick={() => navigate('/reports/pdf-export')}
+            sx={{ borderColor: DK.border, color: DK.text, textTransform: 'none', fontSize: '0.78rem' }}
+          >
+            Export PDF
+          </Button>
         </Box>
       </Box>
 

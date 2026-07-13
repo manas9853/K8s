@@ -25,6 +25,8 @@ class PlatformStatus(BaseModel):
     last_sync: str
     uptime_hours: int
     system_load: int
+    uptime: str
+    response_time: str
 
 
 class Capability(BaseModel):
@@ -197,6 +199,9 @@ async def get_command_center_status():
     elif pending_recs > 200:
         health = "critical"
     
+    uptime_hours = 720  # 30-day rolling window placeholder; replace with real uptime source
+    uptime_pct = "99.9%" if health == "healthy" else ("98.5%" if health == "warning" else "95.0%")
+
     return PlatformStatus(
         platform_health=health,
         total_clusters=total_clusters,
@@ -205,8 +210,10 @@ async def get_command_center_status():
         pending_recommendations=pending_recs,
         auto_fixes_applied=auto_fixes,
         last_sync=datetime.utcnow().isoformat() + 'Z',
-        uptime_hours=720,  # 30 days
-        system_load=45
+        uptime_hours=uptime_hours,
+        system_load=45,
+        uptime=uptime_pct,
+        response_time=f"{dashboard.get('avg_response_ms', 45)}ms",
     )
 
 

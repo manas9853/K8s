@@ -219,7 +219,7 @@ async def get_executive_overview(
             optimization_coverage_percent=round(
                 min((total_savings / total_monthly_cost * 100) if total_monthly_cost > 0 else 0, 100), 1),
             carbon_footprint_reduction_kg=round(total_savings * CARBON_KG_PER_USD, 1),
-            cost_trend_percent=-8.0,  # placeholder until historical data available
+            cost_trend_percent=0.0,  # BUG-B08: 0.0 until real historical data is available — was hardcoded -8.0
             total_nodes=total_nodes,
             total_pods=total_pods,
             total_namespaces=total_namespaces,

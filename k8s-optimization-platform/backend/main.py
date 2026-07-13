@@ -48,7 +48,8 @@ from api import (
     intelligence,
     finops,
     attack_investigation,
-    discovery
+    discovery,
+    platform_engineering,
 )
 from config.settings import settings
 from utils.logger import setup_logging
@@ -235,6 +236,7 @@ app.include_router(storage.router, prefix="/api/v1/storage", tags=["Storage"])
 app.include_router(pvc_file_analysis.router, prefix="/api/v1", tags=["PVC File Analysis"])
 app.include_router(network.router, prefix="/api/v1/network", tags=["Network"])
 app.include_router(observability.router, prefix="/api/v1/observability", tags=["Observability"])
+app.include_router(platform_engineering.router, prefix="/api/v1/platform", tags=["Platform Engineering"])
 
 # Also include routers without /v1 for backward compatibility
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication (Legacy)"])

@@ -1,156 +1,114 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
 import {
   Box, Typography, Grid, Card, CardContent, Chip, Divider,
+  LinearProgress, Alert, Paper,
 } from '@mui/material';
+import axios from 'axios';
 
-const DUMMY_DATA = {
-  general: {
-    title: 'General Settings',
-    icon: '⚙️',
-    settings: [
-      { key: 'Platform Name', value: 'K8s Optimization Platform' },
-      { key: 'Version', value: 'v2.4.1' },
-      { key: 'Default Namespace', value: 'kube-system' },
-      { key: 'Log Level', value: 'INFO' },
-    ],
-  },
-  dataRetention: {
-    title: 'Data Retention',
-    icon: '🗃️',
-    settings: [
-      { key: 'Metrics Retention Days', value: '90' },
-      { key: 'Log Retention Days', value: '30' },
-      { key: 'Audit Log Retention Days', value: '365' },
-    ],
-  },
-  performance: {
-    title: 'Performance',
-    icon: '⚡',
-    settings: [
-      { key: 'Cache TTL', value: '300s' },
-      { key: 'API Rate Limit', value: '1000 req/min' },
-      { key: 'Max Concurrent Jobs', value: '25' },
-    ],
-  },
-  notifications: {
-    title: 'Notifications',
-    icon: '🔔',
-    settings: [
-      { key: 'Default Alert Threshold', value: '80%' },
-      { key: 'Enable Email Reports', value: 'Yes' },
-      { key: 'Report Schedule', value: 'Weekly — Monday 08:00 UTC' },
-    ],
-  },
-};
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
-const tagStyle: Record<string, { color: 'success' | 'info' | 'warning' | 'error' | 'default' }> = {
-  'v2.4.1': { color: 'success' },
-  INFO: { color: 'info' },
-  Yes: { color: 'success' },
-  No: { color: 'default' },
-};
+interface SettingItem {
+  key: string;
+  value: string;
+}
+
+interface SettingsSection {
+  title: string;
+  settings: SettingItem[];
+}
+
+const tagStyle: Record<string, 'success' | 'info' | 'warning' | 'error' | 'default'> = {};
 
 const PlatformSettings: React.FC = () => {
   const { clusterParam } = useActiveCluster();
-  const [data] = useState(DUMMY_DATA);
+  const [sections, setSections] = useState<SettingsSection[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const totalSettings = Object.values(data).reduce((sum, cat) => sum + cat.settings.length, 0);
-  const totalCategories = Object.keys(data).length;
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    axios.get(`${API_BASE}/api/v1/admin/settings`)
+      .then((r) => {
+        const d = r.data;
+        if (Array.isArray(d)) {
+          setSections(d);
+        } else if (d && typeof d === 'object') {
+          // Transform object format: {general: {title, settings}, ...}
+          const secs: SettingsSection[] = Object.values(d).map((v: unknown) => v as SettingsSection);
+          setSections(secs);
+        } else {
+          setSections([]);
+        }
+      })
+      .catch((e) => {
+        if (axios.isAxiosError(e) && e.response?.status === 404) {
+          setSections([]);
+        } else {
+          setError(axios.isAxiosError(e) ? e.response?.data?.detail ?? e.message : String(e));
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [clusterParam]);
+
+  const getTagColor = (value: string): 'success' | 'info' | 'warning' | 'error' | 'default' => {
+    const upper = value.toUpperCase();
+    if (upper === 'YES' || upper === 'TRUE' || upper === 'ENABLED') return 'success';
+    if (upper === 'NO' || upper === 'FALSE' || upper === 'DISABLED') return 'error';
+    if (upper === 'INFO' || upper === 'DEBUG') return 'info';
+    if (upper === 'WARN' || upper === 'WARNING') return 'warning';
+    return 'default';
+  };
+
+  const isChipValue = (value: string): boolean => {
+    const specialValues = ['yes', 'no', 'true', 'false', 'enabled', 'disabled', 'info', 'debug', 'warn', 'warning'];
+    return specialValues.includes(value.toLowerCase());
+  };
 
   return (
     <Box sx={{ p: 3 }}>
-      <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>
-        Platform Settings
-      </Typography>
+      <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>Platform Settings</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Global platform configuration managed by administrators.
+        Platform configuration and runtime settings
       </Typography>
 
-      <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Configuration Categories
-              </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 700 }}>
-                {totalCategories}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Total Settings
-              </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                {totalSettings}
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={4}>
-          <Card elevation={2}>
-            <CardContent>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Platform Version
-              </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: 'success.main' }}>
-                v2.4.1
-              </Typography>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+      {loading && <LinearProgress sx={{ mb: 2 }} />}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
+
+      {sections.length === 0 && !loading && !error && (
+        <Paper sx={{ p: 4 }}>
+          <Typography color="text.secondary" textAlign="center">
+            No platform settings available. Configure settings via the admin API or environment variables.
+          </Typography>
+        </Paper>
+      )}
 
       <Grid container spacing={3}>
-        {Object.values(data).map((category, i) => (
-          <Grid item xs={12} sm={6} key={i}>
+        {sections.map((section, si) => (
+          <Grid item xs={12} sm={6} key={si}>
             <Card elevation={2} sx={{ height: '100%' }}>
               <CardContent>
                 <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
-                  {category.icon} {category.title}
+                  {section.title}
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
-                {category.settings.map((setting, j) => (
+                {(section.settings ?? []).map(({ key, value }, ki) => (
                   <Box
-                    key={j}
+                    key={ki}
                     sx={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      py: 1,
-                      borderBottom: j < category.settings.length - 1 ? '1px solid' : 'none',
+                      display: 'flex', justifyContent: 'space-between',
+                      alignItems: 'center', py: 0.75,
+                      borderBottom: ki < section.settings.length - 1 ? '1px solid' : 'none',
                       borderColor: 'divider',
                     }}
                   >
-                    <Typography variant="body2" color="text.secondary">
-                      {setting.key}
-                    </Typography>
-                    {tagStyle[setting.value] ? (
-                      <Chip
-                        label={setting.value}
-                        color={tagStyle[setting.value].color}
-                        size="small"
-                      />
+                    <Typography variant="body2" color="text.secondary">{key}</Typography>
+                    {isChipValue(value) ? (
+                      <Chip label={value} color={getTagColor(value)} size="small" />
                     ) : (
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          fontWeight: 600,
-                          fontFamily:
-                            setting.key.toLowerCase().includes('version') ||
-                            setting.key.toLowerCase().includes('namespace') ||
-                            setting.key.toLowerCase().includes('ttl')
-                              ? 'monospace'
-                              : 'inherit',
-                          color: 'text.primary',
-                        }}
-                      >
-                        {setting.value}
+                      <Typography variant="body2" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.78rem' }}>
+                        {value}
                       </Typography>
                     )}
                   </Box>
@@ -165,4 +123,5 @@ const PlatformSettings: React.FC = () => {
 };
 
 export default PlatformSettings;
+
 // Made with Bob

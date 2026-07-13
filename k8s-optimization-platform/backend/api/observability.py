@@ -116,26 +116,7 @@ async def get_events(
         all_events = deduped
 
         if not all_events:
-            # Graceful fallback to dummy data
-            raw_events = get_dummy_data("events", cluster_id)
-            result = []
-            for e in raw_events:
-                result.append(EventModel(
-                    name=f"event-{e['reason'].lower()}-{e.get('cluster_id','x')[:4]}",
-                    namespace=e.get("namespace", "default"),
-                    type=e.get("type", "Normal"),
-                    reason=e.get("reason", ""),
-                    message=e.get("message", ""),
-                    involved_object_kind="Pod",
-                    involved_object_name=e.get("object", ""),
-                    source_component="",
-                    source_host="",
-                    count=e.get("count", 1),
-                    first_timestamp=e.get("first_time", ""),
-                    last_timestamp=e.get("last_time", ""),
-                    age="1h",
-                ))
-            return result
+            return []
 
         result = []
         for event in all_events:
@@ -175,17 +156,16 @@ async def get_service_health(namespace: Optional[str] = None,
         # Pull services from network domain (they carry endpoints_count)
         clusters = db_manager.get_all_clusters()
         if not clusters:
-            services_raw = get_dummy_data("services")
-        else:
-            cn = cluster_id or clusters[0]["cluster_name"]
-            metrics = db_manager.get_latest_metrics(cn)
-            net = (metrics.get("network") or {}) if metrics else {}
-            if isinstance(net, str):
-                import json
-                net = json.loads(net)
-            services_raw = (net.get("services") or {}).get("items", [])
-            if not services_raw:
-                services_raw = get_dummy_data("services")
+            return []
+        cn = cluster_id or clusters[0]["cluster_name"]
+        metrics = db_manager.get_latest_metrics(cn)
+        net = (metrics.get("network") or {}) if metrics else {}
+        if isinstance(net, str):
+            import json
+            net = json.loads(net)
+        services_raw = (net.get("services") or {}).get("items", [])
+        if not services_raw:
+            return []
 
         result = []
         for svc in services_raw:

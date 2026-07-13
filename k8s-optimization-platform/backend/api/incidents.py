@@ -458,213 +458,11 @@ def generate_incident_patterns(incidents: List[dict]) -> List[dict]:
     return patterns
 
 
-# Demo incidents data (fallback)
-DEMO_INCIDENTS = [
-    {
-        "incident_id": "inc-001",
-        "type": "oomkill",
-        "severity": "critical",
-        "pod_name": "analytics-worker-7d8f9c-xk2p9",
-        "namespace": "analytics-prod",
-        "cluster": "prod-cluster-a",
-        "timestamp": "2024-01-15T14:23:45Z",
-        "count": 17,
-        "message": "Container killed due to OOM (Out of Memory)",
-        "resource_correlation": {
-            "memory_request": "4Gi",
-            "memory_limit": "4Gi",
-            "peak_memory_usage": "4.2Gi",
-            "avg_memory_usage": "3.8Gi",
-            "memory_trend": "increasing"
-        }
-    },
-    {
-        "incident_id": "inc-002",
-        "type": "restart",
-        "severity": "high",
-        "pod_name": "frontend-app-5c9d8b-m4k7p",
-        "namespace": "frontend-prod",
-        "cluster": "prod-cluster-a",
-        "timestamp": "2024-01-15T15:10:22Z",
-        "count": 8,
-        "message": "Pod restarted 8 times in last 24 hours",
-        "resource_correlation": {
-            "cpu_request": "500m",
-            "cpu_limit": "1000m",
-            "cpu_throttling": "45%",
-            "restart_reason": "CrashLoopBackOff"
-        }
-    },
-    {
-        "incident_id": "inc-003",
-        "type": "throttling",
-        "severity": "medium",
-        "pod_name": "api-server-6f8c7d-n5j8q",
-        "namespace": "backend-api",
-        "cluster": "prod-cluster-a",
-        "timestamp": "2024-01-15T16:05:33Z",
-        "count": 142,
-        "message": "CPU throttling detected: 142 throttling events",
-        "resource_correlation": {
-            "cpu_request": "1000m",
-            "cpu_limit": "1000m",
-            "cpu_usage": "980m",
-            "throttling_percentage": "35%",
-            "performance_impact": "high"
-        }
-    },
-    {
-        "incident_id": "inc-004",
-        "type": "eviction",
-        "severity": "high",
-        "pod_name": "batch-processor-8d9e7f-p6k9r",
-        "namespace": "backend-api",
-        "cluster": "prod-cluster-b",
-        "timestamp": "2024-01-15T17:20:15Z",
-        "count": 3,
-        "message": "Pod evicted due to node pressure",
-        "resource_correlation": {
-            "eviction_reason": "NodeMemoryPressure",
-            "node_memory_usage": "92%",
-            "pod_memory_request": "8Gi",
-            "pod_priority": "low"
-        }
-    },
-    {
-        "incident_id": "inc-005",
-        "type": "oomkill",
-        "severity": "critical",
-        "pod_name": "ml-trainer-9e8f7d-q7l0s",
-        "namespace": "ml-training",
-        "cluster": "prod-cluster-a",
-        "timestamp": "2024-01-15T18:45:50Z",
-        "count": 12,
-        "message": "Repeated OOMKills during training jobs",
-        "resource_correlation": {
-            "memory_request": "16Gi",
-            "memory_limit": "16Gi",
-            "peak_memory_usage": "17.5Gi",
-            "data_size": "large",
-            "batch_size": "too_high"
-        }
-    }
-]
-
-# Demo correlation analyses
-DEMO_CORRELATIONS = [
-    {
-        "incident_id": "inc-001",
-        "incident_type": "oomkill",
-        "pod_name": "analytics-worker-7d8f9c-xk2p9",
-        "namespace": "analytics-prod",
-        "cluster": "prod-cluster-a",
-        "root_cause": "Memory limit too low for workload requirements",
-        "confidence": 95.0,
-        "correlated_metrics": {
-            "memory_usage_trend": "Steadily increasing over 7 days",
-            "peak_usage": "4.2Gi (exceeds 4Gi limit)",
-            "avg_usage": "3.8Gi (95% of limit)",
-            "oomkill_frequency": "17 times in last 7 days",
-            "workload_pattern": "Data processing spikes during month-end"
-        },
-        "recommendation": "Increase memory limit to 6Gi and request to 5Gi",
-        "estimated_fix_time": "5 minutes",
-        "priority": "critical"
-    },
-    {
-        "incident_id": "inc-002",
-        "incident_type": "restart",
-        "pod_name": "frontend-app-5c9d8b-m4k7p",
-        "namespace": "frontend-prod",
-        "cluster": "prod-cluster-a",
-        "root_cause": "CPU throttling causing application timeouts",
-        "confidence": 88.0,
-        "correlated_metrics": {
-            "cpu_throttling": "45% of time",
-            "restart_pattern": "During peak traffic hours",
-            "response_time": "Degraded before restarts",
-            "error_rate": "Spike before each restart"
-        },
-        "recommendation": "Increase CPU limit to 2000m to reduce throttling",
-        "estimated_fix_time": "3 minutes",
-        "priority": "high"
-    },
-    {
-        "incident_id": "inc-003",
-        "incident_type": "throttling",
-        "pod_name": "api-server-6f8c7d-n5j8q",
-        "namespace": "backend-api",
-        "cluster": "prod-cluster-a",
-        "root_cause": "CPU limit equals request causing constant throttling",
-        "confidence": 92.0,
-        "correlated_metrics": {
-            "cpu_usage": "Consistently at 98% of limit",
-            "throttling_events": "142 in last hour",
-            "latency_impact": "P95 latency increased by 300%",
-            "request_rate": "High during business hours"
-        },
-        "recommendation": "Increase CPU limit to 2000m (2x current)",
-        "estimated_fix_time": "2 minutes",
-        "priority": "high"
-    }
-]
-
-# Demo incident patterns
-DEMO_PATTERNS = [
-    {
-        "pattern_id": "pattern-001",
-        "pattern_type": "oomkill",
-        "description": "Memory exhaustion during month-end processing",
-        "frequency": 12,
-        "affected_pods": [
-            "analytics-worker-*",
-            "data-processor-*",
-            "report-generator-*"
-        ],
-        "common_cause": "Insufficient memory allocation for batch jobs",
-        "prevention_steps": [
-            "Increase memory limits for batch processing pods",
-            "Implement memory-efficient data processing",
-            "Add memory monitoring and alerts",
-            "Consider horizontal scaling for large jobs"
-        ]
-    },
-    {
-        "pattern_id": "pattern-002",
-        "pattern_type": "throttling",
-        "description": "CPU throttling during peak traffic",
-        "frequency": 45,
-        "affected_pods": [
-            "api-server-*",
-            "frontend-app-*",
-            "auth-service-*"
-        ],
-        "common_cause": "CPU limits too restrictive for traffic spikes",
-        "prevention_steps": [
-            "Increase CPU limits for user-facing services",
-            "Implement horizontal pod autoscaling",
-            "Optimize application code for CPU efficiency",
-            "Use burst-capable instance types"
-        ]
-    },
-    {
-        "pattern_id": "pattern-003",
-        "pattern_type": "restart",
-        "description": "CrashLoopBackOff due to resource constraints",
-        "frequency": 23,
-        "affected_pods": [
-            "worker-*",
-            "job-processor-*"
-        ],
-        "common_cause": "Application crashes under resource pressure",
-        "prevention_steps": [
-            "Increase resource limits",
-            "Implement graceful degradation",
-            "Add health checks and readiness probes",
-            "Improve error handling in application"
-        ]
-    }
-]
+# Demo incidents data removed (BUG-B03) — use real cluster data.
+# Kept as empty list so any remaining fallback references return no fake data.
+DEMO_INCIDENTS = []
+DEMO_CORRELATIONS = []
+DEMO_PATTERNS = []
 
 
 @router.get("/incidents", response_model=List[Incident])
@@ -677,8 +475,8 @@ async def get_incidents(
 ):
     """Get recent incidents from real Kubernetes data"""
     if not K8S_AVAILABLE:
-        logger.warning("K8s not available, using demo data")
-        incidents = DEMO_INCIDENTS
+        logger.info("K8s not available, returning empty incidents")
+        incidents = []
     else:
         try:
             # Get cluster ID
@@ -696,7 +494,7 @@ async def get_incidents(
             logger.info(f"Generated {len(incidents)} incidents from real data")
         except Exception as e:
             logger.error(f"Error generating incidents: {e}")
-            incidents = DEMO_INCIDENTS
+            incidents = []
     
     # Apply filters
     if cluster:
@@ -729,8 +527,8 @@ async def get_correlations(
 ):
     """Get incident correlations with resource issues from real data"""
     if not K8S_AVAILABLE:
-        logger.warning("K8s not available, using demo data")
-        correlations = DEMO_CORRELATIONS
+        logger.info("K8s not available, returning empty correlations")
+        correlations = []
     else:
         try:
             # Get cluster info
@@ -748,7 +546,7 @@ async def get_correlations(
             logger.info(f"Generated {len(correlations)} correlations")
         except Exception as e:
             logger.error(f"Error generating correlations: {e}")
-            correlations = DEMO_CORRELATIONS
+            correlations = []
     
     # Apply filters
     if cluster:
@@ -782,8 +580,8 @@ async def get_correlation(incident_id: str):
 async def get_patterns():
     """Get incident patterns from real data"""
     if not K8S_AVAILABLE:
-        logger.warning("K8s not available, using demo data")
-        return DEMO_PATTERNS
+        logger.info("K8s not available, returning empty patterns")
+        return []
     
     try:
         # Get incidents first
@@ -796,7 +594,7 @@ async def get_patterns():
         return patterns
     except Exception as e:
         logger.error(f"Error generating patterns: {e}")
-        return DEMO_PATTERNS
+        return []
 
 
 @router.get("/patterns/{pattern_id}", response_model=IncidentPattern)

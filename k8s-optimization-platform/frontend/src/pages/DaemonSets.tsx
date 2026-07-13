@@ -382,7 +382,7 @@ const DaemonSets: React.FC = () => {
   };
 
   const handleAutoFix = (ds: DaemonSet, issue: string) => {
-    showSnack(`Auto-fix for "${issue}" is not yet automated — see Recommendations for manual steps.`, 'error');
+    navigate(`/recommendations?resource=${encodeURIComponent(ds.name)}&namespace=${encodeURIComponent(ds.namespace)}&issue=${encodeURIComponent(issue)}`);
   };
 
   const filteredDaemonSets = daemonsets.filter(ds =>

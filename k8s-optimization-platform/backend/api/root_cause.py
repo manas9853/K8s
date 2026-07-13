@@ -271,7 +271,7 @@ def analyze_root_causes_from_data(
     return root_causes, waste_breakdown, resource_issues
 
 
-# Demo Data (kept for backwards compatibility)
+# BUG-B05: Demo data removed from fallback path. Empty list returned on error instead.
 ROOT_CAUSES_DATA = [
     {
         "category": "Over-Provisioning",

@@ -45,6 +45,7 @@ const OrphanedVolumes: React.FC = () => {
   const { clusterParam } = useActiveCluster();
   const [volumes, setVolumes] = useState<OrphanedVolume[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   const fetchOrphanedVolumes = async () => {
     try {
@@ -56,6 +57,25 @@ const OrphanedVolumes: React.FC = () => {
       console.error('Error fetching orphaned volumes:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (volume: OrphanedVolume) => {
+    const key = `${volume.namespace}-${volume.name}`;
+    if (!window.confirm(`Delete orphaned volume "${volume.name}" in namespace "${volume.namespace}"?\nThis action cannot be undone.`)) return;
+    setDeleting(key);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/storage/orphaned/${encodeURIComponent(volume.namespace)}/${encodeURIComponent(volume.name)}`,
+        { method: 'DELETE' }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setVolumes(prev => prev.filter(v => !(v.name === volume.name && v.namespace === volume.namespace)));
+    } catch (err) {
+      console.error('Delete failed:', err);
+      alert(`Failed to delete volume: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setDeleting(null);
     }
   };
 
@@ -187,8 +207,10 @@ const OrphanedVolumes: React.FC = () => {
                           color="error"
                           startIcon={<DeleteIcon />}
                           variant="outlined"
+                          disabled={deleting === `${volume.namespace}-${volume.name}`}
+                          onClick={() => handleDelete(volume)}
                         >
-                          Delete
+                          {deleting === `${volume.namespace}-${volume.name}` ? 'Deleting…' : 'Delete'}
                         </Button>
                       </TableCell>
                     </TableRow>

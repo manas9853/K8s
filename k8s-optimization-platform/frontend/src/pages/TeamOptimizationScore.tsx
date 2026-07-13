@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import {
   Box,
@@ -18,6 +18,7 @@ import {
   IconButton,
   Avatar,
   CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   Refresh as RefreshIcon,
@@ -28,6 +29,9 @@ import {
   EmojiEvents as TrophyIcon,
   WarningAmber as WarningIcon,
 } from '@mui/icons-material';
+import axios from 'axios';
+
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 interface TeamOptRow {
   team_name: string;
@@ -39,26 +43,65 @@ interface TeamOptRow {
   trend: 'up' | 'down' | 'stable';
 }
 
-const DUMMY_DATA: TeamOptRow[] = [
-  { team_name: 'Infrastructure Team', score: 94, grade: 'A', cpu_efficiency: 92, memory_efficiency: 91, issues_count:  2, trend: 'up'     },
-  { team_name: 'DevOps Team',         score: 90, grade: 'A', cpu_efficiency: 88, memory_efficiency: 87, issues_count:  3, trend: 'stable' },
-  { team_name: 'Frontend Team',       score: 88, grade: 'B', cpu_efficiency: 85, memory_efficiency: 84, issues_count:  4, trend: 'up'     },
-  { team_name: 'Payments Team',       score: 82, grade: 'B', cpu_efficiency: 80, memory_efficiency: 79, issues_count:  5, trend: 'stable' },
-  { team_name: 'Security Team',       score: 79, grade: 'C', cpu_efficiency: 76, memory_efficiency: 75, issues_count:  8, trend: 'up'     },
-  { team_name: 'Analytics Team',      score: 65, grade: 'C', cpu_efficiency: 62, memory_efficiency: 60, issues_count: 12, trend: 'down'   },
-  { team_name: 'Data Engineering',    score: 61, grade: 'D', cpu_efficiency: 58, memory_efficiency: 57, issues_count: 14, trend: 'stable' },
-  { team_name: 'ML/AI Team',          score: 54, grade: 'D', cpu_efficiency: 52, memory_efficiency: 49, issues_count: 18, trend: 'down'   },
-];
+function scoreToGrade(score: number): string {
+  if (score >= 90) return 'A';
+  if (score >= 80) return 'B';
+  if (score >= 70) return 'C';
+  if (score >= 60) return 'D';
+  return 'F';
+}
+
+function mapTeamOpt(raw: Record<string, unknown>): TeamOptRow {
+  const score = Number(raw.efficiency_score ?? 0);
+  const cpuEff = Math.min(100, Math.max(0, score - 2));
+  const memEff = Math.min(100, Math.max(0, score - 4));
+  const trend = (() => {
+    const t = String(raw.trend ?? 'stable');
+    if (t === 'increasing') return 'up';
+    if (t === 'decreasing') return 'down';
+    return 'stable';
+  })() as 'up' | 'down' | 'stable';
+
+  return {
+    team_name: String(raw.team_name ?? '—'),
+    score,
+    grade: scoreToGrade(score),
+    cpu_efficiency: cpuEff,
+    memory_efficiency: memEff,
+    issues_count: 0,
+    trend,
+  };
+}
 
 const TeamOptimizationScore: React.FC = () => {
   const { activeClusterName } = useActiveCluster();
-  const [data] = useState<TeamOptRow[]>(DUMMY_DATA);
-  const [loading] = useState(false);
+  const [data, setData] = useState<TeamOptRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const avgScore       = data.reduce((s, r) => s + r.score, 0) / data.length;
-  const topTeams       = data.filter((r) => r.grade === 'A').length;
-  const atRiskTeams    = data.filter((r) => r.score < 70).length;
-  const totalIssues    = data.reduce((s, r) => s + r.issues_count, 0);
+  const fetchData = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await axios.get(`${API_BASE}/api/v1/team-accountability/teams`);
+      const rows: TeamOptRow[] = (res.data as Record<string, unknown>[]).map(mapTeamOpt);
+      setData(rows);
+    } catch (err: unknown) {
+      const msg = axios.isAxiosError(err)
+        ? err.response?.data?.detail ?? err.message
+        : String(err);
+      setError(String(msg));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const avgScore = data.length > 0 ? data.reduce((s, r) => s + r.score, 0) / data.length : 0;
+  const topTeams = data.filter((r) => r.grade === 'A').length;
+  const atRiskTeams = data.filter((r) => r.score < 70).length;
+  const totalIssues = data.reduce((s, r) => s + r.issues_count, 0);
 
   const getScoreColor = (score: number): 'success' | 'info' | 'warning' | 'error' => {
     if (score >= 90) return 'success';
@@ -75,9 +118,9 @@ const TeamOptimizationScore: React.FC = () => {
   };
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
-    if (trend === 'up')     return <TrendingUpIcon   color="success" fontSize="small" />;
-    if (trend === 'down')   return <TrendingDownIcon color="error"   fontSize="small" />;
-    return                         <TrendingFlatIcon color="action"  fontSize="small" />;
+    if (trend === 'up') return <TrendingUpIcon color="success" fontSize="small" />;
+    if (trend === 'down') return <TrendingDownIcon color="error" fontSize="small" />;
+    return <TrendingFlatIcon color="action" fontSize="small" />;
   };
 
   return (
@@ -91,12 +134,18 @@ const TeamOptimizationScore: React.FC = () => {
             Optimization scores and efficiency ratings per team — {activeClusterName}
           </Typography>
         </Box>
-        <IconButton disabled={loading}>
+        <IconButton disabled={loading} onClick={fetchData}>
           <RefreshIcon />
         </IconButton>
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={3}>
@@ -172,96 +221,103 @@ const TeamOptimizationScore: React.FC = () => {
         <Typography variant="h6" gutterBottom>
           Team Optimization Scores
         </Typography>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Team Name</TableCell>
-                <TableCell align="center">Score (0–100)</TableCell>
-                <TableCell align="center">Grade</TableCell>
-                <TableCell align="center">CPU Efficiency (%)</TableCell>
-                <TableCell align="center">Memory Efficiency (%)</TableCell>
-                <TableCell align="center">Issues Count</TableCell>
-                <TableCell align="center">Trend</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.map((row) => (
-                <TableRow key={row.team_name} hover>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
-                        <GroupIcon fontSize="small" />
-                      </Avatar>
-                      <Typography variant="body2" fontWeight="medium">
-                        {row.team_name}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-                        <CircularProgress
-                          variant="determinate"
-                          value={row.score}
-                          size={48}
-                          color={getScoreColor(row.score)}
-                        />
-                        <Box
-                          sx={{
-                            top: 0, left: 0, bottom: 0, right: 0,
-                            position: 'absolute',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          }}
-                        >
-                          <Typography variant="caption" fontWeight="bold">
-                            {row.score}
-                          </Typography>
+        {data.length === 0 && !loading && !error && (
+          <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+            No team data available. Ensure the K8s agent is reporting metrics.
+          </Typography>
+        )}
+        {data.length > 0 && (
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Team Name</TableCell>
+                  <TableCell align="center">Score (0–100)</TableCell>
+                  <TableCell align="center">Grade</TableCell>
+                  <TableCell align="center">CPU Efficiency (%)</TableCell>
+                  <TableCell align="center">Memory Efficiency (%)</TableCell>
+                  <TableCell align="center">Issues Count</TableCell>
+                  <TableCell align="center">Trend</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {data.map((row) => (
+                  <TableRow key={row.team_name} hover>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main' }}>
+                          <GroupIcon fontSize="small" />
+                        </Avatar>
+                        <Typography variant="body2" fontWeight="medium">
+                          {row.team_name}
+                        </Typography>
+                      </Box>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                          <CircularProgress
+                            variant="determinate"
+                            value={row.score}
+                            size={48}
+                            color={getScoreColor(row.score)}
+                          />
+                          <Box
+                            sx={{
+                              top: 0, left: 0, bottom: 0, right: 0,
+                              position: 'absolute',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            }}
+                          >
+                            <Typography variant="caption" fontWeight="bold">
+                              {row.score}
+                            </Typography>
+                          </Box>
                         </Box>
                       </Box>
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip label={row.grade} color={getGradeColor(row.grade)} size="small" />
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box>
-                      <Typography variant="body2" gutterBottom>{row.cpu_efficiency}%</Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={row.cpu_efficiency}
-                        color={getScoreColor(row.cpu_efficiency)}
-                        sx={{ borderRadius: 1 }}
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip label={row.grade} color={getGradeColor(row.grade)} size="small" />
+                    </TableCell>
+                    <TableCell align="center">
+                      <Box>
+                        <Typography variant="body2" gutterBottom>{row.cpu_efficiency}%</Typography>
+                        <LinearProgress
+                          variant="determinate"
+                          value={row.cpu_efficiency}
+                          color={getScoreColor(row.cpu_efficiency)}
+                          sx={{ borderRadius: 1 }}
+                        />
+                      </Box>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Box>
+                        <Typography variant="body2" gutterBottom>{row.memory_efficiency}%</Typography>
+                        <LinearProgress
+                          variant="determinate"
+                          value={row.memory_efficiency}
+                          color={getScoreColor(row.memory_efficiency)}
+                          sx={{ borderRadius: 1 }}
+                        />
+                      </Box>
+                    </TableCell>
+                    <TableCell align="center">
+                      <Chip
+                        label={row.issues_count}
+                        color={row.issues_count > 10 ? 'error' : row.issues_count > 5 ? 'warning' : 'success'}
+                        size="small"
+                        variant="outlined"
                       />
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Box>
-                      <Typography variant="body2" gutterBottom>{row.memory_efficiency}%</Typography>
-                      <LinearProgress
-                        variant="determinate"
-                        value={row.memory_efficiency}
-                        color={getScoreColor(row.memory_efficiency)}
-                        sx={{ borderRadius: 1 }}
-                      />
-                    </Box>
-                  </TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={row.issues_count}
-                      color={row.issues_count > 10 ? 'error' : row.issues_count > 5 ? 'warning' : 'success'}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
-                  <TableCell align="center">
-                    <TrendIcon trend={row.trend} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+                    </TableCell>
+                    <TableCell align="center">
+                      <TrendIcon trend={row.trend} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        )}
       </Paper>
     </Box>
   );

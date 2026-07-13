@@ -1,23 +1,24 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Chip,
+  TableHead, TableRow, Chip, LinearProgress, Alert,
 } from '@mui/material';
+import axios from 'axios';
 
-const DUMMY_DATA = [
-  { name: 'prod-cluster-full-20250714', resourceType: 'Cluster', cluster: 'prod-us-east-1', status: 'Success', size: '4.8 GB', createdAt: '2025-07-14 02:00', retention: '30 days', restoreAvailable: 'Yes' },
-  { name: 'staging-ns-20250714', resourceType: 'Namespace', cluster: 'staging-us-west-2', status: 'Success', size: '820 MB', createdAt: '2025-07-14 03:00', retention: '14 days', restoreAvailable: 'Yes' },
-  { name: 'prod-api-deploy-20250713', resourceType: 'Deployment', cluster: 'prod-us-east-1', status: 'Success', size: '112 MB', createdAt: '2025-07-13 22:30', retention: '7 days', restoreAvailable: 'Yes' },
-  { name: 'prod-cluster-full-20250713', resourceType: 'Cluster', cluster: 'prod-us-east-1', status: 'Success', size: '4.7 GB', createdAt: '2025-07-13 02:00', retention: '30 days', restoreAvailable: 'Yes' },
-  { name: 'dev-ns-backup-20250713', resourceType: 'Namespace', cluster: 'dev-eu-central-1', status: 'Failed', size: '0 B', createdAt: '2025-07-13 04:00', retention: '7 days', restoreAvailable: 'No' },
-  { name: 'eu-cluster-full-20250714', resourceType: 'Cluster', cluster: 'prod-eu-central-1', status: 'In Progress', size: '2.1 GB', createdAt: '2025-07-14 05:00', retention: '30 days', restoreAvailable: 'No' },
-  { name: 'staging-deploy-20250712', resourceType: 'Deployment', cluster: 'staging-us-west-2', status: 'Success', size: '98 MB', createdAt: '2025-07-12 23:00', retention: '7 days', restoreAvailable: 'Yes' },
-  { name: 'prod-cluster-full-20250712', resourceType: 'Cluster', cluster: 'prod-us-east-1', status: 'Success', size: '4.7 GB', createdAt: '2025-07-12 02:00', retention: '30 days', restoreAvailable: 'Yes' },
-  { name: 'vault-ns-20250711', resourceType: 'Namespace', cluster: 'prod-us-east-1', status: 'Success', size: '56 MB', createdAt: '2025-07-11 01:00', retention: '60 days', restoreAvailable: 'Yes' },
-  { name: 'cicd-deploy-20250710', resourceType: 'Deployment', cluster: 'dev-eu-central-1', status: 'Failed', size: '0 B', createdAt: '2025-07-10 20:00', retention: '7 days', restoreAvailable: 'No' },
-];
+const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+
+interface BackupRecord {
+  name: string;
+  resourceType: string;
+  cluster: string;
+  status: string;
+  size: string;
+  createdAt: string;
+  retention: string;
+  restoreAvailable: string;
+}
 
 const statusColor: Record<string, 'success' | 'error' | 'warning'> = {
   Success: 'success',
@@ -32,8 +33,26 @@ const resourceColor: Record<string, 'primary' | 'secondary' | 'info'> = {
 };
 
 const BackupRecovery: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
-  const [data] = useState(DUMMY_DATA);
+  const { activeClusterName } = useActiveCluster();
+  const [data, setData] = useState<BackupRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    // Velero backup list via admin backup API
+    axios.get(`${API_BASE}/api/v1/admin/backups`)
+      .then((r) => setData(Array.isArray(r.data) ? r.data : []))
+      .catch((e) => {
+        if (axios.isAxiosError(e) && e.response?.status === 404) {
+          setData([]);
+        } else {
+          setError(axios.isAxiosError(e) ? e.response?.data?.detail ?? e.message : String(e));
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [activeClusterName]);
 
   const successful = data.filter((d) => d.status === 'Success').length;
   const failed = data.filter((d) => d.status === 'Failed').length;
@@ -42,94 +61,84 @@ const BackupRecovery: React.FC = () => {
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" sx={{ mb: 3, fontWeight: 700 }}>
-        Backup & Recovery
+        Backup &amp; Recovery
       </Typography>
+
+      {loading && <LinearProgress sx={{ mb: 2 }} />}
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} sm={4}>
           <Card elevation={2}>
             <CardContent>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Successful Backups
-              </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: 'success.main' }}>
-                {successful}
-              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>Successful Backups</Typography>
+              <Typography variant="h3" sx={{ fontWeight: 700, color: 'success.main' }}>{successful}</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} sm={4}>
           <Card elevation={2}>
             <CardContent>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Failed Backups
-              </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: 'error.main' }}>
-                {failed}
-              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>Failed</Typography>
+              <Typography variant="h3" sx={{ fontWeight: 700, color: 'error.main' }}>{failed}</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} sm={4}>
           <Card elevation={2}>
             <CardContent>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Restore Available
-              </Typography>
-              <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main' }}>
-                {restoreReady}
-              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>Restore Ready</Typography>
+              <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main' }}>{restoreReady}</Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
-      <Paper elevation={2}>
-        <TableContainer>
-          <Table>
-            <TableHead>
-              <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: 'grey.50' } }}>
-                <TableCell>Backup Name</TableCell>
-                <TableCell>Resource Type</TableCell>
-                <TableCell>Cluster</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Size</TableCell>
-                <TableCell>Created At</TableCell>
-                <TableCell>Retention</TableCell>
-                <TableCell align="center">Restore Available</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {data.map((row, i) => (
-                <TableRow key={i} hover>
-                  <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.78rem' }}>{row.name}</TableCell>
-                  <TableCell>
-                    <Chip label={row.resourceType} color={resourceColor[row.resourceType]} size="small" />
-                  </TableCell>
-                  <TableCell>{row.cluster}</TableCell>
-                  <TableCell>
-                    <Chip label={row.status} color={statusColor[row.status]} size="small" variant="outlined" />
-                  </TableCell>
-                  <TableCell>{row.size}</TableCell>
-                  <TableCell>{row.createdAt}</TableCell>
-                  <TableCell>{row.retention}</TableCell>
-                  <TableCell align="center">
-                    <Chip
-                      label={row.restoreAvailable}
-                      color={row.restoreAvailable === 'Yes' ? 'success' : 'default'}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </TableCell>
+      {data.length === 0 && !loading && !error && (
+        <Paper sx={{ p: 4 }}>
+          <Typography color="text.secondary" textAlign="center">
+            No backup records found. Install Velero and configure the backup schedule via the admin settings.
+          </Typography>
+        </Paper>
+      )}
+      {data.length > 0 && (
+        <Paper elevation={2}>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow sx={{ '& th': { fontWeight: 700 } }}>
+                  <TableCell>Backup Name</TableCell>
+                  <TableCell>Resource Type</TableCell>
+                  <TableCell>Cluster</TableCell>
+                  <TableCell>Status</TableCell>
+                  <TableCell>Size</TableCell>
+                  <TableCell>Created At</TableCell>
+                  <TableCell>Retention</TableCell>
+                  <TableCell>Restore Available</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      </Paper>
+              </TableHead>
+              <TableBody>
+                {data.map((row, i) => (
+                  <TableRow key={i} hover>
+                    <TableCell sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.78rem' }}>{row.name}</TableCell>
+                    <TableCell><Chip label={row.resourceType} color={resourceColor[row.resourceType] ?? 'default'} size="small" variant="outlined" /></TableCell>
+                    <TableCell>{row.cluster}</TableCell>
+                    <TableCell><Chip label={row.status} color={statusColor[row.status] ?? 'default'} size="small" /></TableCell>
+                    <TableCell>{row.size}</TableCell>
+                    <TableCell>{row.createdAt}</TableCell>
+                    <TableCell>{row.retention}</TableCell>
+                    <TableCell><Chip label={row.restoreAvailable} color={row.restoreAvailable === 'Yes' ? 'success' : 'default'} size="small" /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
+      )}
     </Box>
   );
 };
 
 export default BackupRecovery;
+
 // Made with Bob

@@ -479,7 +479,8 @@ const UserManagement: React.FC = () => {
                             </IconButton>
                           </Tooltip>
                         )}
-                        {u.email !== 'upadhyaymanas3@gmail.com' && (
+                        {/* BUG-F01: removed hardcoded email guard — deletion is now available for all non-current-user accounts */}
+                        {(
                           <Tooltip title="Delete user permanently">
                             <IconButton size="small" color="error" onClick={() => callDelete(u.id)}>
                               <DeleteIcon fontSize="small" />

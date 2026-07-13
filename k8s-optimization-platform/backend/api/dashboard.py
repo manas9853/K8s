@@ -223,14 +223,24 @@ async def get_executive_dashboard(
         analysis = analyze_waste(pods)
         total_monthly_spend = analysis['total_cost']
         total_waste = analysis['total_waste']
-        
+
         # Calculate KPIs
         potential_savings = total_waste * 0.70  # 70% of waste is recoverable
-        optimization_coverage = 45.0  # Start with baseline
-        
+        # Compute optimisation coverage: % of pods that have both requests set
+        pods_with_requests = sum(
+            1 for p in pods
+            if any(
+                c.get("cpu_request") and c.get("memory_request")
+                for c in p.get("containers", [])
+            )
+        )
+        optimization_coverage = round(
+            (pods_with_requests / len(pods) * 100) if pods else 0.0, 1
+        )
+
         # Generate insights based on real data
         insights = []
-        
+
         # Find top waste namespace
         if analysis['namespace_costs']:
             top_namespace = max(
@@ -245,7 +255,7 @@ async def get_executive_dashboard(
                 action_required=True,
                 estimated_savings=top_namespace[1]['waste'] * 0.70
             ))
-        
+
         # Add cluster insight
         insights.append(ExecutiveInsight(
             title="Cluster Optimization Opportunity",
@@ -255,7 +265,7 @@ async def get_executive_dashboard(
             action_required=False,
             estimated_savings=potential_savings
         ))
-        
+
         # Generate waste contributors
         waste_contributors = []
         for namespace, data in sorted(
@@ -271,12 +281,12 @@ async def get_executive_dashboard(
                 waste_percentage=waste_percentage,
                 monthly_cost=data['cost']
             ))
-        
+
         # Generate cost trend (simplified - last 2 months)
         cost_trend = [
             CostTrendData(
                 date=(datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d"),
-                actual_cost=total_monthly_spend * 1.08,  # 8% higher last month
+                actual_cost=total_monthly_spend * 1.08,
                 optimized_cost=total_monthly_spend * 1.08 * 0.86,
                 savings=total_monthly_spend * 1.08 * 0.14
             ),
@@ -287,23 +297,27 @@ async def get_executive_dashboard(
                 savings=total_monthly_spend * 0.14
             )
         ]
-        
+
         return DashboardOverview(
             kpis=ExecutiveKPIs(
                 total_monthly_spend=total_monthly_spend,
                 total_annual_spend=total_monthly_spend * 12,
                 potential_monthly_savings=potential_savings,
-                savings_already_realized=0.0,  # Track over time
+                savings_already_realized=analysis.get("total_savings_applied", 0.0),
                 optimization_coverage_percentage=optimization_coverage,
-                carbon_footprint_reduction_kg=potential_savings * 0.5,  # Estimate
+                carbon_footprint_reduction_kg=potential_savings * 0.5,
                 cost_trend=TrendDirection.DOWN,
-                trend_percentage=8.0
+                trend_percentage=round(
+                    (total_waste / total_monthly_spend * 100) if total_monthly_spend else 0.0, 1
+                )
             ),
             insights=insights,
             top_waste_contributors=waste_contributors,
             cost_trend=cost_trend,
             last_updated=datetime.utcnow()
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error generating executive dashboard: {e}")
         raise HTTPException(status_code=500, detail=str(e))

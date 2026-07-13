@@ -72,11 +72,11 @@ const CommandCenter: React.FC = () => {
         const status = await statusRes.json();
         setHealth({
           status: status.platform_health || 'healthy',
-          uptime: '99.9%',
-          response_time: '45ms',
+          uptime: status.uptime ?? 'N/A',
+          response_time: status.response_time ?? 'N/A',
         });
       } else {
-        setHealth({ status: 'healthy', uptime: '99.9%', response_time: '45ms' });
+        setHealth({ status: 'unknown', uptime: 'N/A', response_time: 'N/A' });
       }
 
       if (alertsRes && alertsRes.ok) {
@@ -88,11 +88,11 @@ const CommandCenter: React.FC = () => {
           time: '5m ago',
         })));
       } else {
-        setAlerts([{ id: 1, severity: 'info', message: 'Platform is operational', time: 'now' }]);
+        setAlerts([]);
       }
     } catch {
-      setHealth({ status: 'healthy', uptime: '99.9%', response_time: '45ms' });
-      setAlerts([{ id: 1, severity: 'info', message: 'Platform is operational', time: 'now' }]);
+      setHealth({ status: 'unknown', uptime: 'N/A', response_time: 'N/A' });
+      setAlerts([]);
     } finally {
       setLoading(false);
     }
@@ -254,24 +254,30 @@ const CommandCenter: React.FC = () => {
               <AlertsIcon color="primary" fontSize="small" />
               <Typography variant="h6">Alerts</Typography>
             </Box>
-            <List dense disablePadding>
-              {alerts.map(alert => (
-                <ListItem key={alert.id} disableGutters>
-                  <ListItemText
-                    primary={
-                      <Box display="flex" alignItems="center" gap={0.5}>
-                        {alert.severity === 'warning' && <WarningIcon color="warning" fontSize="small" />}
-                        {alert.severity === 'error'   && <ErrorIcon   color="error"   fontSize="small" />}
-                        {alert.severity === 'success' && <CheckCircleIcon color="success" fontSize="small" />}
-                        {alert.severity === 'info'    && <TrendingUpIcon  color="info"    fontSize="small" />}
-                        <Typography variant="body2">{alert.message}</Typography>
-                      </Box>
-                    }
-                    secondary={<Typography variant="caption" color="text.secondary">{alert.time}</Typography>}
-                  />
-                </ListItem>
-              ))}
-            </List>
+            {alerts.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                Alert data unavailable — monitoring path may be degraded.
+              </Typography>
+            ) : (
+              <List dense disablePadding>
+                {alerts.map(alert => (
+                  <ListItem key={alert.id} disableGutters>
+                    <ListItemText
+                      primary={
+                        <Box display="flex" alignItems="center" gap={0.5}>
+                          {alert.severity === 'warning' && <WarningIcon color="warning" fontSize="small" />}
+                          {alert.severity === 'error'   && <ErrorIcon   color="error"   fontSize="small" />}
+                          {alert.severity === 'success' && <CheckCircleIcon color="success" fontSize="small" />}
+                          {alert.severity === 'info'    && <TrendingUpIcon  color="info"    fontSize="small" />}
+                          <Typography variant="body2">{alert.message}</Typography>
+                        </Box>
+                      }
+                      secondary={<Typography variant="caption" color="text.secondary">{alert.time}</Typography>}
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            )}
           </Paper>
         </Grid>
       </Grid>
@@ -285,9 +291,9 @@ const CommandCenter: React.FC = () => {
                 <DashboardIcon color="primary" fontSize="small" />
                 <Typography variant="h6">Quick Actions</Typography>
               </Box>
-              <Button variant="outlined" fullWidth sx={{ mb: 1 }}>Run Full Optimization</Button>
-              <Button variant="outlined" fullWidth sx={{ mb: 1 }}>Generate Executive Report</Button>
-              <Button variant="outlined" fullWidth>View All Recommendations</Button>
+              <Button variant="outlined" fullWidth sx={{ mb: 1 }} onClick={() => navigate('/autofix')}>Run Full Optimization</Button>
+              <Button variant="outlined" fullWidth sx={{ mb: 1 }} onClick={() => navigate('/reports/pdf-export')}>Generate Executive Report</Button>
+              <Button variant="outlined" fullWidth onClick={() => navigate('/recommendations')}>View All Recommendations</Button>
             </CardContent>
           </Card>
         </Grid>
