@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Grid,
@@ -76,7 +77,7 @@ interface ExecutiveOverview {
 
 const Executive: React.FC = () => {
   const navigate = useNavigate();
-  const { clusterParam } = useActiveCluster();
+  const { clusterParam, activeClusterId } = useActiveCluster();
   const { clusters, loading: clustersLoading } = useCluster();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -195,8 +196,10 @@ const Executive: React.FC = () => {
         Executive Overview Dashboard
       </Typography>
       <Typography variant="body2" color="text.secondary" gutterBottom>
-        For Leadership & FinOps Teams
+        For Leadership &amp; FinOps Teams
       </Typography>
+
+      <CostAccuracyBanner clusterName={activeClusterId === 'all' ? null : activeClusterId} />
 
       {/* Infra counts row */}
       <Grid container spacing={2} sx={{ mt: 2, mb: 1 }}>

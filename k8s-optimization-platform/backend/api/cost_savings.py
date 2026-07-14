@@ -12,6 +12,7 @@ import json
 import logging
 
 from database.db import db_manager
+import services.cost_service as cost_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -279,13 +280,41 @@ def _build_overview(cluster_name: str, pods: list) -> CostSavingsOverview:
 
 @router.get("/overview", response_model=CostSavingsOverview)
 async def get_cost_savings_overview(cluster_id: Optional[str] = Query(None)):
-    """Real cost savings derived from agent pod requests vs. optimised sizing."""
+    """
+    Real cost savings derived from agent pod requests vs. optimised sizing.
+    Total cost figures are anchored to cost_service for cross-page consistency.
+    """
     try:
         cluster_name, pods = _get_pods(cluster_id)
         if not pods:
             logger.warning("No pod data in DB for cluster_id=%s", cluster_id)
             raise HTTPException(status_code=503, detail="No cluster data available yet — agent may still be collecting")
-        return _build_overview(cluster_name, pods)
+
+        overview = _build_overview(cluster_name, pods)
+
+        # Anchor current_monthly_cost to cost_service so it matches other pages
+        try:
+            snap = await cost_service.resolve(cluster_name)
+            # Scale optimised and savings proportionally to the canonical total
+            if overview.current_monthly_cost > 0 and snap.total_monthly_cost > 0:
+                ratio = snap.total_monthly_cost / overview.current_monthly_cost
+                optimized = round(overview.optimized_monthly_cost * ratio, 2)
+                savings   = round(snap.total_monthly_cost - optimized, 2)
+                savings_pct = round(savings / snap.total_monthly_cost * 100, 1) if snap.total_monthly_cost > 0 else 0.0
+                # Replace top-level totals; per-namespace/team ratios stay intact
+                overview = overview.copy(update={
+                    "current_monthly_cost":   snap.total_monthly_cost,
+                    "current_yearly_cost":    round(snap.total_monthly_cost * 12, 2),
+                    "optimized_monthly_cost": optimized,
+                    "optimized_yearly_cost":  round(optimized * 12, 2),
+                    "monthly_savings":        savings,
+                    "yearly_savings":         round(savings * 12, 2),
+                    "savings_percent":        savings_pct,
+                })
+        except Exception as e:
+            logger.warning("cost_service unavailable for cost_savings anchor: %s", e)
+
+        return overview
     except HTTPException:
         raise
     except Exception as e:

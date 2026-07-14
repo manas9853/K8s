@@ -31,14 +31,14 @@ const PIE_FALLBACK = [RED, AMBER, ACCENT, GREEN, PURPLE];
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface EnergyData {
-  total_energy: { monthly_kwh: number; daily_average_kwh: number; ytd_kwh: number; annual_projection_kwh: number };
-  energy_by_cluster: { cluster: string; environment: string; region: string; kwh: number; percentage: number; efficiency_score: number }[];
-  energy_by_workload_type: { type: string; kwh: number; percentage: number }[];
-  energy_trend: { month: string; kwh: number; efficiency: number }[];
-  peak_usage: { daily_peak_hour: string; peak_kwh: number; off_peak_kwh: number; peak_to_average_ratio: number };
-  energy_efficiency: { pue: number; target_pue: number; cpu_utilization: number; memory_utilization: number; overall_efficiency_score: number };
-  optimization_opportunities: { opportunity: string; potential_savings_kwh: number; impact: string }[];
-  renewable_energy: { percentage: number; kwh: number; target_percentage: number };
+  total_energy: { monthly_kwh: number; daily_average_kwh: number; ytd_kwh?: number; annual_projection_kwh: number };
+  energy_by_cluster: { cluster: string; environment: string; region: string; kwh: number; percentage: number; efficiency_score?: number }[];
+  energy_by_workload_type: { type: string; namespace?: string; kwh: number; percentage: number }[];
+  energy_trend: { month: string; kwh: number; efficiency?: number }[];
+  peak_usage: { daily_peak_hour: string; peak_kwh: number; off_peak_kwh?: number; peak_to_average_ratio?: number };
+  energy_efficiency?: { pue: number; target_pue: number; cpu_utilization: number; memory_utilization: number; overall_efficiency_score: number };
+  optimization_opportunities?: { opportunity: string; potential_savings_kwh: number; impact: string }[];
+  renewable_energy?: { percentage: number; kwh?: number; target_percentage?: number; note?: string };
   last_updated: string;
 }
 
@@ -81,8 +81,8 @@ const EnergyConsumptionInner: React.FC = () => {
   const pieData = data.energy_by_workload_type ?? [];
 
   // Circular renewable indicator geometry (SVG-based, no canvas dep)
-  const renewableAngle = (re?.percentage / 100) * 360;
-  const targetAngle    = (re?.target_percentage / 100) * 360;
+  const renewableAngle = ((re?.percentage ?? 0) / 100) * 360;
+  const targetAngle    = ((re?.target_percentage ?? 30) / 100) * 360;
 
   return (
     <Box sx={{ p: 3, bgcolor: DK.bg, minHeight: '100vh' }}>
@@ -117,8 +117,8 @@ const EnergyConsumptionInner: React.FC = () => {
             { label: 'Monthly kWh',       value: fmtKwh(te.monthly_kwh),           color: AMBER },
             { label: 'Daily Average kWh', value: fmtKwh(te.daily_average_kwh),     color: ACCENT },
             { label: 'Annual Projection', value: fmtKwh(te.annual_projection_kwh), color: PURPLE },
-            { label: 'PUE',               value: ee?.pue?.toFixed(2) ?? '—',       color: ee?.pue < 1.4 ? GREEN : AMBER,
-              sub: `target ${ee?.target_pue}` },
+            { label: 'PUE',               value: ee?.pue?.toFixed(2) ?? '—',       color: (ee?.pue ?? 1.4) < 1.4 ? GREEN : AMBER,
+              sub: `target ${ee?.target_pue ?? 1.3}` },
           ].map(({ label, value, color, sub }) => (
             <Grid item xs={12} sm={6} md={3} key={label}>
               <Card sx={{ bgcolor: DK.surface, border: `1px solid ${color}33` }}>
@@ -261,69 +261,74 @@ const EnergyConsumptionInner: React.FC = () => {
           </Paper>
 
           {/* ── Renewable energy ── */}
-          {re && (
-            <Paper sx={{ p: 3, bgcolor: DK.surface, border: `1px solid ${DK.border}` }}>
-              <Typography variant="h6" fontWeight={600} sx={{ color: DK.text, mb: 2 }}>
-                Renewable Energy
-              </Typography>
-              <Box display="flex" alignItems="center" gap={3}>
-                {/* SVG circular indicator */}
-                <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
-                  <svg width="90" height="90" viewBox="0 0 90 90">
-                    <circle cx="45" cy="45" r="35" fill="none" stroke={DK.border} strokeWidth="8" />
-                    <circle cx="45" cy="45" r="35" fill="none"
-                      stroke={re.percentage >= re.target_percentage ? GREEN : AMBER}
-                      strokeWidth="8" strokeLinecap="round"
-                      strokeDasharray={`${(re.percentage / 100) * 219.9} 219.9`}
-                      transform="rotate(-90 45 45)" />
-                    <circle cx="45" cy="45" r="35" fill="none"
-                      stroke={`${DK.text}33`} strokeWidth="2" strokeLinecap="round"
-                      strokeDasharray={`${(re.target_percentage / 100) * 219.9} 219.9`}
-                      transform="rotate(-90 45 45)" />
-                  </svg>
-                  <Box sx={{
-                    position: 'absolute', inset: 0, display: 'flex',
-                    alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <Typography variant="caption" fontWeight={700}
-                      sx={{ color: re.percentage >= re.target_percentage ? GREEN : AMBER }}>
-                      {re.percentage}%
+          {re && (() => {
+            const renPct = re.percentage ?? 0;
+            const tgtPct = re.target_percentage ?? 30;
+            const renKwh = re.kwh ?? 0;
+            return (
+              <Paper sx={{ p: 3, bgcolor: DK.surface, border: `1px solid ${DK.border}` }}>
+                <Typography variant="h6" fontWeight={600} sx={{ color: DK.text, mb: 2 }}>
+                  Renewable Energy
+                </Typography>
+                <Box display="flex" alignItems="center" gap={3}>
+                  {/* SVG circular indicator */}
+                  <Box sx={{ position: 'relative', width: 90, height: 90, flexShrink: 0 }}>
+                    <svg width="90" height="90" viewBox="0 0 90 90">
+                      <circle cx="45" cy="45" r="35" fill="none" stroke={DK.border} strokeWidth="8" />
+                      <circle cx="45" cy="45" r="35" fill="none"
+                        stroke={renPct >= tgtPct ? GREEN : AMBER}
+                        strokeWidth="8" strokeLinecap="round"
+                        strokeDasharray={`${(renPct / 100) * 219.9} 219.9`}
+                        transform="rotate(-90 45 45)" />
+                      <circle cx="45" cy="45" r="35" fill="none"
+                        stroke={`${DK.text}33`} strokeWidth="2" strokeLinecap="round"
+                        strokeDasharray={`${(tgtPct / 100) * 219.9} 219.9`}
+                        transform="rotate(-90 45 45)" />
+                    </svg>
+                    <Box sx={{
+                      position: 'absolute', inset: 0, display: 'flex',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Typography variant="caption" fontWeight={700}
+                        sx={{ color: renPct >= tgtPct ? GREEN : AMBER }}>
+                        {renPct}%
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Box flex={1}>
+                    <Typography variant="body2" sx={{ color: DK.text }}>
+                      {Number(renKwh).toLocaleString()} kWh from renewables
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: DK.muted, display: 'block', mt: 0.5 }}>
+                      Target: {tgtPct}% renewable
+                    </Typography>
+                    <LinearProgress variant="determinate"
+                      value={Math.min(tgtPct > 0 ? (renPct / tgtPct) * 100 : 0, 100)}
+                      sx={{
+                        mt: 1.5, height: 6, borderRadius: 1, bgcolor: DK.border,
+                        '& .MuiLinearProgress-bar': {
+                          bgcolor: renPct >= tgtPct ? GREEN : AMBER,
+                        },
+                      }} />
+                    <Typography variant="caption" sx={{ color: DK.muted }}>
+                      {renPct >= tgtPct ? '✅ Target met' : `${(tgtPct - renPct).toFixed(0)}% to target`}
                     </Typography>
                   </Box>
                 </Box>
-                <Box flex={1}>
-                  <Typography variant="body2" sx={{ color: DK.text }}>
-                    {Number(re.kwh).toLocaleString()} kWh from renewables
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: DK.muted, display: 'block', mt: 0.5 }}>
-                    Target: {re.target_percentage}% renewable
-                  </Typography>
-                  <LinearProgress variant="determinate"
-                    value={Math.min((re.percentage / re.target_percentage) * 100, 100)}
-                    sx={{
-                      mt: 1.5, height: 6, borderRadius: 1, bgcolor: DK.border,
-                      '& .MuiLinearProgress-bar': {
-                        bgcolor: re.percentage >= re.target_percentage ? GREEN : AMBER,
-                      },
-                    }} />
-                  <Typography variant="caption" sx={{ color: DK.muted }}>
-                    {re.percentage >= re.target_percentage ? '✅ Target met' : `${(re.target_percentage - re.percentage).toFixed(0)}% to target`}
-                  </Typography>
-                </Box>
-              </Box>
-            </Paper>
-          )}
+              </Paper>
+            );
+          })()}
         </Grid>
       </Grid>
 
       {/* ── Optimization opportunities ── */}
-      {data.optimization_opportunities?.length > 0 && (
+      {(data.optimization_opportunities?.length ?? 0) > 0 && (
         <Paper sx={{ p: 3, bgcolor: DK.surface, border: `1px solid ${DK.border}` }}>
           <Typography variant="h6" fontWeight={600} sx={{ color: DK.text, mb: 2 }}>
             Optimization Opportunities
           </Typography>
           <Box display="flex" flexDirection="column" gap={1.5}>
-            {data.optimization_opportunities.map((o, i) => {
+            {(data.optimization_opportunities ?? []).map((o, i) => {
               const high = o.impact?.toLowerCase() === 'high';
               return (
                 <Box key={i} sx={{

@@ -11,6 +11,7 @@ import logging
 # Import database manager for agent clusters
 from database.db import db_manager
 from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR, HOURS_PER_MONTH
+import services.cost_service as cost_service
 
 # Import user registry for org-scoped filtering
 from api.user_management import USER_REGISTRY
@@ -149,7 +150,7 @@ async def list_clusters(
         agent_clusters = db_manager.get_clusters_by_org(org_id)
         if agent_clusters:
             logging.info(f"Found {len(agent_clusters)} agent-registered clusters (org={org_id})")
-            clusters = _convert_agent_clusters_to_cluster_info(agent_clusters)
+            clusters = await _convert_agent_clusters_to_cluster_info(agent_clusters)
         else:
             logging.info(f"No agent-registered clusters found for org={org_id}")
     except Exception as e:
@@ -166,7 +167,7 @@ async def list_clusters(
     return clusters
 
 
-def _convert_agent_clusters_to_cluster_info(
+async def _convert_agent_clusters_to_cluster_info(
     agent_clusters: List[Dict[str, Any]]
 ) -> List[ClusterInfo]:
     """Convert agent cluster data to ClusterInfo models"""
@@ -222,10 +223,15 @@ def _convert_agent_clusters_to_cluster_info(
             else:
                 status = "critical"
             
-            # Calculate costs
-            monthly_cost, potential_savings = _calculate_costs(
-                cpu_requested, memory_requested
-            )
+            # Calculate costs — via cost_service for consistency
+            try:
+                snap = await cost_service.resolve(cluster_name)
+                monthly_cost      = snap.total_monthly_cost
+                potential_savings = snap.savings_potential
+            except Exception:
+                monthly_cost, potential_savings = _calculate_costs(
+                    cpu_requested, memory_requested
+                )
         else:
             # No metrics available — warn so this is visible in backend logs
             logging.warning(

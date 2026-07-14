@@ -29,6 +29,7 @@ import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
 import { Add as AddIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 interface ClusterSummary {
   total_clusters: number;
@@ -63,7 +64,7 @@ interface ClusterFilter {
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   // 🌐 Cluster-scoped: re-fetches whenever the active cluster changes or is deleted
-  const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusterParam, activeClusterName, activeClusterId } = useActiveCluster();
   const { clusters, loading: clustersLoading } = useCluster();
 
   const [loading, setLoading] = useState(true);
@@ -321,6 +322,8 @@ const Dashboard: React.FC = () => {
           {error}
         </Alert>
       )}
+
+      <CostAccuracyBanner clusterName={activeClusterId === 'all' ? null : activeClusterId} />
 
       {/* Filters */}
       <Paper sx={{ p: 2, mb: 3 }}>

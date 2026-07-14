@@ -11,11 +11,12 @@ from enum import Enum
 import logging
 
 from database.db import db_manager
+import services.cost_service as cost_service
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Cost rates (from environment or defaults)
+# Cost rates — imported only for calculate_pod_cost (waste analysis helper, not cost display)
 from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR
 
 
@@ -206,7 +207,7 @@ async def get_executive_dashboard(
     cluster_id: Optional[str] = Query(None),
     days: int = Query(30, description="Number of days for trend data"),
 ):
-    """Get executive overview dashboard from agent_metrics."""
+    """Get executive overview dashboard — cost from cost_service, waste analysis from pods."""
     try:
         pods = _get_pods_for_dashboard(cluster_id)
         if not pods:
@@ -218,14 +219,18 @@ async def get_executive_dashboard(
                 }
             )
 
-        # Analyze costs and waste
+        # ── Cost figures: single source of truth ──────────────────────────────
+        clusters = db_manager.get_all_clusters()
+        cluster_name = cluster_id or (clusters[0]["cluster_name"] if clusters else "")
+        snapshot = await cost_service.resolve(cluster_name) if cluster_name else None
+        total_monthly_spend = snapshot.total_monthly_cost if snapshot else 0.0
+        potential_savings   = snapshot.savings_potential   if snapshot else 0.0
+
+        # ── Waste analysis: namespace breakdown (display only, not cost total) ─
         analysis = analyze_waste(pods)
-        total_monthly_spend = analysis['total_cost']
         total_waste = analysis['total_waste']
 
-        # Calculate KPIs
-        potential_savings = total_waste * 0.70  # 70% of waste is recoverable
-        # Compute optimisation coverage: % of pods that have both requests set
+        # Optimisation coverage: % of pods with both CPU and memory requests set
         pods_with_requests = sum(
             1 for p in pods
             if any(
@@ -237,10 +242,8 @@ async def get_executive_dashboard(
             (pods_with_requests / len(pods) * 100) if pods else 0.0, 1
         )
 
-        # Generate insights based on real data
+        # Generate insights
         insights = []
-
-        # Find top waste namespace
         if analysis['namespace_costs']:
             top_namespace = max(
                 analysis['namespace_costs'].items(),
@@ -255,7 +258,6 @@ async def get_executive_dashboard(
                 estimated_savings=top_namespace[1]['waste'] * 0.70
             ))
 
-        # Add cluster insight
         insights.append(ExecutiveInsight(
             title="Cluster Optimization Opportunity",
             description=f"Cluster has {len(pods)} pods with potential for optimization",
@@ -265,7 +267,7 @@ async def get_executive_dashboard(
             estimated_savings=potential_savings
         ))
 
-        # Generate waste contributors
+        # Waste contributors by namespace
         waste_contributors = []
         for namespace, data in sorted(
             analysis['namespace_costs'].items(),
@@ -281,7 +283,6 @@ async def get_executive_dashboard(
                 monthly_cost=data['cost']
             ))
 
-        # Generate cost trend (simplified - last 2 months)
         cost_trend = [
             CostTrendData(
                 date=(datetime.utcnow() - timedelta(days=30)).strftime("%Y-%m-%d"),
@@ -302,7 +303,7 @@ async def get_executive_dashboard(
                 total_monthly_spend=total_monthly_spend,
                 total_annual_spend=total_monthly_spend * 12,
                 potential_monthly_savings=potential_savings,
-                savings_already_realized=analysis.get("total_savings_applied", 0.0),
+                savings_already_realized=0.0,
                 optimization_coverage_percentage=optimization_coverage,
                 carbon_footprint_reduction_kg=potential_savings * 0.5,
                 cost_trend=TrendDirection.DOWN,
@@ -324,14 +325,18 @@ async def get_executive_dashboard(
 
 @router.get("/kpis", response_model=ExecutiveKPIs)
 async def get_kpis(cluster_id: Optional[str] = Query(None)):
-    """Get current KPIs from agent_metrics."""
+    """Get current KPIs — cost from cost_service."""
     try:
         pods = _get_pods_for_dashboard(cluster_id)
         if not pods:
             raise HTTPException(status_code=503, detail="No cluster data available yet")
-        analysis = analyze_waste(pods)
-        total_monthly_spend = analysis['total_cost']
-        potential_savings = analysis['total_waste'] * 0.70
+
+        clusters = db_manager.get_all_clusters()
+        cluster_name = cluster_id or (clusters[0]["cluster_name"] if clusters else "")
+        snapshot = await cost_service.resolve(cluster_name) if cluster_name else None
+        total_monthly_spend = snapshot.total_monthly_cost if snapshot else 0.0
+        potential_savings   = snapshot.savings_potential   if snapshot else 0.0
+
         return ExecutiveKPIs(
             total_monthly_spend=total_monthly_spend,
             total_annual_spend=total_monthly_spend * 12,

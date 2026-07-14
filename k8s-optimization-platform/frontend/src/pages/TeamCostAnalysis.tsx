@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Typography,
@@ -56,7 +57,7 @@ function mapTeamCost(raw: Record<string, unknown>): TeamCostRow {
 }
 
 const TeamCostAnalysis: React.FC = () => {
-  const { activeClusterName } = useActiveCluster();
+  const { activeClusterName, activeClusterId } = useActiveCluster();
   const [data, setData] = useState<TeamCostRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,6 +116,8 @@ const TeamCostAnalysis: React.FC = () => {
           {error}
         </Alert>
       )}
+
+      <CostAccuracyBanner clusterName={activeClusterId === 'all' ? null : activeClusterId} />
 
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} md={3}>

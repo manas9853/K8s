@@ -35,7 +35,14 @@ const BREAKDOWN_COLORS = {
 interface TeamCharge {
   team: string;
   total_charge: number;
-  breakdown: { compute: number; storage: number; network: number; other: number };
+  breakdown: {
+    compute:        number;
+    storage:        number;
+    network:        number;
+    other:          number;
+    control_plane?: number;
+    [key: string]:  number | undefined;
+  };
   budget?: number;
   variance?: number;
   status: string;
@@ -56,8 +63,10 @@ interface ChargebackData {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const fmt = (n: number) =>
-  `$${n.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+const fmt = (n: number | undefined | null) => {
+  const safe = typeof n === 'number' && isFinite(n) ? n : 0;
+  return `$${safe.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
+};
 
 const statusChip = (status: string) => {
   if (status === 'over_budget')  return { label: 'Over Budget',  color: RED,   bg: '#f8514922' };
@@ -113,10 +122,10 @@ const ChargebackShowbackInner: React.FC = () => {
   const charges = data.team_charges ?? [];
   const chartData = charges.map((t) => ({
     team:    t.team.split(/[\s-]/)[0],
-    Compute: t.breakdown.compute,
-    Storage: t.breakdown.storage,
-    Network: t.breakdown.network,
-    Other:   t.breakdown.other,
+    Compute: t.breakdown.compute  ?? 0,
+    Storage: t.breakdown.storage  ?? 0,
+    Network: t.breakdown.network  ?? 0,
+    Other:   t.breakdown.other    ?? 0,
   }));
 
   return (
@@ -193,12 +202,13 @@ const ChargebackShowbackInner: React.FC = () => {
                 {/* breakdown mini-bars */}
                 {(['compute', 'storage', 'network', 'other'] as const).map((k) => {
                   const color = BREAKDOWN_COLORS[k.charAt(0).toUpperCase() + k.slice(1) as keyof typeof BREAKDOWN_COLORS];
-                  const pct   = Math.round((t.breakdown[k] / total) * 100);
+                  const val   = t.breakdown[k] ?? 0;
+                  const pct   = Math.round((val / total) * 100);
                   return (
                     <Box key={k}>
                       <Box display="flex" justifyContent="space-between" mb={0.25}>
                         <Typography sx={{ color: DK.muted, fontSize: '0.68rem', textTransform: 'capitalize' }}>{k}</Typography>
-                        <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>{fmt(t.breakdown[k])}</Typography>
+                        <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>{fmt(val)}</Typography>
                       </Box>
                       <LinearProgress
                         variant="determinate"
