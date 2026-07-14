@@ -97,8 +97,6 @@ export function useCluster(): ClusterContextType {
 // ─── Provider ────────────────────────────────────────────────────────────────
 
 const API_BASE = process.env.REACT_APP_API_URL || '';
-/** How often (ms) to auto-refresh cluster list for real-time updates */
-const POLL_INTERVAL_MS = 30_000;
 
 export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
   children,
@@ -142,10 +140,38 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
     fetchClusters();
   }, [fetchClusters]);
 
-  // Auto-refresh every 30 s so real-time changes (agent data, new nodes) appear
+  // SSE: re-fetch clusters whenever the backend signals new agent data
   useEffect(() => {
-    const timer = setInterval(fetchClusters, POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
+    const url = `${API_BASE}/api/agents/events`;
+    let es: EventSource;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    const connect = () => {
+      es = new EventSource(url);
+
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event === 'metrics_update') {
+            fetchClusters();
+          }
+        } catch { /* ignore malformed frames */ }
+      };
+
+      es.onerror = () => {
+        // Browser will auto-reconnect for transient failures; we only
+        // set a backup timer if the connection enters CLOSED state.
+        if (es.readyState === EventSource.CLOSED) {
+          reconnectTimer = setTimeout(connect, 10_000);
+        }
+      };
+    };
+
+    connect();
+    return () => {
+      es?.close();
+      clearTimeout(reconnectTimer);
+    };
   }, [fetchClusters]);
 
   // ── Select cluster ───────────────────────────────────────────────────────

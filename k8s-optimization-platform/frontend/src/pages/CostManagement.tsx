@@ -14,7 +14,8 @@ import { API_BASE_URL } from '../config/api';
 
 const COLORS = ['#3b82d4', '#7c5cd8', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6'];
 
-const fmt = (n: number) => `$${n.toLocaleString()}`;
+const fmt = (n: number | null | undefined) =>
+  n == null ? '—' : `$${Number(n).toLocaleString()}`;
 
 const CostManagement: React.FC = () => {
   const { clusterParam } = useActiveCluster();
@@ -98,10 +99,10 @@ const CostManagement: React.FC = () => {
             <Typography variant="h6" gutterBottom>Cost by Resource Type</Typography>
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
-                <Pie data={data.cost_by_resource_type} dataKey="cost" nameKey="type"
+                <Pie data={data.cost_by_resource_type ?? []} dataKey="cost" nameKey="type"
                      cx="50%" cy="50%" outerRadius={90}
                      label={({ type, percentage }) => `${type}: ${percentage}%`}>
-                  {data.cost_by_resource_type.map((_: any, i: number) => (
+                  {(data.cost_by_resource_type ?? []).map((_: any, i: number) => (
                     <Cell key={i} fill={COLORS[i % COLORS.length]} />
                   ))}
                 </Pie>
@@ -116,7 +117,7 @@ const CostManagement: React.FC = () => {
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>Cost by Environment</Typography>
             <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.cost_by_environment}>
+              <BarChart data={data.cost_by_environment ?? []}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="environment" />
                 <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
 import {
   Alert,
@@ -32,32 +32,24 @@ const KillPodInner: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [actionResult, setActionResult] = useState<string | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const fetchData = async (initial = false) => {
-      if (initial) setLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/v1/attack-investigation/kill-pod${clusterParam}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const result: KillPodStatus = await response.json();
-        if (!mounted) return;
-        setData(result);
-        setError(null);
-      } catch (err) {
-        if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Failed to load killed pods data');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    fetchData(true);
-
-    return () => {
-      mounted = false;
-    };
+  const fetchData = useCallback(async (initial = false) => {
+    if (initial) setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/attack-investigation/kill-pod${clusterParam}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result: KillPodStatus = await response.json();
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load killed pods data');
+    } finally {
+      setLoading(false);
+    }
   }, [clusterParam]);
+
+  useEffect(() => {
+    fetchData(true);
+  }, [fetchData]);
 
   const handleKill = async (name: string) => {
     try {
@@ -117,7 +109,7 @@ const KillPodInner: React.FC = () => {
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => window.location.reload()} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
           Refresh
         </Button>
       </Box>

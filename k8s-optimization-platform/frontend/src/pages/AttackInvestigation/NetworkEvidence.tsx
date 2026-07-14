@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
 import {
   Alert,
@@ -92,33 +92,26 @@ const NetworkEvidenceInner: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchData = useCallback(async (initial = false) => {
+    if (initial) setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/attack-investigation/network-evidence${clusterParam}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result: NetworkEvidenceResponse = await response.json();
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load network evidence');
+    } finally {
+      setLoading(false);
+    }
+  }, [clusterParam]);
+
   useEffect(() => {
-    let mounted = true;
-
-    const fetchData = async (initial = false) => {
-      if (initial) setLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/v1/attack-investigation/network-evidence${clusterParam}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const result: NetworkEvidenceResponse = await response.json();
-        if (!mounted) return;
-        setData(result);
-        setError(null);
-      } catch (err) {
-        if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Failed to load network evidence');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
     fetchData(true);
     const interval = setInterval(() => fetchData(false), 120000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [clusterParam]);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   const summary = data?.network_summary;
   const connections = useMemo(() => data?.connections ?? [], [data]);
@@ -163,7 +156,7 @@ const NetworkEvidenceInner: React.FC = () => {
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => window.location.reload()} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
           Refresh
         </Button>
       </Box>

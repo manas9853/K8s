@@ -3,10 +3,13 @@ Agent Receiver API
 Receives metrics and heartbeats from remote cluster agents.
 Supports both basic (v1) and comprehensive (v2) agent payloads.
 """
-from fastapi import APIRouter, HTTPException, Header, Depends
+from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Set
 from datetime import datetime
+import asyncio
+import json
 import logging
 
 from database.db import db_manager
@@ -15,6 +18,25 @@ from api.tokens import get_token_org
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/agents", tags=["agent"])
+
+# ── SSE broadcast bus ─────────────────────────────────────────────────────────
+# Each connected SSE client registers its own asyncio.Queue here.
+# When new agent metrics arrive we put a message on every queue.
+_sse_clients: Set[asyncio.Queue] = set()
+
+
+def _broadcast(cluster_name: str) -> None:
+    """Put a metrics_update event onto every connected SSE client queue.
+    Called synchronously from within an async context (no await needed)."""
+    payload = json.dumps({"event": "metrics_update", "cluster": cluster_name})
+    dead: List[asyncio.Queue] = []
+    for q in _sse_clients:
+        try:
+            q.put_nowait(payload)
+        except asyncio.QueueFull:
+            dead.append(q)
+    for q in dead:
+        _sse_clients.discard(q)
 
 
 class ClusterRegistration(BaseModel):
@@ -169,6 +191,8 @@ async def receive_metrics(
 
         db_manager.update_cluster_heartbeat(cluster_name, "active")
         logger.debug(f"Metrics received from {cluster_name} (agent_v={metrics.agent_version})")
+        # Notify all connected SSE clients that fresh data is available
+        _broadcast(cluster_name)
         return {"status": "success", "message": "Metrics received"}
 
     except HTTPException:
@@ -319,5 +343,44 @@ async def get_command_status(command_id: int):
     if not cmd:
         raise HTTPException(status_code=404, detail="Command not found")
     return cmd
+
+# ── /events — SSE endpoint for real-time push to the frontend ─────────────────
+
+@router.get("/events")
+async def metrics_events(request: Request):
+    """
+    Server-Sent Events stream.
+    The frontend connects once; whenever an agent pushes new metrics the
+    backend immediately sends a `metrics_update` event so the UI can
+    re-fetch only the data it needs — no polling, no page reload.
+    """
+    queue: asyncio.Queue = asyncio.Queue(maxsize=32)
+    _sse_clients.add(queue)
+
+    async def stream():
+        # Send an initial ping so the browser knows the connection is live
+        yield "data: {\"event\": \"connected\"}\n\n"
+        try:
+            while True:
+                # Check for client disconnect every second
+                if await request.is_disconnected():
+                    break
+                try:
+                    payload = await asyncio.wait_for(queue.get(), timeout=30.0)
+                    yield f"data: {payload}\n\n"
+                except asyncio.TimeoutError:
+                    # keepalive comment so proxies don't close the connection
+                    yield ": keepalive\n\n"
+        finally:
+            _sse_clients.discard(queue)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",   # disable nginx buffering
+        },
+    )
 
 # Made with Bob

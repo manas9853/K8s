@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Card,
@@ -38,6 +39,7 @@ interface TokenData {
 }
 
 const ClusterOnboarding: React.FC = () => {
+  const navigate = useNavigate();
   const [activeStep, setActiveStep] = useState(0);
   const [clusterName, setClusterName] = useState('');
   const [clusterDescription, setClusterDescription] = useState('');
@@ -576,7 +578,7 @@ spec:
               <Box sx={{ mt: 4 }}>
                 <Button
                   variant="contained"
-                  onClick={() => window.location.href = '/'}
+                  onClick={() => navigate('/')}
                   fullWidth
                 >
                   Go to Dashboard

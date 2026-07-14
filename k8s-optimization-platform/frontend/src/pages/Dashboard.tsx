@@ -79,15 +79,44 @@ const Dashboard: React.FC = () => {
     team: 'all'
   });
 
+  // Fetch on mount and whenever the active cluster/filter changes
   useEffect(() => {
     fetchDashboardData();
     fetchSimulationMetrics();
-
-    // Poll simulation metrics every 5 seconds for real-time updates
-    const interval = setInterval(fetchSimulationMetrics, 5000);
-    return () => clearInterval(interval);
     // clusterParam ensures re-fetch when user switches cluster or deletes one
   }, [filters, clusterParam]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // SSE: re-fetch dashboard data the moment the backend receives new agent metrics
+  useEffect(() => {
+    const API_BASE = process.env.REACT_APP_API_URL || '';
+    const url = `${API_BASE}/api/agents/events`;
+    let es: EventSource;
+    let reconnectTimer: ReturnType<typeof setTimeout>;
+
+    const connect = () => {
+      es = new EventSource(url);
+      es.onmessage = (e) => {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.event === 'metrics_update') {
+            fetchDashboardData();
+            fetchSimulationMetrics();
+          }
+        } catch { /* ignore */ }
+      };
+      es.onerror = () => {
+        if (es.readyState === EventSource.CLOSED) {
+          reconnectTimer = setTimeout(connect, 10_000);
+        }
+      };
+    };
+
+    connect();
+    return () => {
+      es?.close();
+      clearTimeout(reconnectTimer);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchDashboardData = async () => {
     try {

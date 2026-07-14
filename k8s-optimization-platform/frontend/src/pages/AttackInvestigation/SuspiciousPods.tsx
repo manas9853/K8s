@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
 import {
   Alert,
@@ -181,33 +181,26 @@ const SuspiciousPodsInner: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchSuspiciousPods = useCallback(async (initial = false) => {
+    if (initial) setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/v1/attack-investigation/threat-hunting/suspicious-pods${clusterParam}`);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const result: SuspiciousPodsResponse = await response.json();
+      setData(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch suspicious pods');
+    } finally {
+      setLoading(false);
+    }
+  }, [clusterParam]);
+
   useEffect(() => {
-    let mounted = true;
-
-    const fetchSuspiciousPods = async (initial = false) => {
-      if (initial) setLoading(true);
-      try {
-        const response = await fetch(`${API_BASE_URL}/v1/attack-investigation/threat-hunting/suspicious-pods${clusterParam}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const result: SuspiciousPodsResponse = await response.json();
-        if (!mounted) return;
-        setData(result);
-        setError(null);
-      } catch (err) {
-        if (!mounted) return;
-        setError(err instanceof Error ? err.message : 'Failed to fetch suspicious pods');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
     fetchSuspiciousPods(true);
     const interval = setInterval(() => fetchSuspiciousPods(false), 120000);
-    return () => {
-      mounted = false;
-      clearInterval(interval);
-    };
-  }, [clusterParam]);
+    return () => clearInterval(interval);
+  }, [fetchSuspiciousPods]);
 
   const pods = useMemo(() => (Array.isArray(data?.suspicious_pods) ? data!.suspicious_pods : []), [data]);
   const highRiskPods = useMemo(() => pods.filter((pod) => pod.risk_score >= 60), [pods]);
@@ -250,7 +243,7 @@ const SuspiciousPodsInner: React.FC = () => {
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => window.location.reload()} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchSuspiciousPods(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
           Refresh
         </Button>
       </Box>
