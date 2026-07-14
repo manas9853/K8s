@@ -16,10 +16,7 @@ logger = logging.getLogger(__name__)
 # Base URL for internal API calls
 BASE_URL = "http://localhost:8000/api/v1"
 
-# Cost constants
-CPU_COST_PER_CORE_HOUR = 0.031
-MEMORY_COST_PER_GB_HOUR = 0.004
-HOURS_PER_MONTH = 730
+from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR, HOURS_PER_MONTH
 
 
 class TeamCost(BaseModel):

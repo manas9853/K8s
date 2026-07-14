@@ -16,8 +16,7 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 # Cost rates (from environment or defaults)
-CPU_COST_PER_CORE_HOUR = 0.031  # $0.031 per vCPU hour
-MEMORY_COST_PER_GB_HOUR = 0.004  # $0.004 per GB hour
+from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR
 
 
 # Enums

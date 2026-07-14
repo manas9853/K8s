@@ -14,11 +14,10 @@ from database.db import db_manager
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Cost constants (AWS-style estimates)
-CPU_COST_PER_CORE_HOUR   = 0.04
-MEM_COST_PER_GB_HOUR     = 0.005
+# Cost constants — single source of truth from cost_engine
+from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR, HOURS_PER_MONTH
+MEM_COST_PER_GB_HOUR     = MEMORY_COST_PER_GB_HOUR   # local alias kept for existing usages
 STORAGE_COST_PER_GB_MO   = 0.10
-HOURS_PER_MONTH          = 730
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────

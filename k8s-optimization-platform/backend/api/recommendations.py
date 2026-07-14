@@ -68,9 +68,7 @@ class WorkloadRecommendation(BaseModel):
 
 
 # ── cost constants ────────────────────────────────────────────────────────────
-CPU_COST_PER_CORE_HOUR    = 0.04   # $0.04 / core / hour
-MEMORY_COST_PER_GB_HOUR   = 0.005  # $0.005 / GB / hour
-HOURS_PER_MONTH           = 730
+from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR, HOURS_PER_MONTH
 
 # ── sizing thresholds (from audit.sh logic) ───────────────────────────────────
 MIN_CPU_CORES  = 0.010   # 10m minimum

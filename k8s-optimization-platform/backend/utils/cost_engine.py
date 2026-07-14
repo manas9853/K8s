@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 
 HOURS_PER_MONTH = 730
 
+# ── Canonical per-vCPU/GB fallback rates (AWS unknown-instance default) ────────
+# Import these everywhere instead of defining local constants.
+# cost_engine.compute_cluster_cost() uses PROVIDER_VCPU_RATES for provider-aware
+# calculations; these flat rates are for simple pod/node cost helpers outside
+# compute_cluster_cost (dashboard, pods, team_accountability, etc.).
+CPU_COST_PER_CORE_HOUR  = 0.031   # $/vCPU/hr  (AWS us-east-1 fallback)
+MEMORY_COST_PER_GB_HOUR = 0.004   # $/GB/hr    (AWS us-east-1 fallback)
+
 # ── IBM Cloud IKS instance type pricing ($/hr, us-east on-demand) ─────────────
 IBM_IKS_RATES: dict[str, float] = {
     "b3c.2x8":               0.064,

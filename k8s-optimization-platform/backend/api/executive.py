@@ -16,9 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 # ── Cost constants (same as clusters.py) ─────────────────────────────────────
-CPU_COST_PER_CORE_HOUR   = 0.04
-MEMORY_COST_PER_GB_HOUR  = 0.005
-HOURS_PER_MONTH          = 730
+from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR, HOURS_PER_MONTH
 CARBON_KG_PER_USD        = 0.07   # rough: ~0.07 kg CO₂ per $1 compute cost
 
 

@@ -10,6 +10,7 @@ import logging
 
 # Import database manager for agent clusters
 from database.db import db_manager
+from utils.cost_engine import CPU_COST_PER_CORE_HOUR, MEMORY_COST_PER_GB_HOUR, HOURS_PER_MONTH
 
 # Import user registry for org-scoped filtering
 from api.user_management import USER_REGISTRY
@@ -344,10 +345,6 @@ def _get_k8s_direct_cluster() -> List[ClusterInfo]:
             status = "critical"
         
         # Calculate monthly cost (basic estimation)
-        CPU_COST_PER_CORE_HOUR = 0.04
-        MEMORY_COST_PER_GB_HOUR = 0.005
-        HOURS_PER_MONTH = 730
-        
         monthly_cost = (
             cpu_requested_cores * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
             memory_requested_gb * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
@@ -400,10 +397,6 @@ def _calculate_health_score(cpu_usage_pct: float, memory_usage_pct: float) -> fl
 
 def _calculate_costs(cpu_cores: float, memory_gb: float) -> tuple:
     """Calculate monthly cost and potential savings"""
-    CPU_COST_PER_CORE_HOUR = 0.04
-    MEMORY_COST_PER_GB_HOUR = 0.005
-    HOURS_PER_MONTH = 730
-    
     monthly_cost = (
         cpu_cores * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
         memory_gb * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH
@@ -458,10 +451,6 @@ async def get_cluster_summary(
         memory_capacity_gb = cluster_info.get('memory_capacity_gb', 0)
         
         # Calculate monthly cost
-        CPU_COST_PER_CORE_HOUR = 0.04
-        MEMORY_COST_PER_GB_HOUR = 0.005
-        HOURS_PER_MONTH = 730
-        
         monthly_cost = (
             cpu_requested_cores * CPU_COST_PER_CORE_HOUR * HOURS_PER_MONTH +
             memory_requested_gb * MEMORY_COST_PER_GB_HOUR * HOURS_PER_MONTH

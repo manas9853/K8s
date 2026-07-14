@@ -16,10 +16,9 @@ from database.db import db_manager
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# ── cost constants (match recommendations.py) ─────────────────────────────────
-CPU_COST_PER_CORE_HOUR  = 0.04    # $/core/hour
-MEM_COST_PER_GB_HOUR    = 0.005   # $/GB/hour
-HOURS_PER_MONTH         = 730
+# ── cost constants — single source of truth ───────────────────────────────────
+from utils.cost_engine import CPU_COST_PER_CORE_HOUR, HOURS_PER_MONTH
+from utils.cost_engine import MEMORY_COST_PER_GB_HOUR as MEM_COST_PER_GB_HOUR
 MIN_CPU_CORES           = 0.010
 MIN_MEM_MB              = 16.0
 BUFFER                  = 1.3
