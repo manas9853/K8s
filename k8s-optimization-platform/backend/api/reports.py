@@ -2,6 +2,8 @@
 Executive Reports API
 Generates real reports from live cluster data via cost_service + agent metrics.
 No Celery — generation is synchronous and fast enough for interactive use.
+Reports are persisted to a JSON file on disk so they survive across all
+uvicorn worker processes and page refreshes.
 """
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,12 +14,31 @@ from datetime import datetime, timezone, timedelta
 import logging
 import io
 import json
+import os
+import threading
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
-# ── In-process report store (persists for lifetime of container process) ──────
-_generated_reports: list = []
+# ── File-backed report store — shared across all uvicorn workers ──────────────
+_STORE_PATH = "/tmp/k8s_reports.json"
+_store_lock = threading.Lock()
+
+
+def _load_reports() -> list:
+    try:
+        with open(_STORE_PATH, "r") as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+
+def _save_reports(reports: list) -> None:
+    try:
+        with open(_STORE_PATH, "w") as f:
+            json.dump(reports, f, default=str)
+    except Exception as exc:
+        logger.warning("Could not persist reports: %s", exc)
 
 
 class Report(BaseModel):
