@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box, Typography, Grid, Card, CardContent, Paper, Chip,
   CircularProgress, Alert, IconButton, Select, MenuItem, FormControl, InputLabel
@@ -23,7 +24,7 @@ const fmtK = (n: number) => n >= 1000 ? `$${(n/1000).toFixed(1)}k` : `$${n.toFix
 const tooltipStyle = { backgroundColor: '#1e2433', border: '1px solid #2a3245', color: '#e8eaf0' };
 
 const SavingsTrends: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
+  const { clusterParam, activeClusterId } = useActiveCluster();
   const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -32,9 +33,38 @@ const SavingsTrends: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true); setError(null);
-      const r = await fetch(`${API_BASE_URL}/v1/cost-savings/overview${clusterParam}`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setData(await r.json());
+      const [costRes, savRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/v1/finops/cost-management${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/finops/savings-tracker${clusterParam}`),
+      ]);
+      if (!costRes.ok) throw new Error(`HTTP ${costRes.status}`);
+      const [cost, sav] = await Promise.all([
+        costRes.json(),
+        savRes.ok ? savRes.json() : ({} as any),
+      ]);
+
+      const monthly = cost.total_monthly_cost ?? 0;
+      const savPot  = sav.total_savings?.monthly_potential ?? 0;
+      const yearly  = sav.total_savings?.annual_potential_projection ?? savPot * 12;
+
+      // Build 12-month trend (same growth model as finops backend)
+      const now = new Date();
+      const trendData: TrendItem[] = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date(now.getFullYear(), now.getMonth() - (11 - i), 1);
+        const factor = 1 + (11 - i) * 0.02;
+        const mc  = monthly * factor;
+        const opt = (monthly - savPot) * factor;
+        return { month: d.toLocaleString('default', { month: 'short', year: 'numeric' }), current_cost: mc, optimized_cost: opt, savings: mc - opt };
+      });
+
+      setData({
+        monthly_savings:        savPot,
+        yearly_savings:         yearly,
+        savings_percent:        monthly > 0 ? (savPot / monthly) * 100 : 0,
+        current_monthly_cost:   monthly,
+        optimized_monthly_cost: monthly - savPot,
+        trend_data:             trendData,
+      });
     } catch (e) { setError(e instanceof Error ? e.message : 'Failed to fetch'); }
     finally { setLoading(false); }
   };
@@ -69,6 +99,7 @@ const SavingsTrends: React.FC = () => {
 
   return (
     <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <CostAccuracyBanner clusterName={activeClusterId} />
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>

@@ -11,6 +11,7 @@ import CloudIcon from '@mui/icons-material/Cloud';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 const COLORS = ['#3b82d4', '#7c5cd8', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6'];
 
@@ -18,7 +19,7 @@ const fmt = (n: number | null | undefined) =>
   n == null ? '—' : `$${Number(n).toLocaleString()}`;
 
 const CostManagement: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
+  const { clusterParam, activeClusterId } = useActiveCluster();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,7 @@ const CostManagement: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      <CostAccuracyBanner clusterName={activeClusterId} />
       {/* Header */}
       <Box display="flex" alignItems="center" mb={3}>
         <AttachMoneyIcon sx={{ fontSize: 38, mr: 2, color: 'primary.main' }} />
