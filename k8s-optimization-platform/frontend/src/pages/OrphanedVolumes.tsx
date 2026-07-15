@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Card,
@@ -106,6 +107,7 @@ const OrphanedVolumes: React.FC = () => {
 
   return (
     <Box sx={{ p: 3 }}>
+      <CostAccuracyBanner clusterName={clusterParam} />
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <WarningIcon sx={{ fontSize: 40, color: 'warning.main' }} />

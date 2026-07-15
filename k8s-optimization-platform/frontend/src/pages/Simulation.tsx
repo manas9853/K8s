@@ -178,15 +178,21 @@ const SimulationInner: React.FC = () => {
     }
   };
 
+  // savingsData: per-scenario potential savings — fetched from the scenario result on demand.
+  // For the chart we show a proportional estimate: scenarios with more changes = higher savings.
   const savingsData = scenarios.map(s => ({
     name: s.name.substring(0, 20),
-    savings: Math.random() * 1000 + 200,
+    savings: Object.keys(s.changes || {}).length * 150,  // 150 $/change as rough proxy
   }));
 
+  // Risk distribution: derived deterministically from scenario change-count
+  const low    = scenarios.filter(s => Object.keys(s.changes || {}).length === 1).length;
+  const med    = scenarios.filter(s => Object.keys(s.changes || {}).length === 2).length;
+  const high   = scenarios.filter(s => Object.keys(s.changes || {}).length  > 2).length;
   const riskDistribution = [
-    { name: 'Low Risk', value: scenarios.filter(s => Math.random() > 0.5).length, color: '#4caf50' },
-    { name: 'Medium Risk', value: scenarios.filter(s => Math.random() > 0.7).length, color: '#ff9800' },
-    { name: 'High Risk', value: scenarios.filter(s => Math.random() > 0.9).length, color: '#f44336' },
+    { name: 'Low Risk',    value: low,  color: '#4caf50' },
+    { name: 'Medium Risk', value: med,  color: '#ff9800' },
+    { name: 'High Risk',   value: high, color: '#f44336' },
   ];
 
   return (
@@ -240,7 +246,7 @@ const SimulationInner: React.FC = () => {
                 Potential Savings
               </Typography>
               <Typography variant="h4" color="success.main">
-                ${(scenarios.length * 450).toLocaleString()}
+                ${savingsData.reduce((a, b) => a + b.savings, 0).toLocaleString()}
               </Typography>
             </CardContent>
           </Card>
