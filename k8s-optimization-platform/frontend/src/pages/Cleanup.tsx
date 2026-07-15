@@ -7,6 +7,7 @@ import {
 } from '@mui/material';
 import { Refresh, Delete, Schedule, Warning, CheckCircle } from '@mui/icons-material';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import { API_BASE_URL } from '../config/api';
 
 interface CleanupResource {
@@ -130,6 +131,8 @@ const Cleanup: React.FC = () => {
         <Typography variant="h4">Resource Cleanup Dashboard</Typography>
         <IconButton onClick={fetchData} color="primary"><Refresh /></IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       <Grid container spacing={3} sx={{ mb: 3 }}>
         <Grid item xs={12} md={3}><Card><CardContent><Typography variant="h6" color="text.secondary">Total Resources</Typography><Typography variant="h3">{data.summary.total_resources}</Typography><Typography variant="body2">Cleanup candidates</Typography></CardContent></Card></Grid>

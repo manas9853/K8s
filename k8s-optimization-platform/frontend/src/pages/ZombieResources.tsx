@@ -18,6 +18,7 @@ import {
   Hub as HubIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
@@ -164,6 +165,8 @@ const ZombieResources: React.FC = () => {
           <RefreshIcon />
         </IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* Summary stat cards */}
       {summary && (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Paper,
@@ -197,6 +198,8 @@ const Heatmap: React.FC = () => {
           </IconButton>
         </Box>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* Summary Cards */}
       {summary && (

@@ -12,6 +12,7 @@ import {
   Storage as StorageIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 // ─── Strict dark theme — no blues, purples, teals, or gradients ───────────────
 const T = {
@@ -205,6 +206,8 @@ const UnattachedPVCs: React.FC = () => {
           <RefreshIcon fontSize="small" />
         </IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* ── Stats ── */}
       <Grid container spacing={2} sx={{ mb: 3 }}>

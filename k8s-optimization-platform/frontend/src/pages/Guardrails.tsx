@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Paper,
@@ -189,6 +190,8 @@ const Guardrails: React.FC = () => {
           <RefreshIcon />
         </IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* Summary Cards */}
       {stats && (

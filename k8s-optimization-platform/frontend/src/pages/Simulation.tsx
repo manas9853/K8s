@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Paper,
@@ -217,6 +218,8 @@ const SimulationInner: React.FC = () => {
           </IconButton>
         </Box>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>

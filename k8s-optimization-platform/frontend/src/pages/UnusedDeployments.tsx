@@ -18,6 +18,7 @@ import {
   Error as ErrorIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
@@ -370,6 +371,8 @@ const UnusedDeployments: React.FC = () => {
           <RefreshIcon />
         </IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {error && <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>{error}</Alert>}
 

@@ -5,6 +5,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import { useCluster } from '../contexts/ClusterContext';
 import NoClusterBanner from '../components/NoClusterBanner';
 import {
@@ -103,6 +104,8 @@ const Reports: React.FC = () => {
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2 }} />}
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* KPI summary cards */}
       {summary && (
