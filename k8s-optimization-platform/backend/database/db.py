@@ -305,14 +305,22 @@ class DatabaseManager:
             return []
 
     def get_clusters_by_org(self, org_id: str) -> List[Dict[str, Any]]:
-        """Return only clusters belonging to org_id. 'default' returns all (backward-compat)."""
+        """Return clusters belonging to org_id.
+        
+        'default' returns all clusters (backward-compat).
+        Any other org_id returns its own clusters PLUS any clusters tagged
+        'default' — these are clusters registered by agents whose token was
+        not found in the in-memory token store (e.g. after a backend restart),
+        so they fall back to 'default'. Without this, users with a real org_id
+        see nothing after a backend restart.
+        """
         if org_id == "default":
             return self.get_all_clusters()
         try:
             with self._conn() as conn:
                 cur = conn.cursor()
                 cur.execute(
-                    "SELECT * FROM agent_clusters WHERE org_id = %s ORDER BY last_seen DESC",
+                    "SELECT * FROM agent_clusters WHERE org_id = %s OR org_id = 'default' ORDER BY last_seen DESC",
                     (org_id,),
                 )
                 return [dict(r) for r in cur.fetchall()]
