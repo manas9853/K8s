@@ -3,7 +3,7 @@ Kubernetes Security Analysis API
 Provides comprehensive security scanning, vulnerability management, and compliance tracking
 Integrates with real Kubernetes cluster data for security posture assessment
 """
-from fastapi import APIRouter, HTTPException, BackgroundTasks
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
@@ -3433,3 +3433,153 @@ async def get_auto_remediation(cluster_id: Optional[str] = None):
     except Exception as e:
         logger.error(f"Error fetching auto-remediation data: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# /score  — flat alias expected by SecurityReports.tsx
+# ============================================================================
+
+@router.get("/score")
+async def get_security_score_flat(cluster_id: Optional[str] = Query(None)):
+    """
+    Flat security score shape consumed by SecurityReports.tsx.
+    Delegates to calculate_security_score() on real pod+secrets data — same
+    logic as /security-score but returns the overall_security dict directly
+    (not nested under 'overall_security').
+    """
+    try:
+        pods = await fetch_pods_data()
+
+        stale_secrets: list = []
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as _hcl:
+                _url = "http://localhost:8000/api/v1/cleanup/stale-secrets"
+                if cluster_id:
+                    _url += f"?cluster_id={cluster_id}"
+                _sr = await _hcl.get(_url)
+                if _sr.status_code == 200:
+                    stale_secrets = _sr.json().get("resources", [])
+        except Exception as _e:
+            logger.debug("Could not load stale secrets for /score: %s", _e)
+
+        return calculate_security_score(pods, stale_secrets)
+
+    except Exception as e:
+        logger.error("Error in /security/score: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# /alerts  — array of SecurityAlert objects expected by SecurityReports.tsx
+# ============================================================================
+
+@router.get("/alerts")
+async def get_security_alerts(cluster_id: Optional[str] = Query(None)):
+    """
+    Returns the alerts array directly (not wrapped in a dict).
+    SecurityReports.tsx does: Array.isArray(data) ? data : data.alerts ?? []
+    — so returning the raw array is the cleanest shape.
+    Reuses the same alert-building logic from /command-center.
+    """
+    try:
+        pods = await fetch_pods_data()
+
+        stale_secrets: list = []
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as _hcl:
+                _url = "http://localhost:8000/api/v1/cleanup/stale-secrets"
+                if cluster_id:
+                    _url += f"?cluster_id={cluster_id}"
+                _sr = await _hcl.get(_url)
+                if _sr.status_code == 200:
+                    stale_secrets = _sr.json().get("resources", [])
+        except Exception as _e:
+            logger.debug("Could not load stale secrets for /alerts: %s", _e)
+
+        alerts: list = []
+        aid = 1
+
+        for pod in pods:
+            sa        = pod.get("smart_analysis") or {}
+            rl        = (sa.get("risk_level") or "low").lower()
+            rec       = sa.get("recommendation", "")
+            pod_name  = pod.get("pod_name") or pod.get("name", "unknown")
+            namespace = pod.get("namespace", "default")
+            status    = pod.get("status", "")
+            cpu       = float(pod.get("cpu_request") or (pod.get("cpu_metrics") or {}).get("requested") or 0)
+            mem       = float(pod.get("memory_request_mb") or (pod.get("memory_metrics") or {}).get("requested") or 0)
+            mem_cur   = float(pod.get("memory_usage_mb") or (pod.get("memory_metrics") or {}).get("current") or 0)
+
+            if rl == "high":
+                alerts.append({
+                    "id": f"SEC-{aid:04d}", "severity": "critical",
+                    "title": f"High-risk pod: {pod_name}",
+                    "description": rec or f"Pod flagged as high risk in namespace {namespace}.",
+                    "affected_resource": pod_name, "namespace": namespace,
+                    "cluster": cluster_id or "xforce-devops",
+                    "detected_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "open",
+                    "remediation": "Review pod security context and resource configuration.",
+                })
+                aid += 1
+            elif rl == "medium" and status == "under_provisioned":
+                alerts.append({
+                    "id": f"SEC-{aid:04d}", "severity": "high",
+                    "title": f"Under-provisioned pod at risk: {pod_name}",
+                    "description": "Pod is under-provisioned and at medium risk — OOM kill or throttle likely.",
+                    "affected_resource": pod_name, "namespace": namespace,
+                    "cluster": cluster_id or "xforce-devops",
+                    "detected_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "open",
+                    "remediation": "Increase memory/CPU requests or right-size the workload.",
+                })
+                aid += 1
+            elif cpu == 0 and mem == 0:
+                alerts.append({
+                    "id": f"SEC-{aid:04d}", "severity": "medium",
+                    "title": f"No resource limits set: {pod_name}",
+                    "description": f"Pod in {namespace} has no CPU/memory requests — unbounded resource consumption risk.",
+                    "affected_resource": pod_name, "namespace": namespace,
+                    "cluster": cluster_id or "xforce-devops",
+                    "detected_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "open",
+                    "remediation": "Set resource requests and limits in the pod spec.",
+                })
+                aid += 1
+            elif mem > 0 and mem_cur / mem > 0.90:
+                alerts.append({
+                    "id": f"SEC-{aid:04d}", "severity": "medium",
+                    "title": f"Memory pressure: {pod_name}",
+                    "description": f"Pod is using {mem_cur/mem*100:.0f}% of its memory request ({mem_cur:.0f}/{mem:.0f} MB) — OOM risk.",
+                    "affected_resource": pod_name, "namespace": namespace,
+                    "cluster": cluster_id or "xforce-devops",
+                    "detected_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "open",
+                    "remediation": "Increase memory limit or reduce workload.",
+                })
+                aid += 1
+
+        for sec in (stale_secrets or [])[:20]:
+            if (sec.get("risk_level") or "").lower() == "high":
+                alerts.append({
+                    "id": f"SEC-{aid:04d}", "severity": "high",
+                    "title": f"Stale secret: {sec.get('resource_name', '?')}",
+                    "description": sec.get("reason", "Secret not referenced by any pod or service account."),
+                    "affected_resource": sec.get("resource_name", "?"),
+                    "namespace": sec.get("namespace", "?"),
+                    "cluster": cluster_id or "xforce-devops",
+                    "detected_at": datetime.utcnow().isoformat() + "Z",
+                    "status": "open",
+                    "remediation": "Rotate or delete stale credentials.",
+                })
+                aid += 1
+
+        sev_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+        alerts.sort(key=lambda x: sev_order.get(x["severity"], 4))
+        return alerts
+
+    except Exception as e:
+        logger.error("Error in /security/alerts: %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Made with Bob
