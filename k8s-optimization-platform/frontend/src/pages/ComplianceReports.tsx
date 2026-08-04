@@ -53,16 +53,16 @@ const ComplianceReports: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch compliance dashboard which contains all framework data
       const dashRes = await fetch(`${API_BASE_URL}/v1/compliance/dashboard${clusterParam}`);
       if (dashRes.ok) {
         const dash = await dashRes.json();
-        // The dashboard returns per-framework arrays; normalise into rows
         const frameworkScores: FrameworkResult[] = [];
 
-        // Try top-level frameworks list first
-        const frameworks: any[] = dash.frameworks ?? dash.compliance_frameworks ?? [];
-        for (const f of frameworks) {
+        // Shape A: frameworks is an array [{name, compliance_percentage, ...}]
+        const fwArray: any[] = Array.isArray(dash.frameworks ?? dash.compliance_frameworks)
+          ? (dash.frameworks ?? dash.compliance_frameworks)
+          : [];
+        for (const f of fwArray) {
           frameworkScores.push({
             framework: FRAMEWORK_LABELS[f.name?.toLowerCase()] ?? f.name ?? f.framework ?? '—',
             score: f.compliance_percentage ?? f.score ?? 0,
@@ -74,7 +74,25 @@ const ComplianceReports: React.FC = () => {
           });
         }
 
-        // If no frameworks list, fallback to individual numeric fields
+        // Shape B: frameworks is a dict { "CIS Benchmark": 73.8, "SOC 2": 64.5, ... }
+        if (frameworkScores.length === 0 && dash.frameworks && !Array.isArray(dash.frameworks) && typeof dash.frameworks === 'object') {
+          for (const [name, sc] of Object.entries(dash.frameworks as Record<string, number>)) {
+            const score = Number(sc) || 0;
+            if (score > 0) {
+              frameworkScores.push({
+                framework: name,
+                score: Math.round(score),
+                passed: Math.round(score),
+                failed: 100 - Math.round(score),
+                warnings: 0,
+                total_checks: 100,
+                status: score >= 90 ? 'Compliant' : score >= 70 ? 'Partial' : 'Review Needed',
+              });
+            }
+          }
+        }
+
+        // Shape C: flat numeric fields soc2_score, pci_score, ...
         if (frameworkScores.length === 0) {
           const scoreMap: Record<string, number> = {
             'SOC 2': dash.soc2_score ?? dash.soc2 ?? 0,

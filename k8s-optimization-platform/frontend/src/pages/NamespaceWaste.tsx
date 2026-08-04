@@ -13,6 +13,7 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
@@ -143,6 +144,8 @@ const NamespaceWaste: React.FC = () => {
           <RefreshIcon fontSize="small" />
         </IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* Stats */}
       <Grid container spacing={2} sx={{ mb: 3 }}>

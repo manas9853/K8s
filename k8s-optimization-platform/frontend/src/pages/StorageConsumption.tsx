@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -117,6 +118,8 @@ const StorageConsumption: React.FC = () => {
         </Box>
         <IconButton onClick={fetchConsumption} color="primary"><RefreshIcon /></IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* Summary cards */}
       <Grid container spacing={3} sx={{ mb: 3 }}>

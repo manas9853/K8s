@@ -1,327 +1,296 @@
 """
 PVC File Analysis API
-Analyzes files inside PVCs to identify space-saving opportunities
+Analyses PVC usage using agent-collected metrics (used_bytes / avail_bytes
+from kubelet stats).  No pod exec required — works entirely from the data
+the cluster agent already sends every 60 s.
 """
-from fastapi import APIRouter, HTTPException
-from typing import List, Dict, Any
+from fastapi import APIRouter, HTTPException, Query
+from typing import List, Dict, Any, Optional
 import logging
-from datetime import datetime, timedelta
-from services.k8s_client import k8s_client
+from datetime import datetime, timezone
+
+from database.db import db_manager
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-def execute_in_pod(namespace: str, pod_name: str, container: str, command: List[str]) -> str:
+# ── helpers ───────────────────────────────────────────────────────────────────
+
+def _fmt_bytes(b: float) -> str:
+    if b <= 0:
+        return "0 B"
+    if b < 1024:
+        return f"{int(b)} B"
+    if b < 1024 ** 2:
+        return f"{b / 1024:.1f} KB"
+    if b < 1024 ** 3:
+        return f"{b / 1024 ** 2:.1f} MB"
+    return f"{b / 1024 ** 3:.2f} GB"
+
+
+def _parse_k8s_size(s: str) -> float:
+    """Convert Kubernetes storage string (e.g. '20Gi') → bytes."""
+    s = (s or "0").strip()
+    units = {
+        "Ki": 1024, "Mi": 1024**2, "Gi": 1024**3, "Ti": 1024**4,
+        "K":  1000,  "M":  1000**2, "G":  1000**3, "T":  1000**4,
+    }
+    for suffix, mult in units.items():
+        if s.endswith(suffix):
+            try:
+                return float(s[:-len(suffix)]) * mult
+            except ValueError:
+                return 0.0
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
+def _get_metrics(cluster_id: Optional[str]) -> tuple:
+    """Return (cluster_name, latest_metrics) for the given cluster.
+    Falls back to the most-recently-seen cluster when cluster_id is omitted."""
+    if cluster_id:
+        return cluster_id, (db_manager.get_latest_metrics(cluster_id) or {})
+    clusters = db_manager.get_all_clusters()
+    if not clusters:
+        return "", {}
+    name = clusters[0]["cluster_name"]
+    return name, (db_manager.get_latest_metrics(name) or {})
+
+
+# ── endpoints ─────────────────────────────────────────────────────────────────
+
+@router.get("/storage/pvcs-analysis")
+async def list_pvcs_for_analysis(
+    cluster_id: Optional[str] = Query(None),
+):
     """
-    Execute a command inside a pod and return the output
-    
-    Args:
-        namespace: Kubernetes namespace
-        pod_name: Name of the pod
-        container: Container name
-        command: Command to execute as list
-        
-    Returns:
-        Command output as string
+    Return all PVCs with real usage data from the agent.
+    Used by the PVC File Analysis page to populate the selector.
+    Distinct from /storage/pvcs (storage.py) to avoid route shadowing.
     """
     try:
-        from kubernetes.stream import stream
-        
-        v1 = k8s_client.get_core_api()
-        
-        # Execute command in pod
-        resp = stream(
-            v1.connect_get_namespaced_pod_exec,
-            pod_name,
-            namespace,
-            container=container,
-            command=command,
-            stderr=True,
-            stdin=False,
-            stdout=True,
-            tty=False
+        resolved_cluster, metrics = _get_metrics(cluster_id)
+        storage = metrics.get("storage", {})
+        pvcs_data = storage.get("pvcs", {}).get("items", [])
+        pods_data = metrics.get("pods", {}).get("items", [])
+
+        # Build a lookup: pvc_name → list of pod names that mount it
+        pvc_to_pods: Dict[str, List[str]] = {}
+        for pod in pods_data:
+            for pvc_name in pod.get("pvc_mounts", []):
+                pvc_to_pods.setdefault(pvc_name, []).append(pod["name"])
+
+        result = []
+        for pvc in pvcs_data:
+            name     = pvc.get("name", "")
+            ns       = pvc.get("namespace", "")
+            cap_str  = pvc.get("capacity") or pvc.get("size", "0")
+            cap_b    = _parse_k8s_size(cap_str)
+            used_b   = float(pvc.get("used_bytes") or 0)
+            avail_b  = float(pvc.get("avail_bytes") or 0)
+            util_pct = round(used_b / cap_b * 100, 1) if cap_b > 0 and used_b > 0 else 0.0
+
+            result.append({
+                "name":              name,
+                "namespace":         ns,
+                "cluster_id":        resolved_cluster,   # ← frontend echoes this back
+                "status":            pvc.get("status", "Unknown"),
+                "volume_name":       pvc.get("volume_name"),
+                "storage_class":     pvc.get("storage_class"),
+                "capacity":          cap_str,
+                "capacity_bytes":    cap_b,
+                "used_bytes":        used_b,
+                "avail_bytes":       avail_b,
+                "used_capacity":     _fmt_bytes(used_b) if used_b > 0 else "N/A",
+                "free_capacity":     _fmt_bytes(avail_b) if avail_b > 0 else "N/A",
+                "utilization_percent": util_pct,
+                "access_modes":      pvc.get("access_modes", []),
+                "volume_mode":       pvc.get("volume_mode", "Filesystem"),
+                "labels":            pvc.get("labels", {}),
+                "created":           pvc.get("created"),
+                "used_by_pods":      pvc_to_pods.get(name, []),
+                "bound_to_pod":      pvc_to_pods.get(name, [None])[0],
+            })
+
+        return result
+
+    except Exception as e:
+        logger.error(f"list_pvcs_for_analysis: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/storage/pvcs-analysis/{namespace}/{pvc_name}")
+async def analyze_pvc_files(
+    namespace: str,
+    pvc_name: str,
+    cluster_id: Optional[str] = Query(None),
+):
+    """
+    PVC usage analysis built entirely from agent-collected kubelet stats.
+
+    Returns capacity / used / free / utilisation plus a breakdown by pod
+    and actionable recommendations — no pod exec, no direct cluster access.
+    """
+    try:
+        _resolved_cluster, metrics = _get_metrics(cluster_id)
+        storage = metrics.get("storage", {})
+        pvcs_data = storage.get("pvcs", {}).get("items", [])
+        pods_data = metrics.get("pods", {}).get("items", [])
+
+        # Find the requested PVC
+        pvc = next(
+            (p for p in pvcs_data
+             if p.get("name") == pvc_name and p.get("namespace") == namespace),
+            None,
         )
-        
-        return resp
-    except Exception as e:
-        logger.error(f"Error executing command in pod: {e}")
-        raise
-
-
-def find_pod_using_pvc(namespace: str, pvc_name: str) -> Dict[str, str]:
-    """
-    Find a pod that is using the specified PVC
-    
-    Returns:
-        Dict with pod_name, container_name, and mount_path
-    """
-    try:
-        v1 = k8s_client.get_core_api()
-        
-        # Get all pods in namespace
-        pods = v1.list_namespaced_pod(namespace)
-        
-        for pod in pods.items:
-            if pod.spec.volumes:
-                for volume in pod.spec.volumes:
-                    if volume.persistent_volume_claim and volume.persistent_volume_claim.claim_name == pvc_name:
-                        # Found a pod using this PVC
-                        container_name = pod.spec.containers[0].name
-                        
-                        # Find mount path
-                        mount_path = "/data"  # default
-                        for container in pod.spec.containers:
-                            if container.volume_mounts:
-                                for mount in container.volume_mounts:
-                                    if mount.name == volume.name:
-                                        mount_path = mount.mount_path
-                                        break
-                        
-                        return {
-                            "pod_name": pod.metadata.name,
-                            "container_name": container_name,
-                            "mount_path": mount_path,
-                            "pod_status": pod.status.phase
-                        }
-        
-        return None
-    except Exception as e:
-        logger.error(f"Error finding pod for PVC: {e}")
-        return None
-
-
-def analyze_file(file_info: str, mount_path: str) -> Dict[str, Any]:
-    """
-    Parse file information and create analysis
-    
-    File info format from 'find' command:
-    permissions size mtime path
-    """
-    try:
-        parts = file_info.strip().split(maxsplit=3)
-        if len(parts) < 4:
-            return None
-        
-        permissions, size_bytes, mtime_timestamp, path = parts
-        
-        # Parse file metadata
-        size_bytes = int(size_bytes)
-        mtime = datetime.fromtimestamp(int(mtime_timestamp))
-        age_days = (datetime.now() - mtime).days
-        
-        # Determine file type
-        file_type = "directory" if permissions.startswith('d') else "file"
-        
-        # Calculate if file can be deleted (old and not recently accessed)
-        can_delete = age_days > 90 and file_type == "file"
-        
-        # Generate recommendation
-        if age_days > 365:
-            recommendation = "Very old file, consider archiving or deleting"
-        elif age_days > 180:
-            recommendation = "Old file, safe to delete if not needed"
-        elif age_days > 90:
-            recommendation = "Moderately old, review before deleting"
-        else:
-            recommendation = "Recent file, keep"
-        
-        # Format size
-        if size_bytes < 1024:
-            size_str = f"{size_bytes} B"
-        elif size_bytes < 1024 * 1024:
-            size_str = f"{size_bytes / 1024:.1f} KB"
-        elif size_bytes < 1024 * 1024 * 1024:
-            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
-        else:
-            size_str = f"{size_bytes / (1024 * 1024 * 1024):.2f} GB"
-        
-        return {
-            "path": path.replace(mount_path, ""),  # Remove mount path prefix
-            "size": size_str,
-            "size_bytes": size_bytes,
-            "last_modified": mtime.strftime("%Y-%m-%d"),
-            "last_accessed": mtime.strftime("%Y-%m-%d"),  # Using mtime as approximation
-            "age_days": age_days,
-            "type": file_type,
-            "can_delete": can_delete,
-            "recommendation": recommendation
-        }
-    except Exception as e:
-        logger.error(f"Error analyzing file: {e}")
-        return None
-
-
-@router.get("/storage/pvcs/{namespace}/{pvc_name}/files")
-async def analyze_pvc_files(namespace: str, pvc_name: str):
-    """
-    Analyze files inside a PVC
-    
-    This endpoint:
-    1. Finds a pod using the PVC
-    2. Executes file listing commands inside the pod
-    3. Analyzes file metadata (size, age, access patterns)
-    4. Identifies old/unused files
-    5. Calculates potential space savings
-    """
-    try:
-        # Find a pod using this PVC
-        pod_info = find_pod_using_pvc(namespace, pvc_name)
-        
-        if not pod_info:
+        if pvc is None:
             raise HTTPException(
                 status_code=404,
-                detail=f"No running pod found using PVC '{pvc_name}' in namespace '{namespace}'"
+                detail=f"PVC '{pvc_name}' not found in namespace '{namespace}'. "
+                       "Ensure the agent has sent at least one metrics collection.",
             )
-        
-        if pod_info["pod_status"] != "Running":
-            raise HTTPException(
-                status_code=400,
-                detail=f"Pod is not running (status: {pod_info['pod_status']})"
-            )
-        
-        mount_path = pod_info["mount_path"]
-        
-        # Execute find command to list all files with metadata
-        # Format: permissions size mtime path
-        command = [
-            "find",
-            mount_path,
-            "-type", "f",
-            "-o", "-type", "d",
-            "-printf", "%M %s %T@ %p\\n"
+
+        cap_str  = pvc.get("capacity") or pvc.get("size", "0")
+        cap_b    = _parse_k8s_size(cap_str)
+        used_b   = float(pvc.get("used_bytes") or 0)
+        avail_b  = float(pvc.get("avail_bytes") or 0)
+
+        # Derive free bytes: prefer kubelet avail, fall back to cap - used
+        if avail_b <= 0 and cap_b > 0:
+            avail_b = max(cap_b - used_b, 0)
+
+        util_pct = round(used_b / cap_b * 100, 1) if cap_b > 0 and used_b > 0 else 0.0
+
+        # Pods that mount this PVC
+        mounting_pods = [
+            pod for pod in pods_data
+            if pvc_name in pod.get("pvc_mounts", [])
         ]
-        
-        try:
-            output = execute_in_pod(
-                namespace,
-                pod_info["pod_name"],
-                pod_info["container_name"],
-                command
-            )
-        except Exception as e:
-            # Fallback to simpler command if find with printf not available
-            logger.warning(f"Advanced find failed, using fallback: {e}")
-            command = ["ls", "-lR", mount_path]
-            output = execute_in_pod(
-                namespace,
-                pod_info["pod_name"],
-                pod_info["container_name"],
-                command
-            )
-        
-        # Parse output and analyze files
-        files = []
-        total_size = 0
-        old_files_count = 0
-        potential_savings = 0
-        
-        for line in output.split('\n'):
-            if line.strip():
-                file_info = analyze_file(line, mount_path)
-                if file_info:
-                    files.append(file_info)
-                    total_size += file_info["size_bytes"]
-                    
-                    if file_info["can_delete"]:
-                        old_files_count += 1
-                        potential_savings += file_info["size_bytes"]
-        
-        # Get PVC capacity
-        v1 = k8s_client.get_core_api()
-        pvc = v1.read_namespaced_persistent_volume_claim(pvc_name, namespace)
-        
-        capacity = pvc.spec.resources.requests.get("storage", "0Gi")
-        
-        # Calculate usage percentage
-        capacity_bytes = parse_storage_size(capacity)
-        usage_percentage = (total_size / capacity_bytes * 100) if capacity_bytes > 0 else 0
-        
-        # Format sizes
-        def format_bytes(bytes_val):
-            if bytes_val < 1024 * 1024 * 1024:
-                return f"{bytes_val / (1024 * 1024):.1f} MB"
-            return f"{bytes_val / (1024 * 1024 * 1024):.2f} GB"
-        
+
+        # ── per-pod breakdown ─────────────────────────────────────────────────
+        pod_breakdown = []
+        for pod in mounting_pods:
+            cpu_req = pod.get("cpu_request", 0)
+            mem_req = pod.get("memory_request_mb", 0)
+            pod_breakdown.append({
+                "pod_name":       pod.get("name"),
+                "namespace":      pod.get("namespace"),
+                "status":         pod.get("status", "Unknown"),
+                "node":           pod.get("node"),
+                "owner_kind":     pod.get("owner_kind"),
+                "owner_name":     pod.get("owner_name"),
+                "restarts":       pod.get("total_restarts", 0),
+                "cpu_request":    cpu_req,
+                "memory_request_mb": mem_req,
+                "containers":     [c.get("name") for c in pod.get("containers", [])],
+            })
+
+        # ── recommendations ───────────────────────────────────────────────────
+        recommendations = []
+
+        if not mounting_pods:
+            recommendations.append({
+                "severity": "warning",
+                "title":    "PVC not mounted by any running pod",
+                "detail":   "This PVC is Bound but no running pod is currently mounting it. "
+                            "Consider releasing it to free storage costs.",
+                "action":   "Review and delete if unused",
+            })
+
+        if util_pct > 85:
+            recommendations.append({
+                "severity": "critical",
+                "title":    "Disk usage critical",
+                "detail":   f"PVC is {util_pct}% full ({_fmt_bytes(used_b)} of {cap_str}). "
+                            "Pods may start failing with 'no space left on device'.",
+                "action":   "Expand PVC or clean up old data immediately",
+            })
+        elif util_pct > 70:
+            recommendations.append({
+                "severity": "warning",
+                "title":    "High disk usage",
+                "detail":   f"PVC is {util_pct}% full. Consider expanding or cleaning up.",
+                "action":   "Review logs, cache, and backup files inside the volume",
+            })
+        elif util_pct == 0 and used_b == 0:
+            recommendations.append({
+                "severity": "info",
+                "title":    "No usage data available",
+                "detail":   "The agent could not read kubelet stats for this PVC. "
+                            "This is normal for ReadWriteMany volumes on IBM Cloud File Storage "
+                            "— kubelet stats are not exposed for NFS-backed PVCs.",
+                "action":   "Exec into the mounting pod and run 'df -h <mount_path>' for real usage",
+            })
+        else:
+            recommendations.append({
+                "severity": "ok",
+                "title":    "Usage within healthy range",
+                "detail":   f"PVC is {util_pct}% full ({_fmt_bytes(used_b)} used, {_fmt_bytes(avail_b)} free).",
+                "action":   "No action required",
+            })
+
+        for pod in mounting_pods:
+            if pod.get("total_restarts", 0) > 10:
+                recommendations.append({
+                    "severity": "warning",
+                    "title":    f"Pod '{pod['name']}' has high restarts ({pod['total_restarts']})",
+                    "detail":   "Frequent restarts may indicate the app is hitting disk-full errors.",
+                    "action":   "Check pod logs for 'no space left on device'",
+                })
+
+        # ── summary ───────────────────────────────────────────────────────────
         return {
-            "pvc_name": pvc_name,
-            "namespace": namespace,
-            "total_capacity": capacity,
-            "used_space": format_bytes(total_size),
-            "free_space": format_bytes(capacity_bytes - total_size),
-            "usage_percentage": round(usage_percentage, 1),
-            "file_count": len(files),
-            "old_files_count": old_files_count,
-            "potential_savings": format_bytes(potential_savings),
-            "files": sorted(files, key=lambda x: x["age_days"], reverse=True)[:100],  # Top 100 oldest
-            "pod_info": pod_info
+            "pvc_name":           pvc_name,
+            "namespace":          namespace,
+            "status":             pvc.get("status", "Unknown"),
+            "storage_class":      pvc.get("storage_class"),
+            "access_modes":       pvc.get("access_modes", []),
+            "volume_mode":        pvc.get("volume_mode", "Filesystem"),
+            "created":            pvc.get("created"),
+
+            # Capacity
+            "total_capacity":     cap_str,
+            "capacity_bytes":     cap_b,
+            "used_space":         _fmt_bytes(used_b) if used_b > 0 else "N/A",
+            "free_space":         _fmt_bytes(avail_b) if avail_b > 0 else "N/A",
+            "used_bytes":         used_b,
+            "avail_bytes":        avail_b,
+            "usage_percentage":   util_pct,
+            "has_real_usage":     used_b > 0,
+
+            # Pods
+            "mounting_pods_count": len(mounting_pods),
+            "pod_breakdown":      pod_breakdown,
+
+            # Recommendations
+            "recommendations":    recommendations,
+
+            # Legacy fields (keep so frontend doesn't break)
+            "file_count":         0,
+            "old_files_count":    0,
+            "potential_savings":  "N/A",
+            "files":              [],
+
+            # Data source note
+            "data_source":        "agent_kubelet_stats",
+            "note": (
+                "File-level listing requires exec access to the pod. "
+                "This view shows kubelet-reported disk usage collected by the agent."
+                if used_b == 0 else
+                "Usage data sourced from kubelet stats via the cluster agent."
+            ),
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error analyzing PVC files: {e}")
+        logger.error(f"analyze_pvc_files: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/storage/pvcs/{namespace}/{pvc_name}/files")
-async def delete_file_from_pvc(namespace: str, pvc_name: str, file_path: str):
-    """
-    Delete a file from a PVC
-    
-    WARNING: This operation cannot be undone!
-    """
-    try:
-        # Find pod using PVC
-        pod_info = find_pod_using_pvc(namespace, pvc_name)
-        
-        if not pod_info:
-            raise HTTPException(status_code=404, detail="No pod found using this PVC")
-        
-        mount_path = pod_info["mount_path"]
-        full_path = f"{mount_path}/{file_path.lstrip('/')}"
-        
-        # Execute delete command
-        command = ["rm", "-rf", full_path]
-        
-        output = execute_in_pod(
-            namespace,
-            pod_info["pod_name"],
-            pod_info["container_name"],
-            command
-        )
-        
-        return {
-            "success": True,
-            "message": f"File deleted: {file_path}",
-            "path": full_path
-        }
-        
-    except Exception as e:
-        logger.error(f"Error deleting file: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
-
-def parse_storage_size(size_str: str) -> int:
-    """Convert Kubernetes storage size to bytes"""
-    size_str = size_str.strip()
-    
-    units = {
-        'Ki': 1024,
-        'Mi': 1024 ** 2,
-        'Gi': 1024 ** 3,
-        'Ti': 1024 ** 4,
-        'K': 1000,
-        'M': 1000 ** 2,
-        'G': 1000 ** 3,
-        'T': 1000 ** 4,
-    }
-    
-    for unit, multiplier in units.items():
-        if size_str.endswith(unit):
-            return int(float(size_str[:-len(unit)]) * multiplier)
-    
-    # No unit, assume bytes
-    return int(size_str)
 
 # Made with Bob

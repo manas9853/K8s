@@ -1,6 +1,9 @@
 """
 Token Management API
-Generate and manage API tokens for cluster agents
+Generate and manage API tokens for cluster agents.
+Tokens are persisted in the same Postgres DB used by the agent receiver so
+they survive backend restarts.  Falls back to an in-memory dict when the DB
+is unavailable (local dev without Postgres).
 """
 from fastapi import APIRouter, HTTPException, Depends, Header
 from pydantic import BaseModel
@@ -9,16 +12,151 @@ from datetime import datetime, timedelta
 import secrets
 import hashlib
 import json
+import logging
 import os
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/tokens", tags=["tokens"])
 
-# In-memory token storage (replace with database in production)
-# Format: {token_hash: {token_info}}
-tokens_db = {}
-
 # Admin token for token management (set via environment variable)
 ADMIN_TOKEN = os.getenv('ADMIN_TOKEN', 'admin-secret-token-change-me')
+
+# ---------------------------------------------------------------------------
+# Persistent token store backed by Postgres (same DB as agent_clusters).
+# Falls back to in-memory dict when DB is not available.
+# ---------------------------------------------------------------------------
+
+def _get_db():
+    """Return the shared DatabaseManager, or None if unavailable."""
+    try:
+        from database.db import db_manager
+        if db_manager._pool is not None:
+            return db_manager
+    except Exception:
+        pass
+    return None
+
+
+def _ensure_tokens_table():
+    """Create api_tokens table if it doesn't exist yet."""
+    db = _get_db()
+    if db is None:
+        return
+    try:
+        with db._conn() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS api_tokens (
+                    token_hash   TEXT PRIMARY KEY,
+                    name         TEXT NOT NULL,
+                    description  TEXT,
+                    created_at   TEXT NOT NULL,
+                    expires_at   TEXT,
+                    last_used    TEXT,
+                    usage_count  INTEGER DEFAULT 0,
+                    status       TEXT NOT NULL DEFAULT 'active',
+                    org_id       TEXT NOT NULL DEFAULT 'default'
+                )
+            """)
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"Could not create api_tokens table: {e}")
+
+
+_ensure_tokens_table()
+
+# In-memory fallback (used only when Postgres is unavailable)
+_fallback_tokens: dict = {}
+
+
+def _load_token(token_hash: str) -> Optional[dict]:
+    db = _get_db()
+    if db:
+        try:
+            with db._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM api_tokens WHERE token_hash = %s", (token_hash,))
+                row = cur.fetchone()
+                return dict(row) if row else None
+        except Exception as e:
+            logger.warning(f"DB token load failed: {e}")
+    return _fallback_tokens.get(token_hash)
+
+
+def _save_token(info: dict):
+    db = _get_db()
+    if db:
+        try:
+            with db._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO api_tokens
+                        (token_hash, name, description, created_at, expires_at,
+                         last_used, usage_count, status, org_id)
+                    VALUES (%(token_hash)s, %(name)s, %(description)s, %(created_at)s,
+                            %(expires_at)s, %(last_used)s, %(usage_count)s,
+                            %(status)s, %(org_id)s)
+                    ON CONFLICT (token_hash) DO UPDATE SET
+                        name        = EXCLUDED.name,
+                        description = EXCLUDED.description,
+                        expires_at  = EXCLUDED.expires_at,
+                        last_used   = EXCLUDED.last_used,
+                        usage_count = EXCLUDED.usage_count,
+                        status      = EXCLUDED.status,
+                        org_id      = EXCLUDED.org_id
+                """, info)
+                conn.commit()
+                return
+        except Exception as e:
+            logger.warning(f"DB token save failed, using in-memory fallback: {e}")
+    _fallback_tokens[info["token_hash"]] = info
+
+
+def _all_tokens() -> List[dict]:
+    db = _get_db()
+    if db:
+        try:
+            with db._conn() as conn:
+                cur = conn.cursor()
+                cur.execute("SELECT * FROM api_tokens ORDER BY created_at DESC")
+                return [dict(r) for r in cur.fetchall()]
+        except Exception as e:
+            logger.warning(f"DB token list failed: {e}")
+    return list(_fallback_tokens.values())
+
+
+def _update_token(token_hash: str, fields: dict):
+    info = _load_token(token_hash)
+    if info is None:
+        return
+    info.update(fields)
+    _save_token(info)
+
+
+# Thin compatibility shim so existing call-sites that do `tokens_db[hash]`
+# still work without changes.
+class _TokensDB:
+    def get(self, key, default=None):
+        return _load_token(key) or default
+
+    def __contains__(self, key):
+        return _load_token(key) is not None
+
+    def __getitem__(self, key):
+        val = _load_token(key)
+        if val is None:
+            raise KeyError(key)
+        return val
+
+    def __setitem__(self, key, value):
+        _save_token(value)
+
+    def values(self):
+        return _all_tokens()
+
+
+tokens_db = _TokensDB()
 
 
 class TokenCreate(BaseModel):
@@ -163,8 +301,8 @@ async def revoke_token(
     """
     if token_hash not in tokens_db:
         raise HTTPException(status_code=404, detail="Token not found")
-    
-    tokens_db[token_hash]["status"] = "revoked"
+
+    _update_token(token_hash, {"status": "revoked"})
     
     return {
         "status": "success",
@@ -203,9 +341,11 @@ async def verify_token(authorization: str = Header(None)):
         if datetime.utcnow() > expires_at:
             raise HTTPException(status_code=401, detail="Token has expired")
     
-    # Update usage stats
-    token_info["last_used"] = datetime.utcnow().isoformat()
-    token_info["usage_count"] += 1
+    # Update usage stats (persist to DB)
+    _update_token(token_hash, {
+        "last_used": datetime.utcnow().isoformat(),
+        "usage_count": (token_info.get("usage_count") or 0) + 1,
+    })
     
     return {
         "status": "valid",
@@ -219,27 +359,13 @@ async def verify_token(authorization: str = Header(None)):
 @router.get("/health")
 async def token_service_health():
     """Health check for token service"""
+    all_t = _all_tokens()
     return {
         "status": "healthy",
-        "total_tokens": len(tokens_db),
-        "active_tokens": sum(1 for t in tokens_db.values() if t["status"] == "active"),
-        "revoked_tokens": sum(1 for t in tokens_db.values() if t["status"] == "revoked")
-    }
-
-
-# Initialize with a default token for testing (remove in production)
-if not tokens_db:
-    default_token = "test-token-12345"
-    default_hash = hash_token(default_token)
-    tokens_db[default_hash] = {
-        "token_hash": default_hash,
-        "name": "Default Test Token",
-        "description": "Default token for testing (remove in production)",
-        "created_at": datetime.utcnow().isoformat(),
-        "expires_at": None,
-        "last_used": None,
-        "usage_count": 0,
-        "status": "active"
+        "total_tokens": len(all_t),
+        "active_tokens": sum(1 for t in all_t if t["status"] == "active"),
+        "revoked_tokens": sum(1 for t in all_t if t["status"] == "revoked"),
+        "storage": "postgres" if _get_db() else "in-memory",
     }
 
 # Made with Bob

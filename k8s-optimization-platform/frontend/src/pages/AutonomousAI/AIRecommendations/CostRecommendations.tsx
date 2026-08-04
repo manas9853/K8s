@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import CostAccuracyBanner from '../../../components/CostAccuracyBanner';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Checkbox,
@@ -222,6 +223,8 @@ const CostRecommendations: React.FC = () => {
           </IconButton>
         </Tooltip>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: '#3b82f6' }} /></Box>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}

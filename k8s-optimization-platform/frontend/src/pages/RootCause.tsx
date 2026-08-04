@@ -17,6 +17,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import ClusterGuard from '../components/ClusterGuard';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import { API_BASE_URL } from '../config/api';
 import {
   PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
@@ -255,9 +256,11 @@ const RootCauseInner: React.FC = () => {
           </IconButton>
         </Tooltip>
       </Box>
-      <Typography sx={{ color: DK.muted, fontSize: '0.85rem', mb: 3 }}>
+      <Typography sx={{ color: DK.muted, fontSize: '0.85rem', mb: 2 }}>
         Live waste analysis from cluster agent — identify why resources are over-spent and fix them
       </Typography>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {analysis && (
         <>

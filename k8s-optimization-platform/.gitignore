@@ -45,3 +45,9 @@ backend/data/
 *.tar.gz
 *.bak
 Dockerfile.*.backup
+
+# ── Backend secrets (never commit) ───────────────────────────────────────────
+backend/.env
+backend/.env.production
+backend/.env.local
+.env.production

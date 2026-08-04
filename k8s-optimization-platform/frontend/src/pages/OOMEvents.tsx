@@ -36,6 +36,7 @@ import {
   TrendingUp as TrendingUpIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 interface OOMEventItem {
   pod_name: string;
@@ -166,6 +167,8 @@ const OOMEvents: React.FC = () => {
           </IconButton>
         </Box>
       </Box>
+
+      <CostAccuracyBanner clusterName={selectedClusterId === 'all' ? null : selectedClusterId} />
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

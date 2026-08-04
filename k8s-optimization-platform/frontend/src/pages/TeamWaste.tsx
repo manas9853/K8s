@@ -13,6 +13,7 @@ import {
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
@@ -127,6 +128,8 @@ const TeamWaste: React.FC = () => {
           <RefreshIcon fontSize="small" />
         </IconButton>
       </Box>
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* Info banner if no team labels set */}
       {allUnknown && (

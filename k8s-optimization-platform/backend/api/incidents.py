@@ -1,32 +1,26 @@
 """
 AI Incident Correlation API
-Correlate resource issues with incidents (OOMKills, restarts, throttling)
-NOW WITH REAL KUBERNETES DATA INTEGRATION
+Detects OOMKill risk, restart incidents, and CPU throttling directly from
+the live agent_metrics stored in Postgres — no K8S_AVAILABLE gate, no
+self-HTTP calls.
 """
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 from datetime import datetime, timezone
 import logging
-import httpx
-import os
-
-# Import Kubernetes client
-from services.k8s_client import k8s_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-# Check if Kubernetes is available
-K8S_AVAILABLE = k8s_client is not None and k8s_client.is_connected()
 
+# ── Pydantic models ────────────────────────────────────────────────────────────
 
 class Incident(BaseModel):
-    """Incident definition"""
     incident_id: str
-    type: str  # oomkill, restart, throttling, eviction, crash
-    severity: str  # critical, high, medium, low
+    type: str          # oomkill | restart | throttling | eviction
+    severity: str      # critical | high | medium | low
     pod_name: str
     namespace: str
     cluster: str
@@ -37,14 +31,13 @@ class Incident(BaseModel):
 
 
 class CorrelationAnalysis(BaseModel):
-    """Correlation analysis result"""
     incident_id: str
     incident_type: str
     pod_name: str
     namespace: str
     cluster: str
     root_cause: str
-    confidence: float  # 0-100
+    confidence: float
     correlated_metrics: Dict[str, Any]
     recommendation: str
     estimated_fix_time: str
@@ -52,7 +45,6 @@ class CorrelationAnalysis(BaseModel):
 
 
 class IncidentPattern(BaseModel):
-    """Incident pattern"""
     pattern_id: str
     pattern_type: str
     description: str
@@ -62,694 +54,449 @@ class IncidentPattern(BaseModel):
     prevention_steps: List[str]
 
 
-class IncidentTimeline(BaseModel):
-    """Incident timeline"""
-    timestamp: str
-    incident_type: str
-    pod_name: str
-    namespace: str
-    severity: str
-    message: str
+# ── Helpers ────────────────────────────────────────────────────────────────────
 
-
-def parse_cpu(cpu_str: str) -> float:
-    """Parse CPU string to cores"""
-    if not cpu_str or cpu_str == '0':
+def parse_cpu(val) -> float:
+    s = str(val).strip()
+    if not s or s == "0":
         return 0.0
     try:
-        cpu_str = str(cpu_str).strip()
-        if cpu_str.endswith('n'):
-            return float(cpu_str[:-1]) / 1_000_000_000
-        elif cpu_str.endswith('u'):
-            return float(cpu_str[:-1]) / 1_000_000
-        elif cpu_str.endswith('m'):
-            return float(cpu_str[:-1]) / 1000
-        else:
-            return float(cpu_str)
-    except:
+        if s.endswith("n"):
+            return float(s[:-1]) / 1_000_000_000
+        if s.endswith("u"):
+            return float(s[:-1]) / 1_000_000
+        if s.endswith("m"):
+            return float(s[:-1]) / 1000
+        return float(s)
+    except Exception:
         return 0.0
 
 
-def parse_memory(mem_str: str) -> float:
-    """Parse memory string to MB"""
-    if not mem_str or mem_str == '0':
+def parse_memory(val) -> float:
+    """Return MB"""
+    s = str(val).strip()
+    if not s or s == "0":
         return 0.0
     try:
-        mem_str = str(mem_str).strip()
-        if mem_str.endswith('Ki'):
-            return float(mem_str[:-2]) / 1024
-        elif mem_str.endswith('Mi'):
-            return float(mem_str[:-2])
-        elif mem_str.endswith('Gi'):
-            return float(mem_str[:-2]) * 1024
-        elif mem_str.endswith('Ti'):
-            return float(mem_str[:-2]) * 1024 * 1024
-        elif mem_str.endswith('K'):
-            return float(mem_str[:-1]) / 1024
-        elif mem_str.endswith('M'):
-            return float(mem_str[:-1])
-        elif mem_str.endswith('G'):
-            return float(mem_str[:-1]) * 1024
-        elif mem_str.endswith('T'):
-            return float(mem_str[:-1]) * 1024 * 1024
-        else:
-            return float(mem_str) / (1024 * 1024)
-    except:
+        if s.endswith("Ki"):
+            return float(s[:-2]) / 1024
+        if s.endswith("Mi"):
+            return float(s[:-2])
+        if s.endswith("Gi"):
+            return float(s[:-2]) * 1024
+        if s.endswith("Ti"):
+            return float(s[:-2]) * 1024 * 1024
+        if s.endswith("K"):
+            return float(s[:-1]) / 1024
+        if s.endswith("M"):
+            return float(s[:-1])
+        if s.endswith("G"):
+            return float(s[:-1]) * 1024
+        return float(s) / (1024 * 1024)
+    except Exception:
         return 0.0
 
 
-async def fetch_pods_data() -> List[dict]:
-    """Fetch real pod data from Pods API"""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get("http://localhost:8000/api/v1/pods")
-            if response.status_code == 200:
-                return response.json()
-            else:
-                logger.error(f"Failed to fetch pods data: {response.status_code}")
-                return []
-    except Exception as e:
-        logger.error(f"Error fetching pods data: {e}")
-        return []
+def _get_pods(cluster_id: Optional[str] = None):
+    """
+    Load raw pod list from the latest agent_metrics row.
+    Returns (pods: list[dict], cluster_name: str).
+    """
+    from database.db import db_manager
+    from utils.cluster_registry import get_clusters
 
+    # Resolve cluster_name
+    if cluster_id:
+        cluster_name = cluster_id
+    else:
+        clusters = get_clusters()
+        if not clusters:
+            return [], "unknown"
+        cluster_name = clusters[0]["id"]
 
-async def fetch_recommendations_data() -> List[dict]:
-    """Fetch recommendations from Recommendations API"""
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.get("http://localhost:8000/api/v1/recommendations")
-            if response.status_code == 200:
-                data = response.json()
-                return data if isinstance(data, list) else []
-            else:
-                logger.error(f"Failed to fetch recommendations: {response.status_code}")
-                return []
-    except Exception as e:
-        logger.error(f"Error fetching recommendations: {e}")
-        return []
+    metrics = db_manager.get_latest_metrics(cluster_name)
+    if not metrics:
+        # Try by display name
+        all_c = db_manager.get_all_clusters()
+        if all_c:
+            cluster_name = all_c[0]["cluster_name"]
+            metrics = db_manager.get_latest_metrics(cluster_name)
+    if not metrics:
+        return [], cluster_name
 
-
-def analyze_incidents_from_pods(pods_data: List[dict], recommendations: List[dict], cluster_id: str) -> tuple:
-    """Analyze pods to detect incidents (OOMKills, restarts, throttling)"""
-    
-    incidents = []
-    correlations = []
-    incident_counter = 1
-    
-    # Create recommendation lookup for correlation
-    rec_lookup = {}
-    for rec in recommendations:
-        key = f"{rec.get('namespace', '')}:{rec.get('pod_name', '')}"
-        rec_lookup[key] = rec
-    
-    for pod in pods_data:
-        pod_name = pod.get('pod_name', 'unknown')
-        namespace = pod.get('namespace', 'default')
-        restarts = pod.get('smart_analysis', {}).get('issue', '').split()[0] if 'restart' in pod.get('smart_analysis', {}).get('issue', '').lower() else '0'
-        
-        # Extract restart count
+    pods_domain = metrics.get("pods") or {}
+    if isinstance(pods_domain, str):
+        import json
         try:
-            restart_count = int(restarts) if restarts.isdigit() else 0
-        except:
-            restart_count = 0
-        
-        # Get resource metrics
-        cpu_metrics = pod.get('cpu_metrics', {})
-        memory_metrics = pod.get('memory_metrics', {})
-        
-        cpu_utilization = cpu_metrics.get('utilization_percent', 0)
-        memory_utilization = memory_metrics.get('utilization_percent', 0)
-        
-        cpu_requested = cpu_metrics.get('requested', 0)
-        cpu_limit = cpu_metrics.get('limit', 0)
-        cpu_current = cpu_metrics.get('current', 0)
-        
-        memory_requested = memory_metrics.get('requested', 0)
-        memory_limit = memory_metrics.get('limit', 0)
-        memory_current = memory_metrics.get('current', 0)
-        memory_peak = memory_metrics.get('peak', 0)
-        
-        # Get recommendation for this pod
-        rec_key = f"{namespace}:{pod_name}"
-        recommendation = rec_lookup.get(rec_key, {})
-        
-        # Detect OOMKill risk (memory usage > 90% of limit)
-        if memory_limit > 0 and memory_peak > 0:
-            memory_usage_percent = (memory_peak / memory_limit) * 100
-            if memory_usage_percent > 90:
-                incident_id = f"inc-{incident_counter:03d}"
-                incident_counter += 1
-                
-                # Estimate OOMKill count based on restarts and memory pressure
-                oomkill_count = max(1, restart_count // 2) if restart_count > 0 else 1
-                
-                severity = "critical" if memory_usage_percent > 95 else "high"
-                
+            pods_domain = json.loads(pods_domain)
+        except Exception:
+            pods_domain = {}
+
+    pods = pods_domain.get("items", [])
+    return pods, cluster_name
+
+
+def _analyze(pods: list, cluster_name: str):
+    """
+    Scan every pod for OOMKill risk, high restarts, and CPU throttling.
+    Returns (incidents, correlations) as lists of dicts.
+    """
+    incidents    = []
+    correlations = []
+    counter      = 1
+    now          = datetime.now(timezone.utc).isoformat()
+
+    for pod in pods:
+        pod_name  = pod.get("name") or pod.get("pod_name") or "unknown"
+        namespace = pod.get("namespace") or "default"
+
+        # ── Resource values ──────────────────────────────────────────────────
+        cpu_req   = float(pod.get("cpu_request")        or 0.0)
+        cpu_lim   = float(pod.get("cpu_limit")          or 0.0)
+        mem_req   = float(pod.get("memory_request_mb")  or 0.0)
+        mem_lim   = float(pod.get("memory_limit_mb")    or 0.0)
+
+        # Fall back to container-level if pod-level is zero
+        if cpu_req == 0:
+            for c in pod.get("containers", []):
+                cpu_req += parse_cpu(c.get("cpu_request", "0"))
+                cpu_lim += parse_cpu(c.get("cpu_limit",   "0"))
+                mem_req += float(c.get("memory_request_mb", 0)) or \
+                           parse_memory(c.get("memory_request", "0"))
+                mem_lim += float(c.get("memory_limit_mb",  0)) or \
+                           parse_memory(c.get("memory_limit",  "0"))
+
+        cpu_usage = float(pod.get("cpu_usage_cores") or 0.0)
+        mem_usage = float(pod.get("memory_usage_mb")  or 0.0)
+
+        # Effective limit defaults to 2× request when absent
+        eff_cpu_lim = cpu_lim if cpu_lim > 0 else cpu_req * 2
+        eff_mem_lim = mem_lim if mem_lim > 0 else mem_req * 2
+
+        # Peak estimates (1.3× current when live data absent)
+        has_live  = cpu_usage > 0 or mem_usage > 0
+        cpu_usage = cpu_usage or (cpu_req * 0.5)
+        mem_usage = mem_usage or (mem_req * 0.5)
+        cpu_peak  = cpu_usage * (1.2 if has_live else 1.3)
+        mem_peak  = mem_usage * (1.2 if has_live else 1.3)
+
+        restarts = int(pod.get("restarts") or pod.get("total_restarts") or 0)
+        age_days = int(pod.get("age_days") or 1) or 1
+
+        # ── 1. OOMKill risk — memory peak > 90 % of limit ───────────────────
+        if eff_mem_lim > 0:
+            mem_pct = mem_peak / eff_mem_lim * 100
+            if mem_pct > 90:
+                iid      = f"inc-{counter:03d}"
+                counter += 1
+                severity = "critical" if mem_pct > 95 else "high"
+                oomkill_count = max(1, restarts // 2) if restarts > 0 else 1
+                rec_lim = eff_mem_lim * 1.3
+
                 incidents.append({
-                    "incident_id": incident_id,
-                    "type": "oomkill",
-                    "severity": severity,
-                    "pod_name": pod_name,
-                    "namespace": namespace,
-                    "cluster": cluster_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "count": oomkill_count,
-                    "message": f"High OOMKill risk: Memory usage at {memory_usage_percent:.1f}% of limit",
+                    "incident_id":          iid,
+                    "type":                 "oomkill",
+                    "severity":             severity,
+                    "pod_name":             pod_name,
+                    "namespace":            namespace,
+                    "cluster":              cluster_name,
+                    "timestamp":            now,
+                    "count":                oomkill_count,
+                    "message":              f"OOMKill risk: memory peak {mem_pct:.1f}% of limit",
                     "resource_correlation": {
-                        "memory_request": f"{memory_requested:.0f}Mi",
-                        "memory_limit": f"{memory_limit:.0f}Mi",
-                        "peak_memory_usage": f"{memory_peak:.0f}Mi",
-                        "avg_memory_usage": f"{memory_current:.0f}Mi",
-                        "memory_trend": "critical" if memory_usage_percent > 95 else "high"
-                    }
-                })
-                
-                # Create correlation
-                mem_rec = recommendation.get('memory', {})
-                recommended_limit = mem_rec.get('recommended_limit', memory_limit * 1.3)
-                
-                correlations.append({
-                    "incident_id": incident_id,
-                    "incident_type": "oomkill",
-                    "pod_name": pod_name,
-                    "namespace": namespace,
-                    "cluster": cluster_id,
-                    "root_cause": "Memory limit too low for workload requirements",
-                    "confidence": 95.0 if memory_usage_percent > 95 else 85.0,
-                    "correlated_metrics": {
-                        "memory_usage_trend": f"Peak at {memory_usage_percent:.1f}% of limit",
-                        "peak_usage": f"{memory_peak:.0f}Mi (exceeds safe threshold)",
-                        "avg_usage": f"{memory_current:.0f}Mi ({memory_utilization:.1f}% of limit)",
-                        "oomkill_risk": "Very High" if memory_usage_percent > 95 else "High",
-                        "restart_count": restart_count
+                        "memory_request":    f"{mem_req:.0f}Mi",
+                        "memory_limit":      f"{eff_mem_lim:.0f}Mi",
+                        "peak_memory_usage": f"{mem_peak:.0f}Mi",
+                        "memory_trend":      severity,
                     },
-                    "recommendation": f"Increase memory limit to {recommended_limit:.0f}Mi",
-                    "estimated_fix_time": "5 minutes",
-                    "priority": severity
                 })
-        
-        # Detect restart incidents (restarts > 3)
-        # Calculate restart rate: restarts per day based on pod age
-        age_days = pod.get('age_days', 1)
-        if age_days < 1:
-            age_days = 1  # Minimum 1 day to avoid division by zero
-        
-        restarts_per_day = restart_count / age_days if age_days > 0 else restart_count
-        
-        # Only flag as incident if restart rate is high (>1 per day) OR recent high restarts
-        # This avoids false positives for old pods with historical restarts
-        if restart_count > 10 and restarts_per_day > 1:
-            incident_id = f"inc-{incident_counter:03d}"
-            incident_counter += 1
-            
-            # Severity based on restart rate, not total count
+                correlations.append({
+                    "incident_id":       iid,
+                    "incident_type":     "oomkill",
+                    "pod_name":          pod_name,
+                    "namespace":         namespace,
+                    "cluster":           cluster_name,
+                    "root_cause":        "Memory limit too low for workload requirements",
+                    "confidence":        95.0 if mem_pct > 95 else 85.0,
+                    "correlated_metrics": {
+                        "memory_peak_pct_of_limit": f"{mem_pct:.1f}%",
+                        "peak_usage_mb":            f"{mem_peak:.0f}",
+                        "limit_mb":                 f"{eff_mem_lim:.0f}",
+                        "oomkill_risk":             "Very High" if mem_pct > 95 else "High",
+                    },
+                    "recommendation":    f"Increase memory limit to {rec_lim:.0f}Mi",
+                    "estimated_fix_time": "5 minutes",
+                    "priority":          severity,
+                })
+
+        # ── 2. Restart incidents — >10 restarts AND >1/day rate ─────────────
+        restarts_per_day = restarts / age_days
+        if restarts > 10 and restarts_per_day > 1:
+            iid      = f"inc-{counter:03d}"
+            counter += 1
             if restarts_per_day > 10:
                 severity = "critical"
             elif restarts_per_day > 5:
                 severity = "high"
             else:
                 severity = "medium"
-            
-            # Determine restart reason
-            restart_reason = "Unknown"
-            if memory_peak > memory_limit * 0.9:
-                restart_reason = "OOMKilled"
-            elif cpu_current > cpu_limit * 0.9:
-                restart_reason = "CPU throttling"
+
+            if mem_peak > eff_mem_lim * 0.9:
+                reason = "OOMKilled"
+                root   = "Memory exhaustion causing OOMKills"
+            elif eff_cpu_lim > 0 and cpu_peak > eff_cpu_lim * 0.9:
+                reason = "CPU throttling"
+                root   = "CPU throttling causing application timeouts"
             else:
-                restart_reason = "CrashLoopBackOff"
-            
+                reason = "CrashLoopBackOff"
+                root   = "Resource constraints causing application crashes"
+
             incidents.append({
-                "incident_id": incident_id,
-                "type": "restart",
-                "severity": severity,
-                "pod_name": pod_name,
-                "namespace": namespace,
-                "cluster": cluster_id,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-                "count": restart_count,
-                "message": f"Pod restarted {restart_count} times",
+                "incident_id":          iid,
+                "type":                 "restart",
+                "severity":             severity,
+                "pod_name":             pod_name,
+                "namespace":            namespace,
+                "cluster":              cluster_name,
+                "timestamp":            now,
+                "count":                restarts,
+                "message":              f"Pod restarted {restarts}× ({restarts_per_day:.1f}/day) — {reason}",
                 "resource_correlation": {
-                    "cpu_request": f"{cpu_requested:.3f}",
-                    "cpu_limit": f"{cpu_limit:.3f}",
-                    "cpu_usage": f"{cpu_current:.3f}",
-                    "restart_reason": restart_reason
-                }
-            })
-            
-            # Create correlation
-            root_cause = "Resource constraints causing application crashes"
-            if restart_reason == "OOMKilled":
-                root_cause = "Memory exhaustion causing OOMKills"
-            elif restart_reason == "CPU throttling":
-                root_cause = "CPU throttling causing application timeouts"
-            
-            correlations.append({
-                "incident_id": incident_id,
-                "incident_type": "restart",
-                "pod_name": pod_name,
-                "namespace": namespace,
-                "cluster": cluster_id,
-                "root_cause": root_cause,
-                "confidence": 88.0,
-                "correlated_metrics": {
-                    "restart_count": restart_count,
-                    "restart_reason": restart_reason,
-                    "cpu_utilization": f"{cpu_utilization:.1f}%",
-                    "memory_utilization": f"{memory_utilization:.1f}%"
+                    "restart_count":    restarts,
+                    "restart_reason":   reason,
+                    "cpu_usage_cores":  f"{cpu_usage:.3f}",
+                    "mem_usage_mb":     f"{mem_usage:.0f}",
                 },
-                "recommendation": recommendation.get('smart_analysis', {}).get('recommendation', 'Increase resource limits'),
-                "estimated_fix_time": "3 minutes",
-                "priority": severity
             })
-        
-        # Detect CPU throttling (CPU usage > 85% of limit)
-        if cpu_limit > 0 and cpu_current > 0:
-            cpu_usage_percent = (cpu_current / cpu_limit) * 100
-            if cpu_usage_percent > 85:
-                incident_id = f"inc-{incident_counter:03d}"
-                incident_counter += 1
-                
-                severity = "high" if cpu_usage_percent > 95 else "medium"
-                throttling_events = int((cpu_usage_percent - 85) * 10)  # Estimate
-                
+            correlations.append({
+                "incident_id":       iid,
+                "incident_type":     "restart",
+                "pod_name":          pod_name,
+                "namespace":         namespace,
+                "cluster":           cluster_name,
+                "root_cause":        root,
+                "confidence":        88.0,
+                "correlated_metrics": {
+                    "restart_count":        restarts,
+                    "restarts_per_day":     f"{restarts_per_day:.1f}",
+                    "restart_reason":       reason,
+                    "cpu_utilization_pct":  f"{(cpu_usage / cpu_req * 100) if cpu_req > 0 else 0:.1f}%",
+                    "memory_utilization_pct": f"{(mem_usage / mem_req * 100) if mem_req > 0 else 0:.1f}%",
+                },
+                "recommendation":    "Increase resource limits and add readiness/liveness probes",
+                "estimated_fix_time": "3 minutes",
+                "priority":          severity,
+            })
+
+        # ── 3. CPU throttling — cpu peak > 85 % of limit ────────────────────
+        if eff_cpu_lim > 0:
+            cpu_pct = cpu_peak / eff_cpu_lim * 100
+            if cpu_pct > 85:
+                iid       = f"inc-{counter:03d}"
+                counter  += 1
+                severity  = "high" if cpu_pct > 95 else "medium"
+                throttle_events = int((cpu_pct - 85) * 10)
+                rec_lim   = eff_cpu_lim * 1.5
+
                 incidents.append({
-                    "incident_id": incident_id,
-                    "type": "throttling",
-                    "severity": severity,
-                    "pod_name": pod_name,
-                    "namespace": namespace,
-                    "cluster": cluster_id,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                    "count": throttling_events,
-                    "message": f"CPU throttling detected: {throttling_events} estimated events",
+                    "incident_id":          iid,
+                    "type":                 "throttling",
+                    "severity":             severity,
+                    "pod_name":             pod_name,
+                    "namespace":            namespace,
+                    "cluster":              cluster_name,
+                    "timestamp":            now,
+                    "count":                throttle_events,
+                    "message":              f"CPU throttling: peak {cpu_pct:.1f}% of limit (~{throttle_events} events est.)",
                     "resource_correlation": {
-                        "cpu_request": f"{cpu_requested:.3f}",
-                        "cpu_limit": f"{cpu_limit:.3f}",
-                        "cpu_usage": f"{cpu_current:.3f}",
-                        "throttling_percentage": f"{cpu_usage_percent:.1f}%",
-                        "performance_impact": "high" if cpu_usage_percent > 95 else "medium"
-                    }
-                })
-                
-                # Create correlation
-                cpu_rec = recommendation.get('cpu', {})
-                recommended_limit = cpu_rec.get('recommended_limit', cpu_limit * 1.5)
-                
-                correlations.append({
-                    "incident_id": incident_id,
-                    "incident_type": "throttling",
-                    "pod_name": pod_name,
-                    "namespace": namespace,
-                    "cluster": cluster_id,
-                    "root_cause": "CPU limit too restrictive for workload",
-                    "confidence": 92.0,
-                    "correlated_metrics": {
-                        "cpu_usage": f"At {cpu_usage_percent:.1f}% of limit",
-                        "throttling_events": f"{throttling_events} estimated",
-                        "performance_impact": "High latency and slow response times",
-                        "utilization": f"{cpu_utilization:.1f}%"
+                        "cpu_request":          f"{cpu_req:.3f}",
+                        "cpu_limit":            f"{eff_cpu_lim:.3f}",
+                        "cpu_peak_cores":       f"{cpu_peak:.3f}",
+                        "throttling_percentage": f"{cpu_pct:.1f}%",
                     },
-                    "recommendation": f"Increase CPU limit to {recommended_limit:.3f} cores",
-                    "estimated_fix_time": "2 minutes",
-                    "priority": severity
                 })
-    
+                correlations.append({
+                    "incident_id":       iid,
+                    "incident_type":     "throttling",
+                    "pod_name":          pod_name,
+                    "namespace":         namespace,
+                    "cluster":           cluster_name,
+                    "root_cause":        "CPU limit too restrictive for workload demand",
+                    "confidence":        92.0,
+                    "correlated_metrics": {
+                        "cpu_peak_pct_of_limit": f"{cpu_pct:.1f}%",
+                        "estimated_throttle_events": throttle_events,
+                        "performance_impact": "High latency / slow responses",
+                    },
+                    "recommendation":    f"Increase CPU limit to {rec_lim:.2f} cores",
+                    "estimated_fix_time": "2 minutes",
+                    "priority":          severity,
+                })
+
     return incidents, correlations
 
 
-def generate_incident_patterns(incidents: List[dict]) -> List[dict]:
-    """Generate incident patterns from incidents"""
-    
+def _build_patterns(incidents: list) -> list:
+    by_type: Dict[str, list] = {}
+    for i in incidents:
+        by_type.setdefault(i["type"], []).append(i)
+
     patterns = []
-    
-    # Group by type
-    by_type = {}
-    for incident in incidents:
-        incident_type = incident['type']
-        if incident_type not in by_type:
-            by_type[incident_type] = []
-        by_type[incident_type].append(incident)
-    
-    pattern_counter = 1
-    
-    # OOMKill pattern
-    if 'oomkill' in by_type:
-        oomkill_incidents = by_type['oomkill']
-        affected_pods = list(set([i['pod_name'] for i in oomkill_incidents]))
-        
+    pid = 1
+
+    _steps = {
+        "oomkill": [
+            "Increase memory limits for affected pods",
+            "Set VPA (VerticalPodAutoscaler) in recommendation mode",
+            "Add memory monitoring and OOMKill alerts",
+            "Consider horizontal scaling for memory-intensive workloads",
+        ],
+        "restart": [
+            "Investigate crash logs: kubectl logs <pod> --previous",
+            "Add liveness and readiness probes",
+            "Increase resource limits",
+            "Implement graceful shutdown handling",
+        ],
+        "throttling": [
+            "Increase CPU limits for affected services",
+            "Enable HorizontalPodAutoscaler",
+            "Profile application CPU usage during peak",
+            "Use burst-capable resource configurations",
+        ],
+    }
+
+    for t, items in by_type.items():
+        pods = list({i["pod_name"] for i in items})[:5]
         patterns.append({
-            "pattern_id": f"pattern-{pattern_counter:03d}",
-            "pattern_type": "oomkill",
-            "description": "Memory exhaustion across multiple pods",
-            "frequency": len(oomkill_incidents),
-            "affected_pods": affected_pods[:5],  # Top 5
-            "common_cause": "Insufficient memory allocation for workload requirements",
-            "prevention_steps": [
-                "Increase memory limits for affected pods",
-                "Implement memory-efficient data processing",
-                "Add memory monitoring and alerts",
-                "Consider horizontal scaling for memory-intensive workloads"
-            ]
+            "pattern_id":      f"pattern-{pid:03d}",
+            "pattern_type":    t,
+            "description": {
+                "oomkill":    "Memory exhaustion across multiple pods",
+                "restart":    "Frequent pod restarts due to resource pressure",
+                "throttling": "CPU throttling degrading performance",
+            }.get(t, f"{t} incidents"),
+            "frequency":       len(items),
+            "affected_pods":   pods,
+            "common_cause": {
+                "oomkill":    "Memory limits set below actual working-set requirements",
+                "restart":    "Application crashes under resource pressure or misconfig",
+                "throttling": "CPU limits too restrictive for burst workloads",
+            }.get(t, "Resource misconfiguration"),
+            "prevention_steps": _steps.get(t, ["Review resource settings"]),
         })
-        pattern_counter += 1
-    
-    # Restart pattern
-    if 'restart' in by_type:
-        restart_incidents = by_type['restart']
-        affected_pods = list(set([i['pod_name'] for i in restart_incidents]))
-        
-        patterns.append({
-            "pattern_id": f"pattern-{pattern_counter:03d}",
-            "pattern_type": "restart",
-            "description": "Frequent pod restarts due to resource constraints",
-            "frequency": len(restart_incidents),
-            "affected_pods": affected_pods[:5],
-            "common_cause": "Application crashes under resource pressure",
-            "prevention_steps": [
-                "Increase resource limits",
-                "Implement graceful degradation",
-                "Add health checks and readiness probes",
-                "Improve error handling in application"
-            ]
-        })
-        pattern_counter += 1
-    
-    # Throttling pattern
-    if 'throttling' in by_type:
-        throttling_incidents = by_type['throttling']
-        affected_pods = list(set([i['pod_name'] for i in throttling_incidents]))
-        
-        patterns.append({
-            "pattern_id": f"pattern-{pattern_counter:03d}",
-            "pattern_type": "throttling",
-            "description": "CPU throttling affecting performance",
-            "frequency": len(throttling_incidents),
-            "affected_pods": affected_pods[:5],
-            "common_cause": "CPU limits too restrictive for workload demands",
-            "prevention_steps": [
-                "Increase CPU limits for affected services",
-                "Implement horizontal pod autoscaling",
-                "Optimize application code for CPU efficiency",
-                "Use burst-capable resource configurations"
-            ]
-        })
-    
+        pid += 1
+
     return patterns
 
 
-# Demo incidents data removed (BUG-B03) — use real cluster data.
-# Kept as empty list so any remaining fallback references return no fake data.
-DEMO_INCIDENTS = []
-DEMO_CORRELATIONS = []
-DEMO_PATTERNS = []
+# ── Resolve cluster from query param ──────────────────────────────────────────
 
+def _resolve(cluster: Optional[str]) -> str:
+    from utils.cluster_registry import get_clusters
+    clusters = get_clusters()
+    if not clusters:
+        return "unknown"
+    ids = [c["id"] for c in clusters]
+    if cluster and cluster not in ("all", ""):
+        return cluster if cluster in ids else ids[0]
+    return ids[0]
+
+
+# ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/incidents", response_model=List[Incident])
 async def get_incidents(
-    cluster: Optional[str] = None,
+    cluster_id: Optional[str] = Query(None),
     namespace: Optional[str] = None,
     incident_type: Optional[str] = None,
     severity: Optional[str] = None,
-    hours: int = 24
 ):
-    """Get recent incidents from real Kubernetes data"""
-    if not K8S_AVAILABLE:
-        logger.info("K8s not available, returning empty incidents")
-        incidents = []
-    else:
-        try:
-            # Get cluster ID
-            cluster_id = os.getenv('CLUSTER_ID', 'xforce-devops')
-            
-            # Fetch real data
-            pods_data = await fetch_pods_data()
-            recommendations = await fetch_recommendations_data()
-            
-            # Analyze incidents
-            incidents, _ = analyze_incidents_from_pods(
-                pods_data, recommendations, cluster_id
-            )
-            
-            logger.info(f"Generated {len(incidents)} incidents from real data")
-        except Exception as e:
-            logger.error(f"Error generating incidents: {e}")
-            incidents = []
-    
-    # Apply filters
-    if cluster:
-        incidents = [i for i in incidents if i["cluster"] == cluster]
+    """Return live incidents derived from agent pod metrics."""
+    cname = _resolve(cluster_id)
+    pods, cname = _get_pods(cname)
+    incidents, _ = _analyze(pods, cname)
+
     if namespace:
         incidents = [i for i in incidents if i["namespace"] == namespace]
     if incident_type:
         incidents = [i for i in incidents if i["type"] == incident_type]
     if severity:
         incidents = [i for i in incidents if i["severity"] == severity]
-    
+
+    logger.info(f"incidents: {len(incidents)} from {len(pods)} pods in {cname}")
     return incidents
-
-
-@router.get("/incidents/{incident_id}", response_model=Incident)
-async def get_incident(incident_id: str):
-    """Get specific incident"""
-    incidents = await get_incidents()
-    for incident in incidents:
-        if incident["incident_id"] == incident_id:
-            return incident
-    return {"error": "Incident not found"}
 
 
 @router.get("/correlations", response_model=List[CorrelationAnalysis])
 async def get_correlations(
-    cluster: Optional[str] = None,
+    cluster_id: Optional[str] = Query(None),
     namespace: Optional[str] = None,
-    min_confidence: float = 0
+    min_confidence: float = 0,
 ):
-    """Get incident correlations with resource issues from real data"""
-    if not K8S_AVAILABLE:
-        logger.info("K8s not available, returning empty correlations")
-        correlations = []
-    else:
-        try:
-            # Get cluster info
-            cluster_id = os.getenv('CLUSTER_ID', 'xforce-devops')
-            
-            # Fetch real data
-            pods_data = await fetch_pods_data()
-            recommendations = await fetch_recommendations_data()
-            
-            # Analyze incidents and get correlations
-            _, correlations = analyze_incidents_from_pods(
-                pods_data, recommendations, cluster_id
-            )
-            
-            logger.info(f"Generated {len(correlations)} correlations")
-        except Exception as e:
-            logger.error(f"Error generating correlations: {e}")
-            correlations = []
-    
-    # Apply filters
-    if cluster:
-        correlations = [c for c in correlations if c["cluster"] == cluster]
+    """Return AI correlation analysis for all detected incidents."""
+    cname = _resolve(cluster_id)
+    pods, cname = _get_pods(cname)
+    _, correlations = _analyze(pods, cname)
+
     if namespace:
-        correlations = [
-            c for c in correlations if c["namespace"] == namespace
-        ]
+        correlations = [c for c in correlations if c["namespace"] == namespace]
     if min_confidence > 0:
-        correlations = [
-            c for c in correlations
-            if c["confidence"] >= min_confidence
-        ]
-    
-    return sorted(
-        correlations, key=lambda x: x["confidence"], reverse=True
-    )
+        correlations = [c for c in correlations if c["confidence"] >= min_confidence]
 
-
-@router.get("/correlations/{incident_id}", response_model=CorrelationAnalysis)
-async def get_correlation(incident_id: str):
-    """Get correlation analysis for specific incident"""
-    correlations = await get_correlations()
-    for correlation in correlations:
-        if correlation["incident_id"] == incident_id:
-            return correlation
-    return {"error": "Correlation not found"}
+    return sorted(correlations, key=lambda x: x["confidence"], reverse=True)
 
 
 @router.get("/patterns", response_model=List[IncidentPattern])
-async def get_patterns():
-    """Get incident patterns from real data"""
-    if not K8S_AVAILABLE:
-        logger.info("K8s not available, returning empty patterns")
-        return []
-    
-    try:
-        # Get incidents first
-        incidents = await get_incidents()
-        
-        # Generate patterns
-        patterns = generate_incident_patterns(incidents)
-        
-        logger.info(f"Generated {len(patterns)} incident patterns")
-        return patterns
-    except Exception as e:
-        logger.error(f"Error generating patterns: {e}")
-        return []
-
-
-@router.get("/patterns/{pattern_id}", response_model=IncidentPattern)
-async def get_pattern(pattern_id: str):
-    """Get specific incident pattern"""
-    patterns = await get_patterns()
-    for pattern in patterns:
-        if pattern["pattern_id"] == pattern_id:
-            return pattern
-    return {"error": "Pattern not found"}
-
-
-@router.get("/timeline")
-async def get_incident_timeline(hours: int = 24):
-    """Get incident timeline from real data"""
-    incidents = await get_incidents()
-    
-    timeline = []
-    for incident in incidents:
-        timeline.append({
-            "timestamp": incident["timestamp"],
-            "incident_type": incident["type"],
-            "pod_name": incident["pod_name"],
-            "namespace": incident["namespace"],
-            "severity": incident["severity"],
-            "message": incident["message"]
-        })
-    
-    # Sort by timestamp
-    timeline.sort(key=lambda x: x["timestamp"], reverse=True)
-    
-    return timeline
+async def get_patterns(cluster_id: Optional[str] = Query(None)):
+    """Return recurring incident patterns derived from live data."""
+    cname = _resolve(cluster_id)
+    pods, cname = _get_pods(cname)
+    incidents, _ = _analyze(pods, cname)
+    return _build_patterns(incidents)
 
 
 @router.get("/summary")
-async def get_incident_summary():
-    """Get incident summary statistics from real data"""
-    incidents = await get_incidents()
-    
-    total_incidents = len(incidents)
-    
-    by_type = {}
-    by_severity = {}
-    by_cluster = {}
-    
-    for incident in incidents:
-        # By type
-        incident_type = incident["type"]
-        by_type[incident_type] = by_type.get(incident_type, 0) + 1
-        
-        # By severity
-        severity = incident["severity"]
-        by_severity[severity] = by_severity.get(severity, 0) + 1
-        
-        # By cluster
-        cluster = incident["cluster"]
-        by_cluster[cluster] = by_cluster.get(cluster, 0) + 1
-    
-    # Most affected pods
-    pod_counts = {}
-    for incident in incidents:
-        pod = incident["pod_name"]
-        pod_counts[pod] = pod_counts.get(pod, 0) + incident["count"]
-    
-    top_pods = sorted(
-        pod_counts.items(),
-        key=lambda x: x[1],
-        reverse=True
-    )[:5]
-    
+async def get_incident_summary(cluster_id: Optional[str] = Query(None)):
+    """Return aggregated incident statistics."""
+    cname = _resolve(cluster_id)
+    pods, cname = _get_pods(cname)
+    incidents, _ = _analyze(pods, cname)
+
+    by_type: Dict[str, int] = {}
+    by_sev:  Dict[str, int] = {}
+    pod_counts: Dict[str, int] = {}
+
+    for i in incidents:
+        by_type[i["type"]]     = by_type.get(i["type"], 0)     + 1
+        by_sev[i["severity"]]  = by_sev.get(i["severity"], 0)  + 1
+        pod_counts[i["pod_name"]] = pod_counts.get(i["pod_name"], 0) + i["count"]
+
+    top_pods = sorted(pod_counts.items(), key=lambda x: x[1], reverse=True)[:5]
+
     return {
-        "total_incidents": total_incidents,
-        "by_type": by_type,
-        "by_severity": by_severity,
-        "by_cluster": by_cluster,
-        "top_affected_pods": [
-            {"pod": pod, "count": count}
-            for pod, count in top_pods
-        ],
-        "total_oomkills": sum(
-            i["count"] for i in incidents if i["type"] == "oomkill"
-        ),
-        "total_restarts": sum(
-            i["count"] for i in incidents if i["type"] == "restart"
-        ),
-        "total_throttling_events": sum(
-            i["count"] for i in incidents if i["type"] == "throttling"
-        )
+        "total_incidents":        len(incidents),
+        "by_type":                by_type,
+        "by_severity":            by_sev,
+        "by_cluster":             {cname: len(incidents)},
+        "top_affected_pods":      [{"pod": p, "count": c} for p, c in top_pods],
+        "total_oomkills":         sum(i["count"] for i in incidents if i["type"] == "oomkill"),
+        "total_restarts":         sum(i["count"] for i in incidents if i["type"] == "restart"),
+        "total_throttling_events": sum(i["count"] for i in incidents if i["type"] == "throttling"),
     }
 
 
-@router.post("/analyze")
-async def analyze_incident(incident_data: Dict[str, Any]):
-    """Analyze a new incident and correlate with resources"""
-    
-    pod_name = incident_data.get("pod_name", "unknown")
-    namespace = incident_data.get("namespace", "default")
-    incident_type = incident_data.get("type", "unknown")
-    
-    # Get correlations for this pod
-    correlations = await get_correlations(namespace=namespace)
-    
-    # Find matching correlation
-    matching_correlation = None
-    for corr in correlations:
-        if corr["pod_name"] == pod_name:
-            matching_correlation = corr
-            break
-    
-    if matching_correlation:
-        return {
-            "success": True,
-            "correlation": matching_correlation,
-            "message": "Incident analyzed successfully"
-        }
-    else:
-        # Generic response
-        correlation = {
-            "incident_id": f"inc-new-{datetime.now().timestamp()}",
-            "incident_type": incident_type,
-            "pod_name": pod_name,
-            "namespace": namespace,
-            "root_cause": "Resource constraint detected",
-            "confidence": 75.0,
-            "recommendation": "Increase resource limits",
-            "priority": "medium"
-        }
-        
-        return {
-            "success": True,
-            "correlation": correlation,
-            "message": "Incident analyzed with generic correlation"
-        }
-
-
-@router.get("/recommendations")
-async def get_incident_recommendations():
-    """Get recommendations based on incident patterns from real data"""
-    patterns = await get_patterns()
-    
-    recommendations = []
-    
-    for pattern in patterns:
-        recommendations.append({
-            "pattern": pattern["pattern_type"],
-            "affected_count": pattern["frequency"],
-            "recommendation": pattern["prevention_steps"][0],
-            "priority": "high" if pattern["frequency"] > 5 else "medium",
-            "estimated_impact": (
-                f"Prevent {pattern['frequency']} incidents/month"
-            )
-        })
-    
+@router.get("/timeline")
+async def get_incident_timeline(cluster_id: Optional[str] = Query(None)):
+    """Return incidents sorted chronologically."""
+    cname = _resolve(cluster_id)
+    pods, cname = _get_pods(cname)
+    incidents, _ = _analyze(pods, cname)
     return sorted(
-        recommendations, key=lambda x: x["affected_count"], reverse=True
+        [{"timestamp": i["timestamp"], "incident_type": i["type"],
+          "pod_name": i["pod_name"], "namespace": i["namespace"],
+          "severity": i["severity"], "message": i["message"]}
+         for i in incidents],
+        key=lambda x: x["timestamp"], reverse=True,
     )
 
 # Made with Bob

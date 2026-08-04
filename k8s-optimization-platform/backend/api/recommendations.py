@@ -140,10 +140,19 @@ def _build_recommendations(
         cpu_use = float(pod.get("cpu_usage_cores", 0.0))
         mem_use = float(pod.get("memory_usage_mb",  0.0))
 
-        # If usage data is unavailable (metrics-server gap) skip to avoid
-        # producing misleading "reduce by 100%" recommendations.
-        if cpu_use == 0.0 and mem_use == 0.0:
-            continue
+        # When metrics-server data is absent (cpu_use == mem_use == 0) we can
+        # still flag pods whose requests are large enough to right-size by
+        # assuming a conservative 30 % utilisation baseline. This avoids
+        # producing an empty recommendations page on clusters without
+        # metrics-server while staying honest about the estimate source.
+        no_usage_data = (cpu_use == 0.0 and mem_use == 0.0)
+        if no_usage_data:
+            # Assume 30 % utilisation of whatever was requested.
+            # Only flag pods that are meaningfully over-provisioned (>0.5 CPU or >512 MiB).
+            if cpu_req < 0.5 and mem_req < 512.0:
+                continue   # too small to bother flagging
+            cpu_use = cpu_req * 0.30
+            mem_use = mem_req * 0.30
 
         # ── recommended values: usage × 1.3 headroom, bounded by minimum ──
         rec_cpu = max(MIN_CPU_CORES, cpu_use * BUFFER)
@@ -192,18 +201,19 @@ def _build_recommendations(
             confidence = ConfidenceLevel.HIGH_RISK
 
         # ── performance impact text ───────────────────────────────────────────
+        est_note = " (estimated — metrics-server unavailable)" if no_usage_data else ""
         if status in (RecommendationStatus.REDUCE_CPU,
                       RecommendationStatus.REDUCE_MEMORY):
             pct_used = int((1.0 - max_waste) * 100)
             if max_waste > 0.70:
-                perf = f"Minimal — workload uses ~{pct_used}% of requested resources"
+                perf = f"Minimal — workload uses ~{pct_used}% of requested resources{est_note}"
             else:
-                perf = f"Low — resource usage consistently below {pct_used+20}%"
+                perf = f"Low — resource usage consistently below {pct_used+20}%{est_note}"
         elif status in (RecommendationStatus.INCREASE_CPU,
                         RecommendationStatus.INCREASE_MEMORY):
-            perf = "Prevents throttling/OOMKills — resource usage near limits"
+            perf = f"Prevents throttling/OOMKills — resource usage near limits{est_note}"
         else:
-            perf = "Optimal — resources well-sized"
+            perf = f"Optimal — resources well-sized{est_note}"
 
         # ── only emit if there is something actionable ───────────────────────
         if total_savings < 0.50 and status == RecommendationStatus.NO_ACTION:

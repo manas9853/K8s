@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Typography,
@@ -39,7 +40,7 @@ interface Recommendation {
 }
 
 const ResourceAllocation: React.FC = () => {
-  const { clusterParam } = useActiveCluster();
+  const { clusterParam, activeClusterId } = useActiveCluster();
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,6 +127,7 @@ const ResourceAllocation: React.FC = () => {
 
   return (
     <Box>
+      <CostAccuracyBanner clusterName={activeClusterId === 'all' ? null : activeClusterId} />
       <Typography variant="h4" gutterBottom>
         Resource Allocation Overview
       </Typography>

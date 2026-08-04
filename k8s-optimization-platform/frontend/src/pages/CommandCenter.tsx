@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
+import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
   Paper,
@@ -157,6 +158,8 @@ const CommandCenter: React.FC = () => {
       </Box>
 
       {loading && <LinearProgress sx={{ mb: 2, borderRadius: 1 }} />}
+
+      <CostAccuracyBanner clusterName={clusterParam} />
 
       {/* KPI Summary Cards */}
       <Grid container spacing={3} mb={3}>
