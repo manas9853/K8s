@@ -21,6 +21,7 @@ import TipsAndUpdatesOutlinedIcon from '@mui/icons-material/TipsAndUpdatesOutlin
 import SmartToyOutlinedIcon from '@mui/icons-material/SmartToyOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Inline markdown renderer ─────────────────────────────────────────────────
 // No external deps. Handles **bold**, newlines, bullet/numbered lists.
@@ -30,7 +31,7 @@ function renderMarkdown(text: string): React.ReactNode {
     const parts = line.split(/\*\*(.+?)\*\*/g);
     const rendered = parts.map((part, j) =>
       j % 2 === 1
-        ? <strong key={j} style={{ color: '#e6edf3', fontWeight: 700 }}>{part}</strong>
+        ? <strong key={j} style={{ color: colors.textPrimary, fontWeight: 700 }}>{part}</strong>
         : part
     );
     return (
@@ -45,12 +46,12 @@ function renderMarkdown(text: string): React.ReactNode {
 // ─── Design tokens (matches Incidents.tsx) ───────────────────────────────────
 
 const DK = {
-  bg:      '#0d1117',
-  surface: '#161b22',
-  surface2:'#1c2128',
-  border:  '#30363d',
-  text:    '#e6edf3',
-  muted:   '#8b949e',
+  bg:      colors.background,
+  surface: colors.surface,
+  surface2:colors.surfaceHover,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -93,7 +94,7 @@ const STARTER_QUERIES = [
 
 const ConfidenceBadge: React.FC<{ value: number }> = ({ value }) => {
   const pct = Math.round(value * 100);
-  const color = pct >= 85 ? '#3fb950' : pct >= 65 ? '#d29922' : '#f85149';
+  const color = pct >= 85 ? colors.success : pct >= 65 ? colors.warning : colors.danger;
   return (
     <Chip
       label={`${pct}% confidence`}
@@ -116,7 +117,7 @@ const UserBubble: React.FC<{ query: string; timestamp: string }> = ({ query, tim
     <Box sx={{ maxWidth: '70%' }}>
       <Box
         sx={{
-          bgcolor: '#1f6feb',
+          bgcolor: colors.info,
           borderRadius: '12px 12px 2px 12px',
           px: 2,
           py: 1.25,
@@ -148,7 +149,7 @@ const AIBubble: React.FC<{
 }> = ({ conv, onSuggestion, onFeedback, feedbackDone }) => (
   <Box sx={{ display: 'flex', justifyContent: 'flex-start', mb: 2.5, gap: 1 }}>
     <Box sx={{ mt: 0.5, flexShrink: 0 }}>
-      <SmartToyOutlinedIcon sx={{ fontSize: 20, color: '#58a6ff' }} />
+      <SmartToyOutlinedIcon sx={{ fontSize: 20, color: colors.info }} />
     </Box>
     <Box sx={{ maxWidth: '80%' }}>
       {/* Main response */}
@@ -207,11 +208,11 @@ const AIBubble: React.FC<{
               clickable
               onClick={() => onSuggestion(s)}
               sx={{
-                bgcolor: '#1f6feb22',
-                color: '#58a6ff',
-                border: '1px solid #1f6feb55',
+                bgcolor: `${colors.info}22`,
+                color: colors.info,
+                border: `1px solid ${colors.info}55`,
                 fontSize: '0.72rem',
-                '&:hover': { bgcolor: '#1f6feb44' },
+                '&:hover': { bgcolor: `${colors.info}44` },
               }}
             />
           ))}
@@ -225,8 +226,8 @@ const AIBubble: React.FC<{
             size="small"
             disabled={!!feedbackDone[conv.id]}
             onClick={() => onFeedback(conv.id, conv.userQuery, conv.aiResponse, 'up')}
-            sx={{ color: feedbackDone[conv.id] === 'up' ? '#3fb950' : DK.muted,
-                  '&:hover': { color: '#3fb950' } }}
+            sx={{ color: feedbackDone[conv.id] === 'up' ? colors.success : DK.muted,
+                  '&:hover': { color: colors.success } }}
           >
             <ThumbUpOutlinedIcon sx={{ fontSize: 14 }} />
           </IconButton>
@@ -236,8 +237,8 @@ const AIBubble: React.FC<{
             size="small"
             disabled={!!feedbackDone[conv.id]}
             onClick={() => onFeedback(conv.id, conv.userQuery, conv.aiResponse, 'down')}
-            sx={{ color: feedbackDone[conv.id] === 'down' ? '#f85149' : DK.muted,
-                  '&:hover': { color: '#f85149' } }}
+            sx={{ color: feedbackDone[conv.id] === 'down' ? colors.danger : DK.muted,
+                  '&:hover': { color: colors.danger } }}
           >
             <ThumbDownOutlinedIcon sx={{ fontSize: 14 }} />
           </IconButton>
@@ -370,7 +371,7 @@ const NaturalLanguageQueries: React.FC = () => {
           </Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mt: 0.25 }}>
             Ask anything about your Kubernetes infrastructure — real answers from{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
 
@@ -406,7 +407,7 @@ const NaturalLanguageQueries: React.FC = () => {
                       color: DK.text,
                       border: `1px solid ${DK.border}`,
                       fontSize: '0.8rem',
-                      '&:hover': { bgcolor: DK.surface2, borderColor: '#58a6ff' },
+                      '&:hover': { bgcolor: DK.surface2, borderColor: colors.info },
                     }}
                   />
                 ))}
@@ -426,7 +427,7 @@ const NaturalLanguageQueries: React.FC = () => {
           {/* Typing indicator */}
           {loading && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-              <SmartToyOutlinedIcon sx={{ fontSize: 20, color: '#58a6ff' }} />
+              <SmartToyOutlinedIcon sx={{ fontSize: 20, color: colors.info }} />
               <Box
                 sx={{
                   bgcolor: DK.surface2,
@@ -439,7 +440,7 @@ const NaturalLanguageQueries: React.FC = () => {
                   gap: 1,
                 }}
               >
-                <CircularProgress size={14} sx={{ color: '#58a6ff' }} />
+                <CircularProgress size={14} sx={{ color: colors.info }} />
                 <Typography sx={{ color: DK.muted, fontSize: '0.82rem' }}>Thinking…</Typography>
               </Box>
             </Box>
@@ -447,8 +448,8 @@ const NaturalLanguageQueries: React.FC = () => {
 
           {/* Error */}
           {error && (
-            <Box sx={{ bgcolor: '#f851491a', border: '1px solid #f8514944', borderRadius: 2, px: 2, py: 1.25, mb: 2 }}>
-              <Typography sx={{ color: '#f85149', fontSize: '0.83rem' }}>{error}</Typography>
+            <Box sx={{ bgcolor: `${colors.danger}1a`, border: `1px solid ${colors.danger}44`, borderRadius: 2, px: 2, py: 1.25, mb: 2 }}>
+              <Typography sx={{ color: colors.danger, fontSize: '0.83rem' }}>{error}</Typography>
             </Box>
           )}
         </Box>
@@ -483,8 +484,8 @@ const NaturalLanguageQueries: React.FC = () => {
                 fontSize: '0.88rem',
                 borderRadius: 2,
                 '& fieldset': { borderColor: DK.border },
-                '&:hover fieldset': { borderColor: '#58a6ff' },
-                '&.Mui-focused fieldset': { borderColor: '#58a6ff' },
+                '&:hover fieldset': { borderColor: colors.info },
+                '&.Mui-focused fieldset': { borderColor: colors.info },
               },
               '& .MuiInputBase-input::placeholder': { color: DK.muted, opacity: 1 },
             }}
@@ -495,12 +496,12 @@ const NaturalLanguageQueries: React.FC = () => {
                 onClick={() => submitQuery(input)}
                 disabled={loading || !input.trim()}
                 sx={{
-                  bgcolor: '#1f6feb',
+                  bgcolor: colors.info,
                   color: '#fff',
                   width: 40,
                   height: 40,
                   borderRadius: 2,
-                  '&:hover': { bgcolor: '#388bfd' },
+                  '&:hover': { bgcolor: colors.info, opacity: 0.85 },
                   '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
                 }}
               >
@@ -572,7 +573,7 @@ const NaturalLanguageQueries: React.FC = () => {
         {/* Tips */}
         <Box sx={{ borderTop: `1px solid ${DK.border}`, px: 2, py: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
-            <TipsAndUpdatesOutlinedIcon sx={{ fontSize: 16, color: '#d29922' }} />
+            <TipsAndUpdatesOutlinedIcon sx={{ fontSize: 16, color: colors.warning }} />
             <Typography sx={{ color: DK.text, fontSize: '0.8rem', fontWeight: 600 }}>
               Tips
             </Typography>

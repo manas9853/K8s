@@ -26,6 +26,7 @@ import {
 } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface TimelineEvent {
   timestamp: string;
@@ -72,20 +73,20 @@ interface ActiveThreatsResponse {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#ef5350',
-  high: '#ffa726',
-  medium: '#90caf9',
-  low: '#a5d6a7',
-  info: '#90caf9',
+  critical: colors.danger,
+  high: colors.warning,
+  medium: colors.info,
+  low: colors.success,
+  info: colors.info,
 };
 
 const EVENT_ACCENT: Record<string, string> = {
-  detection: '#90caf9',
-  analysis: '#ffa726',
-  incident_created: '#a78bfa',
-  action: '#60a5fa',
-  containment: '#ef5350',
-  resolution: '#a5d6a7',
+  detection: colors.info,
+  analysis: colors.warning,
+  incident_created: colors.purple,
+  action: colors.info,
+  containment: colors.danger,
+  resolution: colors.success,
 };
 
 function formatTimestamp(value?: string | null) {
@@ -95,7 +96,7 @@ function formatTimestamp(value?: string | null) {
 }
 
 function getSeverityColor(severity: string) {
-  return SEVERITY_COLOR[(severity || '').toLowerCase()] || '#8892a4';
+  return SEVERITY_COLOR[(severity || '').toLowerCase()] || colors.textSecondary;
 }
 
 function getEventIcon(eventType: string) {
@@ -200,7 +201,7 @@ const IncidentTimelineInner: React.FC = () => {
 
   if (loading && !timelineData) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -208,7 +209,7 @@ const IncidentTimelineInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -216,12 +217,12 @@ const IncidentTimelineInner: React.FC = () => {
 
   if (!timelineData || incidentOptions.length === 0) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
-        <Paper sx={{ p: 4, bgcolor: '#1e2433', border: '1px solid #2a3245', maxWidth: 720, mx: 'auto', textAlign: 'center' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
+        <Paper sx={{ p: 4, bgcolor: colors.surface, border: `1px solid ${colors.border}`, maxWidth: 720, mx: 'auto', textAlign: 'center' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             No incident timeline data available
           </Typography>
-          <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.7 }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.7 }}>
             This page uses real incident ids derived from the current active threats feed. No threat-backed incidents were returned for the selected cluster.
           </Typography>
         </Paper>
@@ -230,15 +231,15 @@ const IncidentTimelineInner: React.FC = () => {
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <SecurityIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <SecurityIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Incident Timeline
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real incident history for {timelineData.cluster_name || 'cluster'} · {timelineData.incident_id}
             </Typography>
           </Box>
@@ -250,15 +251,15 @@ const IncidentTimelineInner: React.FC = () => {
             value={incidentId}
             onChange={(event) => setIncidentId(event.target.value)}
             size="small"
-            SelectProps={{ MenuProps: { PaperProps: { sx: { bgcolor: '#1e2433', color: '#e8eaf0' } } } }}
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
+            SelectProps={{ MenuProps: { PaperProps: { sx: { bgcolor: colors.surface, color: colors.textPrimary } } } }}
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
             sx={{
               minWidth: 320,
               '& .MuiOutlinedInput-root': {
-                color: '#e8eaf0',
-                bgcolor: '#1e2433',
-                '& fieldset': { borderColor: '#2a3245' },
-                '&:hover fieldset': { borderColor: '#90caf9' },
+                color: colors.textPrimary,
+                bgcolor: colors.surface,
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.info },
               },
             }}
           >
@@ -271,7 +272,7 @@ const IncidentTimelineInner: React.FC = () => {
           <Button
             variant="contained"
             onClick={() => setIncidentId((current) => current)}
-            sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
+            sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}
           >
             Refresh
           </Button>
@@ -280,15 +281,15 @@ const IncidentTimelineInner: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Events', value: timelineData.summary.total_events, color: '#90caf9' },
-          { label: 'Critical Events', value: timelineData.summary.critical_events, color: '#ef5350' },
-          { label: 'Actions Taken', value: timelineData.summary.actions_taken, color: '#a5d6a7' },
-          { label: 'Resources Affected', value: timelineData.summary.resources_affected, color: '#ffa726' },
+          { label: 'Total Events', value: timelineData.summary.total_events, color: colors.info },
+          { label: 'Critical Events', value: timelineData.summary.critical_events, color: colors.danger },
+          { label: 'Actions Taken', value: timelineData.summary.actions_taken, color: colors.success },
+          { label: 'Resources Affected', value: timelineData.summary.resources_affected, color: colors.warning },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                   {item.label}
                 </Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>
@@ -300,56 +301,56 @@ const IncidentTimelineInner: React.FC = () => {
         ))}
       </Grid>
 
-      <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+      <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
           Incident Summary
         </Typography>
         <Box display="flex" gap={1} flexWrap="wrap" mb={1.5}>
-          <Chip label={timelineData.severity.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: getSeverityColor(timelineData.severity), fontWeight: 'bold' }} />
-          <Chip label={timelineData.status.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontWeight: 'bold' }} />
-          <Chip label={timelineData.incident_id} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4' }} />
+          <Chip label={timelineData.severity.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: getSeverityColor(timelineData.severity), fontWeight: 'bold' }} />
+          <Chip label={timelineData.status.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontWeight: 'bold' }} />
+          <Chip label={timelineData.incident_id} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary }} />
         </Box>
-        <Typography variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7, mb: 1 }}>
+        <Typography variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7, mb: 1 }}>
           {timelineData.title} was detected from live threat signals in the cluster and converted into an incident timeline using the active threat feed.
         </Typography>
         {selectedIncident && (
           <Stack spacing={0.75}>
             {selectedIncident.indicators.slice(0, 3).map((indicator) => (
-              <Typography key={indicator} variant="body2" sx={{ color: '#8892a4' }}>
+              <Typography key={indicator} variant="body2" sx={{ color: colors.textSecondary }}>
                 • {indicator}
               </Typography>
             ))}
           </Stack>
         )}
-        <Divider sx={{ my: 2, borderColor: '#2a3245' }} />
+        <Divider sx={{ my: 2, borderColor: colors.border }} />
         <Grid container spacing={2}>
           <Grid item xs={12} md={4}>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>Start Time</Typography>
-            <Typography variant="body2" sx={{ color: '#e8eaf0' }}>{formatTimestamp(timelineData.start_time)}</Typography>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>Start Time</Typography>
+            <Typography variant="body2" sx={{ color: colors.textPrimary }}>{formatTimestamp(timelineData.start_time)}</Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>End Time</Typography>
-            <Typography variant="body2" sx={{ color: '#e8eaf0' }}>{formatTimestamp(timelineData.end_time)}</Typography>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>End Time</Typography>
+            <Typography variant="body2" sx={{ color: colors.textPrimary }}>{formatTimestamp(timelineData.end_time)}</Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>Duration</Typography>
-            <Typography variant="body2" sx={{ color: '#e8eaf0' }}>{timelineData.duration}</Typography>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>Duration</Typography>
+            <Typography variant="body2" sx={{ color: colors.textPrimary }}>{timelineData.duration}</Typography>
           </Grid>
         </Grid>
       </Paper>
 
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Event Timeline
           </Typography>
         </Box>
         <Box px={2} pb={2}>
           {timelineData.events.map((event, index) => {
-            const accent = EVENT_ACCENT[(event.event_type || '').toLowerCase()] || '#90caf9';
+            const accent = EVENT_ACCENT[(event.event_type || '').toLowerCase()] || colors.info;
             return (
               <Box key={`${event.timestamp}-${index}`}>
-                <Paper sx={{ p: 2, mb: 2, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+                <Paper sx={{ p: 2, mb: 2, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                   <Grid container spacing={2}>
                     <Grid item xs={12} md={3}>
                       <Box display="flex" alignItems="center" gap={1} mb={1} sx={{ color: accent }}>
@@ -358,33 +359,33 @@ const IncidentTimelineInner: React.FC = () => {
                           {event.event_type.replace(/_/g, ' ').toUpperCase()}
                         </Typography>
                       </Box>
-                      <Typography variant="body2" sx={{ color: '#8892a4' }}>
+                      <Typography variant="body2" sx={{ color: colors.textSecondary }}>
                         {formatTimestamp(event.timestamp)}
                       </Typography>
                       <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                        <Chip label={event.severity.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: getSeverityColor(event.severity), fontWeight: 'bold', fontSize: 10 }} />
+                        <Chip label={event.severity.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: getSeverityColor(event.severity), fontWeight: 'bold', fontSize: 10 }} />
                       </Box>
                     </Grid>
                     <Grid item xs={12} md={9}>
-                      <Typography variant="subtitle1" fontWeight="bold" sx={{ color: '#e8eaf0' }} gutterBottom>
+                      <Typography variant="subtitle1" fontWeight="bold" sx={{ color: colors.textPrimary }} gutterBottom>
                         {event.description}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: '#8892a4' }} gutterBottom>
+                      <Typography variant="body2" sx={{ color: colors.textSecondary }} gutterBottom>
                         Actor: {event.actor}
                       </Typography>
-                      <Typography variant="body2" sx={{ color: '#8892a4' }} gutterBottom>
+                      <Typography variant="body2" sx={{ color: colors.textSecondary }} gutterBottom>
                         Resource: {event.resource}
                       </Typography>
                       {event.action_taken && (
-                        <Chip label={`Action: ${event.action_taken}`} size="small" sx={{ mt: 1, bgcolor: '#2a3245', color: '#a5d6a7' }} />
+                        <Chip label={`Action: ${event.action_taken}`} size="small" sx={{ mt: 1, bgcolor: colors.border, color: colors.success }} />
                       )}
                       {Object.keys(event.details || {}).length > 0 && (
-                        <Box sx={{ mt: 2, p: 1.5, bgcolor: '#1e2433', borderRadius: 1, border: '1px solid #2a3245' }}>
-                          <Typography variant="caption" fontWeight="bold" sx={{ color: '#8892a4' }}>
+                        <Box sx={{ mt: 2, p: 1.5, bgcolor: colors.surface, borderRadius: 1, border: `1px solid ${colors.border}` }}>
+                          <Typography variant="caption" fontWeight="bold" sx={{ color: colors.textSecondary }}>
                             Details
                           </Typography>
                           {Object.entries(event.details).map(([key, value]) => (
-                            <Typography key={key} variant="body2" sx={{ color: '#c8d0dc', fontSize: 12 }}>
+                            <Typography key={key} variant="body2" sx={{ color: colors.textMuted, fontSize: 12 }}>
                               {key}: {String(value)}
                             </Typography>
                           ))}
@@ -393,7 +394,7 @@ const IncidentTimelineInner: React.FC = () => {
                     </Grid>
                   </Grid>
                 </Paper>
-                {index < timelineData.events.length - 1 && <Divider sx={{ my: 1, borderColor: '#2a3245' }} />}
+                {index < timelineData.events.length - 1 && <Divider sx={{ my: 1, borderColor: colors.border }} />}
               </Box>
             );
           })}

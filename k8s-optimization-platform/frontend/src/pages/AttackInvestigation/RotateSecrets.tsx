@@ -15,6 +15,7 @@ import {
 import { RotateRight as RotateIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface RotateSecretResponse {
   action: string;
@@ -114,16 +115,16 @@ const RotateSecretsInner: React.FC = () => {
 
   if (bootstrapLoading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <LinearProgress sx={{ width: 240 }} />
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
-      <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#e8eaf0' }}>
-        <RotateIcon sx={{ color: '#90caf9' }} /> Rotate Secrets
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
+      <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, color: colors.textPrimary }}>
+        <RotateIcon sx={{ color: colors.info }} /> Rotate Secrets
       </Typography>
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
@@ -138,10 +139,10 @@ const RotateSecretsInner: React.FC = () => {
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: '#e8eaf0' }}>Emergency Secret Rotation</Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4', mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: colors.textPrimary }}>Emergency Secret Rotation</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 3 }}>
                 Select a namespace first, then choose one of the real secrets returned for that namespace from the cluster security data.
               </Typography>
               <TextField
@@ -152,7 +153,7 @@ const RotateSecretsInner: React.FC = () => {
                 onChange={(e) => setNamespace(e.target.value)}
                 sx={{ mb: 2 }}
                 size="small"
-                InputLabelProps={{ style: { color: '#8892a4' } }}
+                InputLabelProps={{ style: { color: colors.textSecondary } }}
                 SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 320 } } } }}
               >
                 {namespaces.map((item) => (
@@ -168,9 +169,9 @@ const RotateSecretsInner: React.FC = () => {
                 sx={{ mb: 3 }}
                 size="small"
                 disabled={!namespace || namespaceSecrets.length === 0}
-                InputLabelProps={{ style: { color: '#8892a4' } }}
+                InputLabelProps={{ style: { color: colors.textSecondary } }}
                 helperText={namespace ? `${namespaceSecrets.length} secret(s) available in ${namespace}` : 'Select a namespace to load secrets'}
-                FormHelperTextProps={{ sx: { color: '#8892a4' } }}
+                FormHelperTextProps={{ sx: { color: colors.textSecondary } }}
               >
                 {namespaceSecrets.map((secret) => (
                   <MenuItem key={`${secret.namespace}-${secret.secret_name}`} value={secret.secret_name}>
@@ -194,10 +195,10 @@ const RotateSecretsInner: React.FC = () => {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: '#e8eaf0' }}>Selection status</Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.8 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: colors.textPrimary }}>Selection status</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.8 }}>
                 {namespace
                   ? `${namespaceSecrets.length} secret(s) were found for namespace ${namespace}.`
                   : 'No namespace selected yet.'}

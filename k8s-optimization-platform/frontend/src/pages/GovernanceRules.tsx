@@ -10,6 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface RuleException {
   id: number;
@@ -51,19 +52,19 @@ interface GovernanceRulesData {
 
 // ── Visual constants ──────────────────────────────────────────────────────────
 const SEV: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  high:     { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  medium:   { bg: '#0d1f3c', text: '#60a5fa', border: '#1e3a5f' },
-  low:      { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  critical: { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  high:     { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  medium:   { bg: colors.infoBg, text: colors.info, border: colors.info },
+  low:      { bg: colors.successBg, text: colors.success, border: colors.successBg },
 };
 
 const CAT_COLOR: Record<string, string> = {
-  'Security':            '#f87171',
-  'Access Control':      '#c084fc',
-  'Network Security':    '#60a5fa',
-  'Data Protection':     '#f59e0b',
-  'Resource Management': '#4ade80',
-  'Compliance':          '#22d3ee',
+  'Security':            colors.danger,
+  'Access Control':      colors.purple,
+  'Network Security':    colors.info,
+  'Data Protection':     colors.warning,
+  'Resource Management': colors.success,
+  'Compliance':          colors.info,
 };
 
 // ── Per-row expanded detail ───────────────────────────────────────────────────
@@ -75,50 +76,50 @@ const RuleRow: React.FC<{
 }> = ({ rule: r, submittingId, onFix, onException }) => {
   const [open, setOpen] = useState(false);
   const sev = SEV[r.severity] || SEV.medium;
-  const catColor = CAT_COLOR[r.category] ?? '#8892a4';
+  const catColor = CAT_COLOR[r.category] ?? colors.textSecondary;
   const busy = submittingId === r.id;
 
   return (
     <>
       <TableRow
         hover
-        sx={{ '&:hover': { bgcolor: '#232d3f' }, cursor: 'pointer', bgcolor: open ? '#1a2540' : undefined }}
+        sx={{ '&:hover': { bgcolor: colors.surfaceHover }, cursor: 'pointer', bgcolor: open ? colors.infoBg : undefined }}
         onClick={() => setOpen(o => !o)}
       >
-        <TableCell sx={{ borderColor: '#2a3245', pr: 0.5, width: 32 }}>
-          <IconButton size="small" sx={{ color: '#8892a4', p: 0 }}>
+        <TableCell sx={{ borderColor: colors.border, pr: 0.5, width: 32 }}>
+          <IconButton size="small" sx={{ color: colors.textSecondary, p: 0 }}>
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
-        <TableCell sx={{ color: '#e8eaf0', fontWeight: 600, fontSize: 13, borderColor: '#2a3245' }}>{r.name}</TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600, fontSize: 13, borderColor: colors.border }}>{r.name}</TableCell>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={r.category} size="small"
-            sx={{ bgcolor: '#1e2433', color: catColor, border: `1px solid ${catColor}44`, fontSize: 10, fontWeight: 700 }} />
+            sx={{ bgcolor: colors.surface, color: catColor, border: `1px solid ${catColor}44`, fontSize: 10, fontWeight: 700 }} />
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={r.severity.toUpperCase()} size="small"
             sx={{ bgcolor: sev.bg, color: sev.text, border: `1px solid ${sev.border}`, fontSize: 10, fontWeight: 700 }} />
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={r.enabled ? 'Enabled' : 'Disabled'} size="small"
-            sx={{ bgcolor: r.enabled ? '#0d2d1a' : '#1e2433', color: r.enabled ? '#4ade80' : '#8892a4',
-                  border: `1px solid ${r.enabled ? '#1a4a2a' : '#2a3245'}`, fontSize: 10 }} />
+            sx={{ bgcolor: r.enabled ? colors.successBg : colors.surface, color: r.enabled ? colors.success : colors.textSecondary,
+                  border: `1px solid ${r.enabled ? colors.successBg : colors.border}`, fontSize: 10 }} />
         </TableCell>
-        <TableCell align="right" sx={{ color: r.violations > 0 ? '#f87171' : '#4ade80', fontWeight: 700, fontSize: 14, borderColor: '#2a3245' }}>
+        <TableCell align="right" sx={{ color: r.violations > 0 ? colors.danger : colors.success, fontWeight: 700, fontSize: 14, borderColor: colors.border }}>
           {r.violations}
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Box display="flex" gap={0.75} onClick={e => e.stopPropagation()}>
             {r.auto_fix_supported && r.violations > 0 ? (
               <Button size="small" variant="contained" disabled={busy} onClick={() => onFix(r)}
-                sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' }, fontSize: 10, py: 0.25, minWidth: 48 }}>
+                sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info }, fontSize: 10, py: 0.25, minWidth: 48 }}>
                 {busy ? '…' : 'Fix'}
               </Button>
             ) : (
-              <Chip label="Manual" size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
+              <Chip label="Manual" size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
             )}
             <Button size="small" variant="outlined" disabled={busy} onClick={() => onException(r)}
-              sx={{ borderColor: '#7c5cd8', color: '#c084fc', fontSize: 10, py: 0.25 }}>
+              sx={{ borderColor: colors.purple, color: colors.purple, fontSize: 10, py: 0.25 }}>
               {r.exception ? 'Exception ✓' : 'Except'}
             </Button>
           </Box>
@@ -126,37 +127,37 @@ const RuleRow: React.FC<{
       </TableRow>
 
       {/* Expanded detail row */}
-      <TableRow sx={{ bgcolor: '#131d2e' }}>
+      <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
         <TableCell colSpan={7} sx={{ p: 0, border: 0 }}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box px={3} py={1.5}>
               <Box display="flex" gap={4} flexWrap="wrap">
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#60a5fa', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.info, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     WHY THIS RULE EXISTS
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 12 }}>{r.why}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 12 }}>{r.why}</Typography>
                 </Box>
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#4ade80', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.success, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     REMEDIATION
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#a5d6a7', fontSize: 12 }}>{r.remediation}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.success, fontSize: 12 }}>{r.remediation}</Typography>
                 </Box>
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     SIGNAL / CURRENT STATE
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 12, fontFamily: 'monospace' }}>{r.signal}</Typography>
-                  <Typography variant="body2" sx={{ color: r.violations > 0 ? '#f87171' : '#4ade80', fontSize: 12, mt: 0.5 }}>
+                  <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 12, fontFamily: 'monospace' }}>{r.signal}</Typography>
+                  <Typography variant="body2" sx={{ color: r.violations > 0 ? colors.danger : colors.success, fontSize: 12, mt: 0.5 }}>
                     {r.violations > 0 ? `${r.violations} violation(s) detected` : 'No violations — rule passing'}
                   </Typography>
                   {r.exception && (
-                    <Typography variant="caption" sx={{ color: '#c084fc', display: 'block', mt: 0.5 }}>
+                    <Typography variant="caption" sx={{ color: colors.purple, display: 'block', mt: 0.5 }}>
                       Exception by {r.exception.owner} until {new Date(r.exception.review_date).toLocaleDateString()}
                     </Typography>
                   )}
-                  <Typography variant="caption" sx={{ color: '#57606a', display: 'block', mt: 0.5 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5 }}>
                     Last triggered: {new Date(r.last_triggered).toLocaleString()}
                   </Typography>
                 </Box>
@@ -260,8 +261,8 @@ const GovernanceRulesInner: React.FC = () => {
   };
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
-  if (error)   return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data)   return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
+  if (error)   return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data)   return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
 
   const rules = data.rules || [];
   const violating = rules.filter(r => r.violations > 0 && r.enabled);
@@ -275,17 +276,17 @@ const GovernanceRulesInner: React.FC = () => {
   const maxCat = Math.max(...Object.values(byCategory), 1);
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
 
       {/* Header */}
       <Box display="flex" alignItems="center" gap={1.5} mb={1}>
-        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: '#1e2433', border: '1px solid #2a3245',
+        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}`,
                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
           📋
         </Box>
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Governance Rules</Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>Governance Rules</Typography>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Real cluster scan · {data.cluster_name || 'Cluster'} · {data.total_pods_scanned || 0} pods,&nbsp;
             {data.total_containers_scanned || 0} containers · Last scan: {new Date(data.last_scan).toLocaleString()}
           </Typography>
@@ -295,7 +296,7 @@ const GovernanceRulesInner: React.FC = () => {
       {actionMessage && (
         <Alert
           severity={actionMessage.toLowerCase().includes('failed') ? 'error' : 'success'}
-          sx={{ mb: 3, mt: 2, bgcolor: '#131d2e', color: '#e8eaf0', border: '1px solid #2a3245' }}
+          sx={{ mb: 3, mt: 2, bgcolor: colors.surfaceAlt, color: colors.textPrimary, border: `1px solid ${colors.border}` }}
           onClose={() => setActionMessage(null)}
         >
           {actionMessage}
@@ -305,17 +306,17 @@ const GovernanceRulesInner: React.FC = () => {
       {/* KPI cards */}
       <Grid container spacing={2} sx={{ mb: 3, mt: 2 }}>
         {[
-          { label: 'Total Rules',       value: data.total_rules,       color: '#60a5fa' },
-          { label: 'Enabled',           value: data.enabled_rules,      color: '#4ade80' },
-          { label: 'Disabled',          value: data.disabled_rules,     color: '#8892a4' },
-          { label: 'Rules Violating',   value: violating.length,        color: violating.length > 0 ? '#f87171' : '#4ade80' },
-          { label: 'Total Violations',  value: data.total_violations,   color: data.total_violations > 0 ? '#f87171' : '#4ade80' },
-          { label: 'Auto-fixable',      value: rules.filter(r => r.auto_fix_supported && r.violations > 0).length, color: '#f59e0b' },
+          { label: 'Total Rules',       value: data.total_rules,       color: colors.info },
+          { label: 'Enabled',           value: data.enabled_rules,      color: colors.success },
+          { label: 'Disabled',          value: data.disabled_rules,     color: colors.textSecondary },
+          { label: 'Rules Violating',   value: violating.length,        color: violating.length > 0 ? colors.danger : colors.success },
+          { label: 'Total Violations',  value: data.total_violations,   color: data.total_violations > 0 ? colors.danger : colors.success },
+          { label: 'Auto-fixable',      value: rules.filter(r => r.auto_fix_supported && r.violations > 0).length, color: colors.warning },
         ].map((k) => (
           <Grid item xs={6} sm={4} md={2} key={k.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{k.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{k.label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: k.color }}>{k.value}</Typography>
               </CardContent>
             </Card>
@@ -324,19 +325,19 @@ const GovernanceRulesInner: React.FC = () => {
       </Grid>
 
       {/* Violations by category */}
-      <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+      <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>Violations by Category</Typography>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>Violations by Category</Typography>
           <Grid container spacing={2}>
             {Object.entries(byCategory).sort((a, b) => b[1] - a[1]).map(([cat, count]) => (
               <Grid item xs={12} sm={6} md={4} key={cat}>
                 <Box mb={0.5} display="flex" justifyContent="space-between">
-                  <Typography variant="caption" sx={{ color: CAT_COLOR[cat] ?? '#8892a4', fontWeight: 700 }}>{cat}</Typography>
-                  <Typography variant="caption" sx={{ color: count > 0 ? '#f87171' : '#4ade80', fontWeight: 700 }}>{count}</Typography>
+                  <Typography variant="caption" sx={{ color: CAT_COLOR[cat] ?? colors.textSecondary, fontWeight: 700 }}>{cat}</Typography>
+                  <Typography variant="caption" sx={{ color: count > 0 ? colors.danger : colors.success, fontWeight: 700 }}>{count}</Typography>
                 </Box>
                 <LinearProgress variant="determinate" value={(count / maxCat) * 100}
-                  sx={{ height: 6, borderRadius: 3, bgcolor: '#2a3245',
-                        '& .MuiLinearProgress-bar': { bgcolor: CAT_COLOR[cat] ?? '#60a5fa' } }} />
+                  sx={{ height: 6, borderRadius: 3, bgcolor: colors.border,
+                        '& .MuiLinearProgress-bar': { bgcolor: CAT_COLOR[cat] ?? colors.info } }} />
               </Grid>
             ))}
           </Grid>
@@ -344,19 +345,19 @@ const GovernanceRulesInner: React.FC = () => {
       </Card>
 
       {/* Rules table */}
-      <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <CardContent>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1 }}>
             All Rules ({data.total_rules})
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mb: 2 }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mb: 2 }}>
             Click any row to expand why the rule exists, the exact remediation step, and the live signal state.
             Fix queues a direct spec patch through the agent. Exception records an accepted business justification.
           </Typography>
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#131d2e', color: '#8892a4', borderColor: '#2a3245', fontSize: 12 } }}>
+                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceAlt, color: colors.textSecondary, borderColor: colors.border, fontSize: 12 } }}>
                   <TableCell sx={{ width: 32 }} />
                   <TableCell>Rule</TableCell>
                   <TableCell>Category</TableCell>
@@ -379,21 +380,21 @@ const GovernanceRulesInner: React.FC = () => {
 
       {/* Violation breakdown bar */}
       {violating.length > 0 && (
-        <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mt: 3 }}>
+        <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mt: 3 }}>
           <CardContent>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
               Violation Breakdown — Rules with Active Violations
             </Typography>
             <Box display="flex" flexDirection="column" gap={1.25}>
               {[...violating].sort((a, b) => b.violations - a.violations).map(r => (
                 <Box key={r.id}>
                   <Box display="flex" justifyContent="space-between" mb={0.25}>
-                    <Typography variant="caption" sx={{ color: '#c8d0dc', fontWeight: 600, fontSize: 12 }}>{r.name}</Typography>
-                    <Typography variant="caption" sx={{ color: '#f87171', fontWeight: 700, fontSize: 12 }}>{r.violations}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textMuted, fontWeight: 600, fontSize: 12 }}>{r.name}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.danger, fontWeight: 700, fontSize: 12 }}>{r.violations}</Typography>
                   </Box>
                   <LinearProgress variant="determinate" value={(r.violations / maxViolations) * 100}
-                    sx={{ height: 5, borderRadius: 3, bgcolor: '#2a3245',
-                          '& .MuiLinearProgress-bar': { bgcolor: CAT_COLOR[r.category] ?? '#60a5fa' } }} />
+                    sx={{ height: 5, borderRadius: 3, bgcolor: colors.border,
+                          '& .MuiLinearProgress-bar': { bgcolor: CAT_COLOR[r.category] ?? colors.info } }} />
                 </Box>
               ))}
             </Box>
@@ -403,37 +404,37 @@ const GovernanceRulesInner: React.FC = () => {
 
       {/* Exception dialog */}
       <Dialog open={exceptionDialogOpen} onClose={() => setExceptionDialogOpen(false)} maxWidth="sm" fullWidth
-        sx={{ '& .MuiDialog-paper': { bgcolor: '#1e2433', color: '#e8eaf0', border: '1px solid #2a3245', borderRadius: 2 } }}>
-        <DialogTitle sx={{ borderBottom: '1px solid #2a3245' }}>Accept Governance Exception</DialogTitle>
+        sx={{ '& .MuiDialog-paper': { bgcolor: colors.surface, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 2 } }}>
+        <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}` }}>Accept Governance Exception</DialogTitle>
         <DialogContent sx={{ pt: 2, display: 'grid', gap: 2 }}>
-          <Typography variant="body2" sx={{ color: '#8892a4' }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
             Record why this governance rule violation is intentionally accepted and will not be remediated now.
           </Typography>
           <TextField label="Rule" value={selectedRule?.name ?? ''} fullWidth disabled
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Business justification" value={exceptionForm.justification}
             onChange={e => setExceptionForm(v => ({ ...v, justification: e.target.value }))}
             fullWidth required multiline minRows={3}
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Owner" value={exceptionForm.owner}
             onChange={e => setExceptionForm(v => ({ ...v, owner: e.target.value }))}
             fullWidth required
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Review date" type="date" value={exceptionForm.review_date}
             onChange={e => setExceptionForm(v => ({ ...v, review_date: e.target.value }))}
-            fullWidth required InputLabelProps={{ shrink: true, sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            fullWidth required InputLabelProps={{ shrink: true, sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
         </DialogContent>
-        <DialogActions sx={{ borderTop: '1px solid #2a3245', px: 3, py: 2 }}>
-          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: '#8892a4' }}>Cancel</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${colors.border}`, px: 3, py: 2 }}>
+          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: colors.textSecondary }}>Cancel</Button>
           <Button variant="contained"
             disabled={!exceptionForm.justification || !exceptionForm.owner || !exceptionForm.review_date
                       || !selectedRule || submittingId === selectedRule?.id}
             onClick={handleSaveException}
-            sx={{ bgcolor: '#7c5cd8', '&:hover': { bgcolor: '#6d4ec7' } }}>
+            sx={{ bgcolor: colors.purple, '&:hover': { bgcolor: colors.purple } }}>
             Save Exception
           </Button>
         </DialogActions>

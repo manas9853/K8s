@@ -19,6 +19,7 @@ import {
 } from '@mui/material';
 import { Security as SecurityIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface RootContainer {
   pod_name: string;
@@ -110,7 +111,7 @@ const RootContainers: React.FC = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>Security Score</Typography>
-              <Typography variant="h3" sx={{ color: data.security_score >= 70 ? '#4caf50' : '#f44336' }}>
+              <Typography variant="h3" sx={{ color: data.security_score >= 70 ? colors.success : colors.danger }}>
                 {data.security_score}
               </Typography>
               <Typography variant="body2" color="textSecondary">out of 100</Typography>

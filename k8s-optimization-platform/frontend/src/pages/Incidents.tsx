@@ -23,6 +23,7 @@ import TimelineIcon from '@mui/icons-material/Timeline';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
+import { colors } from '../theme/colors';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -76,29 +77,29 @@ interface Summary {
 // ─── Design tokens ─────────────────────────────────────────────────────────
 
 const DK = {
-  bg: '#0d1117',
-  surface: '#161b22',
-  surface2: '#1c2128',
-  border: '#30363d',
-  text: '#e6edf3',
-  muted: '#8b949e',
+  bg: colors.background,
+  surface: colors.surface,
+  surface2: colors.surfaceHover,
+  border: colors.border,
+  text: colors.textPrimary,
+  muted: colors.textSecondary,
 };
 
 const SEV: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  oomkill:   '#f85149',
-  restart:   '#d29922',
-  throttling:'#3b82f6',
-  eviction:  '#a371f7',
+  oomkill:   colors.danger,
+  restart:   colors.warning,
+  throttling:colors.info,
+  eviction:  colors.purple,
 };
 
-const PIE_COLORS = ['#f85149', '#d29922', '#3b82f6', '#a371f7', '#3fb950', '#58a6ff'];
+const PIE_COLORS = [colors.danger, colors.warning, colors.info, colors.purple, colors.success, colors.info];
 
 // ─── Reusable mini-components ──────────────────────────────────────────────
 
@@ -225,7 +226,7 @@ const IncidentsInner: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#f85149' }} />
+      <CircularProgress sx={{ color: colors.danger }} />
     </Box>
   );
 
@@ -242,13 +243,13 @@ const IncidentsInner: React.FC = () => {
       {/* Header */}
       <Box display="flex" alignItems="center" justifyContent="space-between" mb={0.5}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <FlashOnIcon sx={{ color: '#f85149', fontSize: 28 }} />
+          <FlashOnIcon sx={{ color: colors.danger, fontSize: 28 }} />
           <Typography sx={{ color: DK.text, fontSize: '1.5rem', fontWeight: 700 }}>
             AI Incident Correlation
           </Typography>
           {summary && (
             <Chip label={`${summary.total_incidents} incidents`} size="small"
-              sx={{ bgcolor: '#f8514922', color: '#f85149', border: '1px solid #f8514944', fontWeight: 600 }} />
+              sx={{ bgcolor: `${colors.danger}22`, color: colors.danger, border: `1px solid ${colors.danger}44`, fontWeight: 600 }} />
           )}
         </Box>
         <Tooltip title="Refresh">
@@ -265,17 +266,17 @@ const IncidentsInner: React.FC = () => {
       {summary && (
         <Grid container spacing={2} mb={3}>
           <Grid item xs={6} sm={3}>
-            <KpiCard label="Total Incidents" value={summary.total_incidents} accent="#f85149" />
+            <KpiCard label="Total Incidents" value={summary.total_incidents} accent={colors.danger} />
           </Grid>
           <Grid item xs={6} sm={3}>
-            <KpiCard label="OOM Kills" value={summary.total_oomkills} accent="#f85149"
+            <KpiCard label="OOM Kills" value={summary.total_oomkills} accent={colors.danger}
               sub={`${summary.by_severity?.critical ?? 0} critical`} />
           </Grid>
           <Grid item xs={6} sm={3}>
-            <KpiCard label="Pod Restarts" value={summary.total_restarts} accent="#d29922" />
+            <KpiCard label="Pod Restarts" value={summary.total_restarts} accent={colors.warning} />
           </Grid>
           <Grid item xs={6} sm={3}>
-            <KpiCard label="Throttling Events" value={summary.total_throttling_events} accent="#3b82f6" />
+            <KpiCard label="Throttling Events" value={summary.total_throttling_events} accent={colors.info} />
           </Grid>
         </Grid>
       )}
@@ -325,7 +326,7 @@ const IncidentsInner: React.FC = () => {
       <Card sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2 }}>
         <Box sx={{ borderBottom: `1px solid ${DK.border}` }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)}
-            sx={{ '& .MuiTabs-indicator': { bgcolor: '#f85149' }, px: 1 }}>
+            sx={{ '& .MuiTabs-indicator': { bgcolor: colors.danger }, px: 1 }}>
             <Tab label={`Incidents (${visibleIncidents.length})`} sx={tabSx} />
             <Tab label={`Correlations (${correlations.length})`} sx={tabSx} />
             <Tab label={`Patterns (${patterns.length})`} sx={tabSx} />
@@ -337,8 +338,8 @@ const IncidentsInner: React.FC = () => {
         {tab === 0 && (
           <Box p={2}>
             {fixedIds.size > 0 && (
-              <Box sx={{ bgcolor: '#3fb95011', border: '1px solid #3fb95033', borderRadius: 1.5, p: 1.5, mb: 2 }}>
-                <Typography sx={{ color: '#3fb950', fontSize: '0.82rem', fontWeight: 600 }}>
+              <Box sx={{ bgcolor: `${colors.success}11`, border: `1px solid ${colors.success}33`, borderRadius: 1.5, p: 1.5, mb: 2 }}>
+                <Typography sx={{ color: colors.success, fontSize: '0.82rem', fontWeight: 600 }}>
                   ✅ {fixedIds.size} incident{fixedIds.size > 1 ? 's' : ''} fixed this session
                 </Typography>
               </Box>
@@ -376,8 +377,8 @@ const IncidentsInner: React.FC = () => {
                         <Button size="small" variant="contained"
                           disabled={fixLoading === inc.incident_id || inc.namespace === 'multiple'}
                           onClick={() => handleFix(inc)}
-                          sx={{ bgcolor: '#238636', color: '#fff', fontSize: '0.7rem', px: 1, py: 0.3, textTransform: 'none', fontWeight: 600, minWidth: 48,
-                            '&:hover': { bgcolor: '#2ea043' }, '&.Mui-disabled': { bgcolor: '#21262d', color: DK.muted } }}>
+                          sx={{ bgcolor: colors.success, color: '#fff', fontSize: '0.7rem', px: 1, py: 0.3, textTransform: 'none', fontWeight: 600, minWidth: 48,
+                            '&:hover': { bgcolor: colors.success }, '&.Mui-disabled': { bgcolor: colors.surfaceHover, color: DK.muted } }}>
                           {fixLoading === inc.incident_id ? '…' : 'Fix'}
                         </Button>
                       </TableCell>
@@ -413,7 +414,7 @@ const IncidentsInner: React.FC = () => {
                       <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{c.root_cause}</Typography>
                     </Box>
                     <Chip label={`${c.confidence}% conf.`} size="small"
-                      sx={{ bgcolor: c.confidence > 90 ? '#3fb95022' : '#d2992222', color: c.confidence > 90 ? '#3fb950' : '#d29922', border: `1px solid ${c.confidence > 90 ? '#3fb95044' : '#d2992244'}`, fontWeight: 700, fontSize: '0.68rem' }} />
+                      sx={{ bgcolor: c.confidence > 90 ? `${colors.success}22` : `${colors.warning}22`, color: c.confidence > 90 ? colors.success : colors.warning, border: `1px solid ${c.confidence > 90 ? `${colors.success}44` : `${colors.warning}44`}`, fontWeight: 700, fontSize: '0.68rem' }} />
                     <SevChip value={c.priority} />
                   </Box>
                 </AccordionSummary>
@@ -432,8 +433,8 @@ const IncidentsInner: React.FC = () => {
                     </Grid>
                     <Grid item xs={12} md={6}>
                       <Typography sx={{ color: DK.muted, fontSize: '0.72rem', fontWeight: 700, mb: 0.75, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Recommendation</Typography>
-                      <Box sx={{ bgcolor: '#3fb95011', border: '1px solid #3fb95033', borderRadius: 1.5, p: 1.5 }}>
-                        <Typography sx={{ color: '#3fb950', fontSize: '0.82rem' }}>{c.recommendation}</Typography>
+                      <Box sx={{ bgcolor: `${colors.success}11`, border: `1px solid ${colors.success}33`, borderRadius: 1.5, p: 1.5 }}>
+                        <Typography sx={{ color: colors.success, fontSize: '0.82rem' }}>{c.recommendation}</Typography>
                       </Box>
                       <Typography sx={{ color: DK.muted, fontSize: '0.72rem', mt: 1 }}>
                         Est. fix time: <strong style={{ color: DK.text }}>{c.estimated_fix_time}</strong>
@@ -464,7 +465,7 @@ const IncidentsInner: React.FC = () => {
                       <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{p.common_cause}</Typography>
                     </Box>
                     <Chip label={`${p.frequency}×`} size="small"
-                      sx={{ bgcolor: '#f8514922', color: '#f85149', border: '1px solid #f8514944', fontWeight: 700, fontSize: '0.7rem' }} />
+                      sx={{ bgcolor: `${colors.danger}22`, color: colors.danger, border: `1px solid ${colors.danger}44`, fontWeight: 700, fontSize: '0.7rem' }} />
                   </Box>
                 </AccordionSummary>
                 <AccordionDetails sx={{ bgcolor: DK.bg, borderTop: `1px solid ${DK.border}`, p: 2 }}>
@@ -482,7 +483,7 @@ const IncidentsInner: React.FC = () => {
                         <ListItem disablePadding sx={{ py: 0.5 }}>
                           <Box display="flex" gap={1.5} alignItems="flex-start">
                             <Chip label={`${idx + 1}`} size="small"
-                              sx={{ bgcolor: '#3b82f622', color: '#3b82f6', border: '1px solid #3b82f644', fontWeight: 700, fontSize: '0.65rem', minWidth: 24, height: 20 }} />
+                              sx={{ bgcolor: `${colors.info}22`, color: colors.info, border: `1px solid ${colors.info}44`, fontWeight: 700, fontSize: '0.65rem', minWidth: 24, height: 20 }} />
                             <Typography sx={{ color: DK.muted, fontSize: '0.8rem' }}>{step}</Typography>
                           </Box>
                         </ListItem>
@@ -544,7 +545,7 @@ const IncidentsInner: React.FC = () => {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity={toast.sev === 'info' ? 'info' : toast.sev}
           onClose={() => setToast(t => ({ ...t, open: false }))}
-          sx={{ bgcolor: toast.sev === 'success' ? '#238636' : toast.sev === 'info' ? '#1f3a5f' : '#b62324', color: '#fff', '& .MuiAlert-icon': { color: '#fff' }, maxWidth: 480 }}>
+          sx={{ bgcolor: toast.sev === 'success' ? colors.success : toast.sev === 'info' ? colors.infoBg : colors.danger, color: '#fff', '& .MuiAlert-icon': { color: '#fff' }, maxWidth: 480 }}>
           {toast.msg}
         </Alert>
       </Snackbar>

@@ -53,6 +53,7 @@ import {
   Radar,
 } from 'recharts';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface ScoreFactor {
   name: string;
@@ -110,7 +111,7 @@ interface Summary {
 }
 
 const scoreColor = (score: number) =>
-  score >= 90 ? '#2e7d32' : score >= 75 ? '#1565c0' : score >= 60 ? '#e65100' : '#c62828';
+  score >= 90 ? colors.success : score >= 75 ? colors.info : score >= 60 ? colors.warning : colors.danger;
 
 const gradeChipColor = (grade: string): 'success' | 'primary' | 'warning' | 'error' => {
   if (grade.startsWith('A')) return 'success';
@@ -340,7 +341,7 @@ const Scoring: React.FC = () => {
         <Grid item xs={12} md={5}>
           <Paper sx={{ p: 3, mb: 2 }}>
             <Box display="flex" alignItems="center" gap={1} mb={2}>
-              <StarIcon sx={{ color: '#e65100', fontSize: 20 }} />
+              <StarIcon sx={{ color: colors.warning, fontSize: 20 }} />
               <Typography variant="h6" fontWeight="bold">Top Performers</Typography>
             </Box>
             <Stack spacing={1}>
@@ -366,7 +367,7 @@ const Scoring: React.FC = () => {
 
           <Paper sx={{ p: 3 }}>
             <Box display="flex" alignItems="center" gap={1} mb={2}>
-              <WarningIcon sx={{ color: '#c62828', fontSize: 20 }} />
+              <WarningIcon sx={{ color: colors.danger, fontSize: 20 }} />
               <Typography variant="h6" fontWeight="bold">Needs Attention</Typography>
             </Box>
             {summary?.needs_attention.length === 0 ? (
@@ -420,7 +421,7 @@ const Scoring: React.FC = () => {
                               size="small"
                               sx={{
                                 height: 18, fontSize: 10,
-                                bgcolor: factor.status === 'excellent' ? '#e8f5e9' : factor.status === 'good' ? '#e3f2fd' : factor.status === 'fair' ? '#fff3e0' : '#fdecea',
+                                bgcolor: factor.status === 'excellent' ? colors.successBg : factor.status === 'good' ? colors.infoBg : factor.status === 'fair' ? colors.warningBg : colors.dangerBg,
                                 color,
                               }}
                             />
@@ -451,7 +452,7 @@ const Scoring: React.FC = () => {
                     <PolarGrid />
                     <PolarAngleAxis dataKey="factor" tick={{ fontSize: 12 }} />
                     <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 10 }} />
-                    <Radar name="Score" dataKey="score" stroke="#1565c0" fill="#1565c0" fillOpacity={0.2} />
+                    <Radar name="Score" dataKey="score" stroke={colors.info} fill={colors.info} fillOpacity={0.2} />
                   </RadarChart>
                 </ResponsiveContainer>
               </Paper>
@@ -466,12 +467,12 @@ const Scoring: React.FC = () => {
                   </Typography>
                   <ResponsiveContainer width="100%" height={220}>
                     <LineChart data={selectedTrendData.history}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
                       <XAxis dataKey="date" tick={{ fontSize: 12 }} />
                       <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
                       <RechartsTooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="score" stroke="#1565c0" strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="score" stroke={colors.info} strokeWidth={2} dot={{ r: 3 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 </Paper>

@@ -41,6 +41,7 @@ import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Cart
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Prediction {
   prediction_id: string;
@@ -228,7 +229,7 @@ const PredictiveInner: React.FC = () => {
                   dataKey="value"
                 >
                   {typeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={['#f44336', '#ff9800', '#2196f3', '#9c27b0'][index % 4]} />
+                    <Cell key={`cell-${index}`} fill={[colors.danger, colors.warning, colors.info, colors.purple][index % 4]} />
                   ))}
                 </Pie>
                 <Tooltip />
@@ -415,13 +416,13 @@ const PredictiveInner: React.FC = () => {
                 {selectedPrediction.recommendation}
               </Alert>
               <Typography variant="subtitle2" gutterBottom>Current Metrics</Typography>
-              <Paper sx={{ p: 2, mb: 2, bgcolor: '#f5f5f5' }}>
+              <Paper sx={{ p: 2, mb: 2, bgcolor: colors.surfaceHover }}>
                 <pre style={{ fontSize: '12px', margin: 0 }}>
                   {JSON.stringify(selectedPrediction.current_metrics, null, 2)}
                 </pre>
               </Paper>
               <Typography variant="subtitle2" gutterBottom>Predicted Metrics</Typography>
-              <Paper sx={{ p: 2, bgcolor: '#f5f5f5' }}>
+              <Paper sx={{ p: 2, bgcolor: colors.surfaceHover }}>
                 <pre style={{ fontSize: '12px', margin: 0 }}>
                   {JSON.stringify(selectedPrediction.predicted_metrics, null, 2)}
                 </pre>

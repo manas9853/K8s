@@ -10,6 +10,7 @@ import {
   Timeline as TraceIcon, Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -50,20 +51,20 @@ interface TracesData {
 // ── Small helpers ─────────────────────────────────────────────────────────────
 
 const statusColor = (s: TraceService['status']) =>
-  s === 'healthy' ? '#22c55e' : s === 'degraded' ? '#f59e0b' : '#ef4444';
+  s === 'healthy' ? colors.success : s === 'degraded' ? colors.warning : colors.danger;
 
 const statusMui = (s: TraceService['status']): 'success' | 'warning' | 'error' =>
   s === 'healthy' ? 'success' : s === 'degraded' ? 'warning' : 'error';
 
 const latencyColor = (ms: number) =>
-  ms > 500 ? '#ef4444' : ms > 200 ? '#f59e0b' : '#22c55e';
+  ms > 500 ? colors.danger : ms > 200 ? colors.warning : colors.success;
 
 const HistBar: React.FC<{ label: string; value: number; maxVal: number; color: string }> = ({
   label, value, maxVal, color,
 }) => (
   <Box display="flex" alignItems="center" gap={1} mb={0.75}>
     <Typography variant="caption" sx={{ width: 36, flexShrink: 0, textAlign: 'right' }}>{label}</Typography>
-    <Box sx={{ flex: 1, bgcolor: '#f3f4f6', borderRadius: 1, height: 14, overflow: 'hidden' }}>
+    <Box sx={{ flex: 1, bgcolor: colors.surfaceHover, borderRadius: 1, height: 14, overflow: 'hidden' }}>
       <Box sx={{ width: `${Math.min(100, (value / Math.max(maxVal, 1)) * 100)}%`, height: '100%', bgcolor: color, borderRadius: 1 }} />
     </Box>
     <Typography variant="caption" fontWeight={700} sx={{ width: 56, flexShrink: 0 }}>{value}ms</Typography>
@@ -172,15 +173,15 @@ const Traces: React.FC = () => {
       {/* ── KPI strip ────────────────────────────────────────────────────── */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Services',      value: String(data.total_services),  color: '#6366f1' },
-          { label: 'Est. Req / sec',       value: String(totalRPS),             color: '#3b82f6' },
-          { label: 'Avg P95 Latency',      value: `${avgP95}ms`,               color: avgP95 > 300 ? '#ef4444' : '#22c55e' },
-          { label: 'Avg Error Rate',       value: `${avgErrRate}%`,             color: parseFloat(avgErrRate) > 2 ? '#ef4444' : '#22c55e' },
-          { label: 'Services w/ Issues',   value: String(issueCount),           color: issueCount > 0 ? '#f59e0b' : '#22c55e' },
-          { label: 'Total Restarts',       value: String(totalRestarts),        color: totalRestarts > 50 ? '#ef4444' : totalRestarts > 10 ? '#f59e0b' : '#22c55e' },
+          { label: 'Total Services',      value: String(data.total_services),  color: colors.purple },
+          { label: 'Est. Req / sec',       value: String(totalRPS),             color: colors.info },
+          { label: 'Avg P95 Latency',      value: `${avgP95}ms`,               color: avgP95 > 300 ? colors.danger : colors.success },
+          { label: 'Avg Error Rate',       value: `${avgErrRate}%`,             color: parseFloat(avgErrRate) > 2 ? colors.danger : colors.success },
+          { label: 'Services w/ Issues',   value: String(issueCount),           color: issueCount > 0 ? colors.warning : colors.success },
+          { label: 'Total Restarts',       value: String(totalRestarts),        color: totalRestarts > 50 ? colors.danger : totalRestarts > 10 ? colors.warning : colors.success },
         ].map(({ label, value, color }) => (
           <Grid item xs={12} sm={6} md={2} key={label}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}` }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, borderLeft: `4px solid ${color}` }}>
               <CardContent sx={{ py: '12px !important', px: 2 }}>
                 <Typography variant="caption" color="textSecondary" fontWeight={600}>{label}</Typography>
                 <Typography variant="h5" fontWeight={800} sx={{ color, mt: 0.5 }}>{value}</Typography>
@@ -193,7 +194,7 @@ const Traces: React.FC = () => {
       <Grid container spacing={3}>
         {/* ── Service performance table ─────────────────────────────────── */}
         <Grid item xs={12} md={8}>
-          <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+          <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={2}>
                 Service Performance Map
@@ -204,7 +205,7 @@ const Traces: React.FC = () => {
               <TableContainer sx={{ maxHeight: 460, overflow: 'auto' }}>
                 <Table size="small" stickyHeader>
                   <TableHead>
-                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#f8fafc', fontSize: 12 } }}>
+                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceHover, fontSize: 12 } }}>
                       <TableCell>Service</TableCell>
                       <TableCell>Namespace</TableCell>
                       <TableCell>Endpoints</TableCell>
@@ -246,7 +247,7 @@ const Traces: React.FC = () => {
                         <TableCell sx={{ color: latencyColor(svc.p99_latency_ms) }}>{svc.p99_latency_ms}ms</TableCell>
                         <TableCell>
                           <Typography variant="body2" fontWeight={700}
-                            sx={{ color: svc.error_rate > 10 ? '#ef4444' : svc.error_rate > 3 ? '#f59e0b' : '#22c55e' }}>
+                            sx={{ color: svc.error_rate > 10 ? colors.danger : svc.error_rate > 3 ? colors.warning : colors.success }}>
                             {svc.error_rate.toFixed(1)}%
                           </Typography>
                         </TableCell>
@@ -264,7 +265,7 @@ const Traces: React.FC = () => {
 
         {/* ── Latency histogram ─────────────────────────────────────────── */}
         <Grid item xs={12} md={4}>
-          <Card elevation={0} sx={{ border: '1px solid #e5e7eb', height: '100%' }}>
+          <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, height: '100%' }}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={2}>Latency Distribution (top 6)</Typography>
               {services.slice(0, 6).map(svc => (
@@ -273,9 +274,9 @@ const Traces: React.FC = () => {
                     {svc.service}
                     <Typography component="span" variant="caption" color="textSecondary" ml={0.5}>· {svc.namespace}</Typography>
                   </Typography>
-                  <HistBar label="P50" value={svc.p50_latency_ms} maxVal={topLatency} color="#22c55e" />
-                  <HistBar label="P95" value={svc.p95_latency_ms} maxVal={topLatency} color="#f59e0b" />
-                  <HistBar label="P99" value={svc.p99_latency_ms} maxVal={topLatency} color="#ef4444" />
+                  <HistBar label="P50" value={svc.p50_latency_ms} maxVal={topLatency} color={colors.success} />
+                  <HistBar label="P95" value={svc.p95_latency_ms} maxVal={topLatency} color={colors.warning} />
+                  <HistBar label="P99" value={svc.p99_latency_ms} maxVal={topLatency} color={colors.danger} />
                 </Box>
               ))}
             </CardContent>
@@ -284,7 +285,7 @@ const Traces: React.FC = () => {
 
         {/* ── Recent spans (from events) ────────────────────────────────── */}
         <Grid item xs={12}>
-          <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+          <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
             <CardContent>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                 <Typography variant="subtitle1" fontWeight={700}>
@@ -297,7 +298,7 @@ const Traces: React.FC = () => {
               <TableContainer>
                 <Table size="small">
                   <TableHead>
-                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#f8fafc', fontSize: 12 } }}>
+                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceHover, fontSize: 12 } }}>
                       <TableCell>Event ID</TableCell>
                       <TableCell>Namespace</TableCell>
                       <TableCell>Operation</TableCell>
@@ -323,11 +324,11 @@ const Traces: React.FC = () => {
                         </TableCell>
                         <TableCell>
                           <Box display="flex" alignItems="center" gap={1}>
-                            <Box sx={{ width: 60, bgcolor: '#f3f4f6', borderRadius: 1, height: 5, overflow: 'hidden' }}>
+                            <Box sx={{ width: 60, bgcolor: colors.surfaceHover, borderRadius: 1, height: 5, overflow: 'hidden' }}>
                               <Box sx={{
                                 width: `${Math.min(100, (span.duration_ms / 5000) * 100)}%`,
                                 height: '100%',
-                                bgcolor: span.duration_ms > 2000 ? '#ef4444' : span.duration_ms > 500 ? '#f59e0b' : '#22c55e',
+                                bgcolor: span.duration_ms > 2000 ? colors.danger : span.duration_ms > 500 ? colors.warning : colors.success,
                               }} />
                             </Box>
                             <Typography variant="caption">{span.duration_ms}ms</Typography>

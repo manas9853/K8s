@@ -15,6 +15,7 @@ import {
   Widgets as PodsIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface NamespaceMetrics {
   namespace: string;
@@ -70,7 +71,7 @@ const MultiSeriesChart: React.FC<{
         {/* Y grid lines */}
         {[0.25, 0.5, 0.75, 1].map(f => {
           const y = height - f * (height - 8) - 4;
-          return <line key={f} x1={0} y1={y} x2={width} y2={y} stroke="#f3f4f6" strokeWidth={1} />;
+          return <line key={f} x1={0} y1={y} x2={width} y2={y} stroke={colors.surfaceHover} strokeWidth={1} />;
         })}
       </svg>
       <Box display="flex" gap={2} mt={0.5} flexWrap="wrap">
@@ -87,8 +88,8 @@ const MultiSeriesChart: React.FC<{
 
 // Heatmap block
 const HeatCell: React.FC<{ value: number; label: string }> = ({ value, label }) => {
-  const bg = value > 80 ? '#fecaca' : value > 60 ? '#fed7aa' : value > 40 ? '#fef08a' : '#bbf7d0';
-  const fg = value > 80 ? '#991b1b' : value > 60 ? '#9a3412' : value > 40 ? '#854d0e' : '#166534';
+  const bg = value > 80 ? colors.dangerBg : value > 60 ? colors.warningBg : value > 40 ? colors.warningBg : colors.successBg;
+  const fg = value > 80 ? colors.dangerBg : value > 60 ? colors.warning : value > 40 ? colors.warningBg : colors.success;
   return (
     <Tooltip title={`${label}: ${value.toFixed(1)}%`}>
       <Box sx={{
@@ -151,12 +152,12 @@ const Metrics: React.FC = () => {
   const totalNetIn = filtered.reduce((s, m) => s + m.network_in, 0);
   const totalNetOut = filtered.reduce((s, m) => s + m.network_out, 0);
 
-  const cpuColor = (v: number) => v > 80 ? '#ef4444' : v > 60 ? '#f59e0b' : '#22c55e';
-  const memColor = (v: number) => v > 85 ? '#ef4444' : v > 65 ? '#f59e0b' : '#3b82f6';
+  const cpuColor = (v: number) => v > 80 ? colors.danger : v > 60 ? colors.warning : colors.success;
+  const memColor = (v: number) => v > 85 ? colors.danger : v > 65 ? colors.warning : colors.info;
 
   // Multi-series chart data from all namespaces (top 5 by CPU)
   const top5 = [...filtered].sort((a, b) => b.cpu_usage - a.cpu_usage).slice(0, 5);
-  const chartColors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444'];
+  const chartColors = [colors.info, colors.purple, colors.success, colors.warning, colors.danger];
 
   return (
     <Box p={3}>
@@ -194,14 +195,14 @@ const Metrics: React.FC = () => {
       {/* ── Summary KPI strip ────────────────────────────────────────────────── */}
       <Grid container spacing={2} mb={3}>
         {[
-          { icon: <PodsIcon />, label: 'Total Pods', value: String(totalPods), unit: '', color: '#6366f1', trend: null },
+          { icon: <PodsIcon />, label: 'Total Pods', value: String(totalPods), unit: '', color: colors.purple, trend: null },
           { icon: <MetricsIcon />, label: 'Avg CPU Usage', value: avgCPU.toFixed(1), unit: '%', color: cpuColor(avgCPU), trend: avgCPU > 70 ? 'high' : 'normal' },
           { icon: <MemoryIcon />, label: 'Avg Memory', value: avgMem.toFixed(1), unit: '%', color: memColor(avgMem), trend: avgMem > 80 ? 'high' : 'normal' },
-          { icon: <NetworkIcon />, label: 'Network In', value: (totalNetIn / 1000).toFixed(2), unit: 'GB/s', color: '#10b981', trend: null },
-          { icon: <BoltIcon />, label: 'Network Out', value: (totalNetOut / 1000).toFixed(2), unit: 'GB/s', color: '#f59e0b', trend: null },
+          { icon: <NetworkIcon />, label: 'Network In', value: (totalNetIn / 1000).toFixed(2), unit: 'GB/s', color: colors.success, trend: null },
+          { icon: <BoltIcon />, label: 'Network Out', value: (totalNetOut / 1000).toFixed(2), unit: 'GB/s', color: colors.warning, trend: null },
         ].map(({ icon, label, value, unit, color, trend }) => (
           <Grid item xs={12} sm={6} md={2.4} key={label}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}` }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, borderLeft: `4px solid ${color}` }}>
               <CardContent sx={{ py: '12px !important', px: 2 }}>
                 <Box display="flex" justifyContent="space-between" alignItems="flex-start">
                   <Typography variant="caption" color="textSecondary" fontWeight={600}>{label}</Typography>
@@ -228,7 +229,7 @@ const Metrics: React.FC = () => {
         <Grid container spacing={3}>
           {/* Multi-series CPU chart */}
           <Grid item xs={12} md={8}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} mb={1}>CPU Usage — Top Namespaces</Typography>
                 <Typography variant="caption" color="textSecondary" display="block" mb={2}>
@@ -249,7 +250,7 @@ const Metrics: React.FC = () => {
 
           {/* Memory sparklines */}
           <Grid item xs={12} md={4}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>Memory Trends</Typography>
                 {filtered.slice(0, 6).map((m, i) => (
@@ -269,7 +270,7 @@ const Metrics: React.FC = () => {
 
           {/* CPU heatmap */}
           <Grid item xs={12}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} mb={0.5}>CPU Utilization Heatmap</Typography>
                 <Typography variant="caption" color="textSecondary" display="block" mb={2}>
@@ -284,13 +285,13 @@ const Metrics: React.FC = () => {
 
           {/* Namespace table */}
           <Grid item xs={12}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>Namespace Resource Matrix</Typography>
                 <TableContainer>
                   <Table size="small">
                     <TableHead>
-                      <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#f8fafc', fontSize: 12 } }}>
+                      <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceHover, fontSize: 12 } }}>
                         <TableCell>Namespace</TableCell>
                         <TableCell>Pods</TableCell>
                         <TableCell>CPU</TableCell>
@@ -310,7 +311,7 @@ const Metrics: React.FC = () => {
                             <TableCell>{m.pod_count}</TableCell>
                             <TableCell>
                               <Box display="flex" alignItems="center" gap={1}>
-                                <Box sx={{ width: 60, bgcolor: '#f3f4f6', borderRadius: 1, height: 6, overflow: 'hidden' }}>
+                                <Box sx={{ width: 60, bgcolor: colors.surfaceHover, borderRadius: 1, height: 6, overflow: 'hidden' }}>
                                   <Box sx={{ width: `${Math.min(m.cpu_usage, 100)}%`, height: '100%', bgcolor: cpuColor(m.cpu_usage) }} />
                                 </Box>
                                 <Typography variant="caption">{m.cpu_usage.toFixed(1)}%</Typography>
@@ -318,7 +319,7 @@ const Metrics: React.FC = () => {
                             </TableCell>
                             <TableCell>
                               <Box display="flex" alignItems="center" gap={1}>
-                                <Box sx={{ width: 60, bgcolor: '#f3f4f6', borderRadius: 1, height: 6, overflow: 'hidden' }}>
+                                <Box sx={{ width: 60, bgcolor: colors.surfaceHover, borderRadius: 1, height: 6, overflow: 'hidden' }}>
                                   <Box sx={{ width: `${Math.min(m.memory_usage, 100)}%`, height: '100%', bgcolor: memColor(m.memory_usage) }} />
                                 </Box>
                                 <Typography variant="caption">{m.memory_usage.toFixed(1)}%</Typography>

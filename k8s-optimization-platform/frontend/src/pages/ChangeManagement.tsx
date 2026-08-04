@@ -9,6 +9,7 @@ import {
 import ChangeCircleIcon from '@mui/icons-material/ChangeCircle';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Change {
   id: string;
@@ -38,37 +39,37 @@ interface ChangeManagementData {
 }
 
 const DK = {
-  bg: '#0d1117',
-  surface: '#161b22',
-  border: '#30363d',
-  text: '#e6edf3',
-  muted: '#8b949e',
+  bg: colors.background,
+  surface: colors.surface,
+  border: colors.border,
+  text: colors.textPrimary,
+  muted: colors.textSecondary,
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  implemented:  '#3fb950',
-  approved:     '#3b82f6',
-  in_progress:  '#a371f7',
-  pending:      '#d29922',
-  rejected:     '#f85149',
-  rolled_back:  '#8b949e',
+  implemented:  colors.success,
+  approved:     colors.info,
+  in_progress:  colors.purple,
+  pending:      colors.warning,
+  rejected:     colors.danger,
+  rolled_back:  colors.textSecondary,
 };
 
 const PRIORITY_COLOR: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 const RISK_COLOR: Record<string, string> = {
-  high:   '#f85149',
-  medium: '#d29922',
-  low:    '#3fb950',
+  high:   colors.danger,
+  medium: colors.warning,
+  low:    colors.success,
 };
 
 const StyledChip: React.FC<{ value: string; colorMap: Record<string, string>; label?: string }> = ({ value, colorMap, label }) => {
-  const c = colorMap[value] ?? '#8b949e';
+  const c = colorMap[value] ?? colors.textSecondary;
   return (
     <Chip
       label={label ?? value.replace('_', ' ')}
@@ -133,13 +134,13 @@ const ChangeManagementInner: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#a371f7' }} />
+      <CircularProgress sx={{ color: colors.purple }} />
     </Box>
   );
 
   if (error) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#2d1317', color: '#f85149', border: '1px solid #f8514944' }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: colors.danger, border: `1px solid ${colors.danger}44` }}>{error}</Alert>
     </Box>
   );
 
@@ -157,7 +158,7 @@ const ChangeManagementInner: React.FC = () => {
     color: DK.text,
     '& .MuiOutlinedInput-notchedOutline': { borderColor: DK.border },
     '& .MuiSvgIcon-root': { color: DK.muted },
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#a371f7' },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.purple },
     bgcolor: DK.surface,
   };
 
@@ -165,17 +166,17 @@ const ChangeManagementInner: React.FC = () => {
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
       {/* Header */}
       <Box display="flex" alignItems="center" gap={1.5} mb={0.5}>
-        <ChangeCircleIcon sx={{ color: '#a371f7', fontSize: 28 }} />
+        <ChangeCircleIcon sx={{ color: colors.purple, fontSize: 28 }} />
         <Typography sx={{ color: DK.text, fontSize: '1.5rem', fontWeight: 700 }}>
           Change Management
         </Typography>
         {data.cluster_name && (
           <Chip label={data.cluster_name} size="small"
-            sx={{ bgcolor: '#a371f722', color: '#a371f7', border: '1px solid #a371f744', fontWeight: 600 }} />
+            sx={{ bgcolor: `${colors.purple}22`, color: colors.purple, border: `1px solid ${colors.purple}44`, fontWeight: 600 }} />
         )}
         {data.approval_required && (
           <Chip label="Approval Required" size="small"
-            sx={{ bgcolor: '#d2992222', color: '#d29922', border: '1px solid #d2992244', fontWeight: 600 }} />
+            sx={{ bgcolor: `${colors.warning}22`, color: colors.warning, border: `1px solid ${colors.warning}44`, fontWeight: 600 }} />
         )}
       </Box>
       <Typography sx={{ color: DK.muted, fontSize: '0.85rem', mb: 3 }}>
@@ -188,16 +189,16 @@ const ChangeManagementInner: React.FC = () => {
           <KpiCard label="Total Changes" value={data.total_changes} />
         </Grid>
         <Grid item xs={6} sm={2.4}>
-          <KpiCard label="Pending" value={data.pending_changes} accent="#d29922" />
+          <KpiCard label="Pending" value={data.pending_changes} accent={colors.warning} />
         </Grid>
         <Grid item xs={6} sm={2.4}>
-          <KpiCard label="Approved / In Progress" value={data.approved_changes} accent="#3b82f6" />
+          <KpiCard label="Approved / In Progress" value={data.approved_changes} accent={colors.info} />
         </Grid>
         <Grid item xs={6} sm={2.4}>
-          <KpiCard label="Implemented" value={data.implemented_changes} accent="#3fb950" />
+          <KpiCard label="Implemented" value={data.implemented_changes} accent={colors.success} />
         </Grid>
         <Grid item xs={6} sm={2.4}>
-          <KpiCard label="Rejected" value={data.rejected_changes} accent="#f85149" />
+          <KpiCard label="Rejected" value={data.rejected_changes} accent={colors.danger} />
         </Grid>
       </Grid>
 
@@ -206,7 +207,7 @@ const ChangeManagementInner: React.FC = () => {
         <CardContent sx={{ p: '14px 16px !important' }}>
           <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.75}>
             <Typography sx={{ color: DK.muted, fontSize: '0.8rem' }}>Implementation Progress</Typography>
-            <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '0.85rem' }}>{implementedPct}%</Typography>
+            <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '0.85rem' }}>{implementedPct}%</Typography>
           </Box>
           <LinearProgress
             variant="determinate"
@@ -214,8 +215,8 @@ const ChangeManagementInner: React.FC = () => {
             sx={{
               height: 7,
               borderRadius: 4,
-              bgcolor: '#21262d',
-              '& .MuiLinearProgress-bar': { bgcolor: '#3fb950', borderRadius: 4 },
+              bgcolor: colors.surfaceHover,
+              '& .MuiLinearProgress-bar': { bgcolor: colors.success, borderRadius: 4 },
             }}
           />
           <Typography sx={{ color: DK.muted, fontSize: '0.72rem', mt: 0.75 }}>
@@ -267,13 +268,13 @@ const ChangeManagementInner: React.FC = () => {
               <TableHead>
                 <TableRow>
                   {['ID','Title','Description','Type','Priority','Status','Risk','Requester','Approver','Requested'].map(h => (
-                    <TableCell key={h} sx={{ bgcolor: '#1c2128', color: DK.muted, fontWeight: 700, fontSize: '0.72rem', borderBottom: `1px solid ${DK.border}`, whiteSpace: 'nowrap' }}>{h}</TableCell>
+                    <TableCell key={h} sx={{ bgcolor: colors.surfaceHover, color: DK.muted, fontWeight: 700, fontSize: '0.72rem', borderBottom: `1px solid ${DK.border}`, whiteSpace: 'nowrap' }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filtered.map((c) => (
-                  <TableRow key={c.id} hover sx={{ '&:hover': { bgcolor: '#1c2128' }, '& td': { borderBottom: `1px solid ${DK.border}22` } }}>
+                  <TableRow key={c.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, '& td': { borderBottom: `1px solid ${DK.border}22` } }}>
                     <TableCell sx={{ color: DK.muted, fontFamily: 'monospace', fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{c.id}</TableCell>
                     <TableCell sx={{ color: DK.text, fontWeight: 600, fontSize: '0.8rem', minWidth: 180 }}>{c.title}</TableCell>
                     <TableCell sx={{ color: DK.muted, fontSize: '0.75rem', maxWidth: 260 }}>{c.description}</TableCell>

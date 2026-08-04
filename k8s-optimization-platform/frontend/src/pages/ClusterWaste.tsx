@@ -18,19 +18,20 @@ import {
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  hover:  '#252e42',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8b95a9',
-  body:   '#c8cdd8',
-  green:  '#4ade80',
-  red:    '#f87171',
-  yellow: '#f59e0b',
+  bg:     colors.background,
+  card:   colors.surface,
+  hover:  colors.surfaceHover,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  body:   colors.textMuted,
+  green:  colors.success,
+  red:    colors.danger,
+  yellow: colors.warning,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,7 +81,7 @@ const wasteColor = (pct: number) =>
   pct >= 60 ? T.red : pct >= 35 ? T.yellow : T.green;
 
 const wasteBarColor = (pct: number) =>
-  pct >= 60 ? '#450a0a' : pct >= 35 ? '#451a03' : '#052e16';
+  pct >= 60 ? colors.dangerBg : pct >= 35 ? colors.warningBg : colors.successBg;
 
 const efficiencyScore = (cpuW: number, memW: number) =>
   Math.max(0, Math.min(100, Math.round(100 - (cpuW * 0.6 + memW * 0.4))));
@@ -242,7 +243,7 @@ const ClusterWaste: React.FC = () => {
 
   if (error) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
 
@@ -434,7 +435,7 @@ const ClusterWaste: React.FC = () => {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: '#161f30' }}>
+                  <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
                     <TableCell sx={headSx}>Namespace</TableCell>
                     <TableCell sx={{ ...headSx, textAlign: 'right' }}>Current</TableCell>
                     <TableCell sx={{ ...headSx, textAlign: 'right' }}>Optimal</TableCell>

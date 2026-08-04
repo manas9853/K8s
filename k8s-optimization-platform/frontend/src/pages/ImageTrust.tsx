@@ -1,24 +1,25 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 const T = {
-  bg: '#0f1724',
-  card: '#1e2433',
-  border: '#2a3245',
-  text: '#e8eaf0',
-  muted: '#8892a4',
-  accent: '#3b82f6',
+  bg: colors.background,
+  card: colors.surface,
+  border: colors.border,
+  text: colors.textPrimary,
+  muted: colors.textSecondary,
+  accent: colors.info,
   // trust levels
-  private:   { bg: '#0d1f3c', text: '#60a5fa', border: '#1e3a5f' },
-  community: { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  unknown:   { bg: '#2d1a2e', text: '#c084fc', border: '#4a2a4a' },
-  trusted:   { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  private:   { bg: colors.infoBg, text: colors.info, border: colors.info },
+  community: { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  unknown:   { bg: colors.purpleBg, text: colors.purple, border: colors.purple },
+  trusted:   { bg: colors.successBg, text: colors.success, border: colors.successBg },
   // severity
-  critical:  { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  high:      { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  medium:    { bg: '#0d1f3c', text: '#60a5fa', border: '#1e3a5f' },
-  low:       { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  critical:  { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  high:      { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  medium:    { bg: colors.infoBg, text: colors.info, border: colors.info },
+  low:       { bg: colors.successBg, text: colors.success, border: colors.successBg },
 };
 
 const trustPalette = (level: string) => {
@@ -29,9 +30,9 @@ const trustPalette = (level: string) => {
 };
 
 const scoreColor = (score: number) => {
-  if (score >= 80) return '#4ade80';
-  if (score >= 60) return '#f59e0b';
-  return '#f87171';
+  if (score >= 80) return colors.success;
+  if (score >= 60) return colors.warning;
+  return colors.danger;
 };
 
 export default function ImageTrust() {
@@ -105,7 +106,7 @@ export default function ImageTrust() {
   );
   if (error || !data) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ color: '#f87171', fontSize: 15 }}>Error: {error || 'No data'}</div>
+      <div style={{ color: colors.danger, fontSize: 15 }}>Error: {error || 'No data'}</div>
     </div>
   );
 
@@ -123,12 +124,12 @@ export default function ImageTrust() {
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 8, background: '#1e2433', border: '1px solid #2a3245', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🔏</div>
+        <div style={{ width: 36, height: 36, borderRadius: 8, background: colors.surface, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🔏</div>
         <div>
           <div style={{ fontSize: 20, fontWeight: 700 }}>Image Trust & Provenance</div>
           <div style={{ color: T.muted, fontSize: 13 }}>Registry classification, signature verification and provenance tracking</div>
         </div>
-        <div style={{ marginLeft: 'auto', background: '#1e2433', border: '1px solid #2a3245', borderRadius: 8, padding: '6px 14px', fontSize: 12, color: T.muted }}>
+        <div style={{ marginLeft: 'auto', background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 8, padding: '6px 14px', fontSize: 12, color: T.muted }}>
           {data.cluster_name ?? 'xforce-devops'} · {totalImgs} unique images
         </div>
       </div>
@@ -139,14 +140,14 @@ export default function ImageTrust() {
         {/* Score ring */}
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="110" height="110" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#2a3245" strokeWidth="8" />
+            <circle cx="50" cy="50" r="40" fill="none" stroke={colors.border} strokeWidth="8" />
             <circle cx="50" cy="50" r="40" fill="none"
               stroke={scoreColor(score)} strokeWidth="8"
               strokeDasharray={`${(score / 100) * 251.3} 251.3`}
               strokeLinecap="round"
               transform="rotate(-90 50 50)" />
             <text x="50" y="46" textAnchor="middle" fill={scoreColor(score)} fontSize="18" fontWeight="700">{Math.round(score)}</text>
-            <text x="50" y="62" textAnchor="middle" fill="#8892a4" fontSize="9">Trust Score</text>
+            <text x="50" y="62" textAnchor="middle" fill={colors.textSecondary} fontSize="9">Trust Score</text>
           </svg>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
             {score >= 80 ? '🟢 Good' : score >= 60 ? '🟡 Fair' : '🔴 Poor'}
@@ -157,9 +158,9 @@ export default function ImageTrust() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           {[
             { label: 'Total Unique Images', value: totalImgs, col: T.accent },
-            { label: 'Private Registry', value: privateCount, col: '#60a5fa' },
-            { label: 'Community Images', value: communityCount, col: '#f59e0b' },
-            { label: 'Unknown / Untrusted', value: unknownCount + untrustedCount, col: '#f87171' },
+            { label: 'Private Registry', value: privateCount, col: colors.info },
+            { label: 'Community Images', value: communityCount, col: colors.warning },
+            { label: 'Unknown / Untrusted', value: unknownCount + untrustedCount, col: colors.danger },
           ].map(s => (
             <div key={s.label} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 12, color: T.muted, marginBottom: 6 }}>{s.label}</div>
@@ -188,7 +189,7 @@ export default function ImageTrust() {
                   </div>
                   <div style={{ color: T.muted, fontSize: 12 }}>{r.image_count} imgs · {pct}%</div>
                 </div>
-                <div style={{ height: 5, background: '#2a3245', borderRadius: 3 }}>
+                <div style={{ height: 5, background: colors.border, borderRadius: 3 }}>
                   <div style={{ height: '100%', width: `${pct}%`, background: pal.text, borderRadius: 3, transition: 'width .3s' }} />
                 </div>
               </div>
@@ -213,7 +214,7 @@ export default function ImageTrust() {
               {spotlightImages.slice(0, 15).map((img: any, i: number) => {
                 const pal = trustPalette(img.trust_level);
                 return (
-                  <div key={i} style={{ padding: '8px 10px', background: '#151f30', borderRadius: 8, marginBottom: 6, border: `1px solid ${pal.border}` }}>
+                  <div key={i} style={{ padding: '8px 10px', background: colors.surfaceAlt, borderRadius: 8, marginBottom: 6, border: `1px solid ${pal.border}` }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ padding: '1px 7px', borderRadius: 4, fontSize: 10, background: pal.bg, color: pal.text, border: `1px solid ${pal.border}`, whiteSpace: 'nowrap' }}>{img.trust_level}</span>
                       <span style={{ fontFamily: 'monospace', fontSize: 12, color: T.text, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={img.image}>{img.image}</span>
@@ -272,11 +273,11 @@ export default function ImageTrust() {
               placeholder="Search image / pod / namespace…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 12px', color: T.text, fontSize: 13, width: 240, outline: 'none' }}
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 12px', color: T.text, fontSize: 13, width: 240, outline: 'none' }}
             />
             {/* Trust filter */}
             <select value={filterTrust} onChange={e => setFilterTrust(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Trust Levels</option>
               <option value="private">Private</option>
               <option value="community">Community</option>
@@ -285,13 +286,13 @@ export default function ImageTrust() {
             </select>
             {/* Registry filter */}
             <select value={filterReg} onChange={e => setFilterReg(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Registries</option>
               {registries.filter(r => r !== 'all').map(r => <option key={r} value={r}>{r}</option>)}
             </select>
             {/* Namespace filter */}
             <select value={filterNs} onChange={e => setFilterNs(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Namespaces</option>
               {namespaces.filter(n => n !== 'all').map(n => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -314,9 +315,9 @@ export default function ImageTrust() {
                 const isRisky = img.trust_level === 'unknown' || img.trust_level === 'untrusted';
                 return (
                   <tr key={i}
-                    style={{ borderBottom: `1px solid ${T.border}`, background: isRisky ? '#151820' : 'transparent' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#1a2035')}
-                    onMouseLeave={e => (e.currentTarget.style.background = isRisky ? '#151820' : 'transparent')}>
+                    style={{ borderBottom: `1px solid ${T.border}`, background: isRisky ? colors.surfaceAlt : 'transparent' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = colors.surfaceAlt)}
+                    onMouseLeave={e => (e.currentTarget.style.background = isRisky ? colors.surfaceAlt : 'transparent')}>
                     {/* Image */}
                     <td style={{ padding: '9px 12px', maxWidth: 280 }}>
                       <div style={{ fontFamily: 'monospace', fontSize: 12, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={img.image}>
@@ -331,7 +332,7 @@ export default function ImageTrust() {
                     </td>
                     {/* Namespace */}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: '#1e2433', color: '#60a5fa', border: '1px solid #2a3245' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: colors.surface, color: colors.info, border: `1px solid ${colors.border}` }}>
                         {img.namespace}
                       </span>
                     </td>
@@ -347,15 +348,15 @@ export default function ImageTrust() {
                     </td>
                     {/* Signed */}
                     <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                      <span style={{ fontSize: 14, color: img.signed ? '#4ade80' : '#f87171' }}>{img.signed ? '✓' : '✗'}</span>
+                      <span style={{ fontSize: 14, color: img.signed ? colors.success : colors.danger }}>{img.signed ? '✓' : '✗'}</span>
                     </td>
                     {/* Uses Digest */}
                     <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                      <span style={{ fontSize: 14, color: img.uses_digest ? '#4ade80' : '#f87171' }}>{img.uses_digest ? '✓' : '✗'}</span>
+                      <span style={{ fontSize: 14, color: img.uses_digest ? colors.success : colors.danger }}>{img.uses_digest ? '✓' : '✗'}</span>
                     </td>
                     {/* Latest Tag */}
                     <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                      <span style={{ fontSize: 14, color: img.uses_latest_tag ? '#f87171' : '#4ade80' }}>
+                      <span style={{ fontSize: 14, color: img.uses_latest_tag ? colors.danger : colors.success }}>
                         {img.uses_latest_tag ? '⚠ yes' : '✓ no'}
                       </span>
                     </td>

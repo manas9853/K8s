@@ -21,6 +21,7 @@ import {
 import { Security as SecurityIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface PlaybookStep {
   step: number;
@@ -41,10 +42,10 @@ interface PlaybookExecutionResponse {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#ef5350',
-  high: '#ffa726',
-  medium: '#90caf9',
-  low: '#a5d6a7',
+  critical: colors.danger,
+  high: colors.warning,
+  medium: colors.info,
+  low: colors.success,
 };
 
 function formatTimestamp(value?: string) {
@@ -121,7 +122,7 @@ const PlaybookExecutionInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -129,7 +130,7 @@ const PlaybookExecutionInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -137,43 +138,43 @@ const PlaybookExecutionInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to fetch playbook execution data</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <SecurityIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <SecurityIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Playbook Execution
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real execution plan for {data.cluster_name || 'cluster'} · Last updated {formatTimestamp(data.last_updated)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Playbook ID', value: data.id, color: '#90caf9' },
-          { label: 'Total Steps', value: data.steps.length, color: '#90caf9' },
-          { label: 'Automated Steps', value: automatedSteps, color: automatedSteps > 0 ? '#a5d6a7' : '#8892a4' },
-          { label: 'Manual Steps', value: manualSteps, color: manualSteps > 0 ? '#ffa726' : '#8892a4' },
-          { label: 'Total Actions', value: totalActions, color: '#90caf9' },
+          { label: 'Playbook ID', value: data.id, color: colors.info },
+          { label: 'Total Steps', value: data.steps.length, color: colors.info },
+          { label: 'Automated Steps', value: automatedSteps, color: automatedSteps > 0 ? colors.success : colors.textSecondary },
+          { label: 'Manual Steps', value: manualSteps, color: manualSteps > 0 ? colors.warning : colors.textSecondary },
+          { label: 'Total Actions', value: totalActions, color: colors.info },
         ].map((item) => (
           <Grid item xs={6} md key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', height: '100%' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, height: '100%' }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                   {item.label}
                 </Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color, wordBreak: 'break-word' }}>
@@ -185,69 +186,69 @@ const PlaybookExecutionInner: React.FC = () => {
         ))}
       </Grid>
 
-      <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box display="flex" justifyContent="space-between" gap={2} flexWrap="wrap" mb={1.5}>
           <Box>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               {data.name}
             </Typography>
-            <Typography variant="body2" sx={{ color: '#8892a4' }}>
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>
               Backend execution data currently resolves to this playbook sequence from the real detail endpoint.
             </Typography>
           </Box>
-          <Chip label={data.severity.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: SEVERITY_COLOR[data.severity] || '#8892a4', fontWeight: 'bold', fontSize: 10 }} />
+          <Chip label={data.severity.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: SEVERITY_COLOR[data.severity] || colors.textSecondary, fontWeight: 'bold', fontSize: 10 }} />
         </Box>
-        <Typography variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.75 }}>
+        <Typography variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.75 }}>
           This page is using the real execution steps returned by the backend. Each step below includes the backend description, the exact actions array, whether the step is automated, and why the step matters in the remediation flow.
         </Typography>
       </Paper>
 
       <Stack spacing={1.5} mb={3}>
         {data.steps.map((step) => (
-          <Paper key={step.step} sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Paper key={step.step} sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <Box display="flex" justifyContent="space-between" gap={2} flexWrap="wrap" mb={1.5}>
               <Box>
                 <Box display="flex" alignItems="center" gap={1} flexWrap="wrap" mb={0.5}>
-                  <Chip label={`Step ${step.step}`} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
-                  <Typography variant="subtitle1" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                  <Chip label={`Step ${step.step}`} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontWeight: 'bold', fontSize: 10 }} />
+                  <Typography variant="subtitle1" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                     {step.title}
                   </Typography>
                 </Box>
-                <Typography variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+                <Typography variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
                   {step.description}
                 </Typography>
               </Box>
               <Box display="flex" gap={1} flexWrap="wrap" alignItems="flex-start">
-                <Chip label={step.automated ? 'AUTOMATED' : 'MANUAL'} size="small" sx={{ bgcolor: '#2a3245', color: step.automated ? '#a5d6a7' : '#ffa726', fontWeight: 'bold', fontSize: 10 }} />
-                <Chip label={step.estimated_time} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontWeight: 'bold', fontSize: 10 }} />
+                <Chip label={step.automated ? 'AUTOMATED' : 'MANUAL'} size="small" sx={{ bgcolor: colors.border, color: step.automated ? colors.success : colors.warning, fontWeight: 'bold', fontSize: 10 }} />
+                <Chip label={step.estimated_time} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontWeight: 'bold', fontSize: 10 }} />
               </Box>
             </Box>
 
-            <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mb: 1 }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mb: 1 }}>
               Why this step matters
             </Typography>
-            <Typography variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.75, mb: 2 }}>
+            <Typography variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.75, mb: 2 }}>
               {buildStepReason(data.id, step)}
             </Typography>
 
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12, width: 80 }}>
+                  <TableCell sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12, width: 80 }}>
                     Action #
                   </TableCell>
-                  <TableCell sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>
+                  <TableCell sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>
                     Backend Action
                   </TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
                 {step.actions.map((action, index) => (
-                  <TableRow key={`${step.step}-${index}`} hover sx={{ '&:hover': { bgcolor: '#232d3f' }, bgcolor: '#131d2e' }}>
-                    <TableCell sx={{ color: '#90caf9', borderColor: '#2a3245', fontWeight: 700 }}>
+                  <TableRow key={`${step.step}-${index}`} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, bgcolor: colors.surfaceAlt }}>
+                    <TableCell sx={{ color: colors.info, borderColor: colors.border, fontWeight: 700 }}>
                       {index + 1}
                     </TableCell>
-                    <TableCell sx={{ color: '#c8d0dc', borderColor: '#2a3245', fontSize: 12 }}>
+                    <TableCell sx={{ color: colors.textMuted, borderColor: colors.border, fontSize: 12 }}>
                       {action}
                     </TableCell>
                   </TableRow>

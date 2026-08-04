@@ -49,6 +49,7 @@ import {
   Timeline as TimelineIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface ConfigurationSnapshot {
   field: string;
@@ -293,7 +294,7 @@ const Rollback: React.FC = () => {
       {/* Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+          <Card sx={{ background: `linear-gradient(135deg, ${colors.gradientStart} 0%, ${colors.gradientEnd} 100%)`, color: 'white' }}>
             <CardContent>
               <Typography variant="h3" sx={{ fontWeight: 700 }}>
                 {summary?.total_changes || 0}
@@ -414,7 +415,7 @@ const Rollback: React.FC = () => {
           {/* Changes Table */}
           <TableContainer component={Paper} sx={{ boxShadow: 3 }}>
             <Table>
-              <TableHead sx={{ background: '#1a237e' }}>
+              <TableHead sx={{ background: colors.info }}>
                 <TableRow>
                   <TableCell sx={{ color: 'white', fontWeight: 700 }}>Select</TableCell>
                   <TableCell sx={{ color: 'white', fontWeight: 700 }}>Resource</TableCell>
@@ -429,7 +430,7 @@ const Rollback: React.FC = () => {
               <TableBody>
                 {changes.map((change) => (
                   <React.Fragment key={change.change_id}>
-                    <TableRow hover sx={{ '&:hover': { background: '#f5f5f5' } }}>
+                    <TableRow hover sx={{ '&:hover': { background: colors.surfaceHover } }}>
                       <TableCell>
                         <input
                           type="checkbox"
@@ -507,10 +508,10 @@ const Rollback: React.FC = () => {
                                       <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                         {snapshot.field}
                                       </TableCell>
-                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: '#d32f2f' }}>
+                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: colors.danger }}>
                                         {snapshot.old_value}
                                       </TableCell>
-                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: '#2e7d32' }}>
+                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: colors.success }}>
                                         {snapshot.new_value}
                                       </TableCell>
                                       <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
@@ -537,7 +538,7 @@ const Rollback: React.FC = () => {
       {activeTab === 1 && (
         <TableContainer component={Paper} sx={{ boxShadow: 3 }}>
           <Table>
-            <TableHead sx={{ background: '#1a237e' }}>
+            <TableHead sx={{ background: colors.info }}>
               <TableRow>
                 <TableCell sx={{ color: 'white', fontWeight: 700 }}>Rollback ID</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 700 }}>Change ID</TableCell>
@@ -578,7 +579,7 @@ const Rollback: React.FC = () => {
       {activeTab === 2 && (
         <TableContainer component={Paper} sx={{ boxShadow: 3 }}>
           <Table>
-            <TableHead sx={{ background: '#1a237e' }}>
+            <TableHead sx={{ background: colors.info }}>
               <TableRow>
                 <TableCell sx={{ color: 'white', fontWeight: 700 }}>Audit ID</TableCell>
                 <TableCell sx={{ color: 'white', fontWeight: 700 }}>Change ID</TableCell>

@@ -27,6 +27,7 @@ import {
 } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface BlastResource {
   type: string;
@@ -67,10 +68,10 @@ interface ActiveThreatsResponse {
 }
 
 const IMPACT_COLOR: Record<string, string> = {
-  critical: '#ef5350',
-  high: '#ffa726',
-  medium: '#90caf9',
-  low: '#a5d6a7',
+  critical: colors.danger,
+  high: colors.warning,
+  medium: colors.info,
+  low: colors.success,
 };
 
 function getIncidentId(index: number) {
@@ -191,7 +192,7 @@ const BlastRadiusAnalysisInner: React.FC = () => {
 
   if (loading && !blastRadius) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -199,7 +200,7 @@ const BlastRadiusAnalysisInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -207,12 +208,12 @@ const BlastRadiusAnalysisInner: React.FC = () => {
 
   if (!blastRadius || incidentOptions.length === 0) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
-        <Paper sx={{ p: 4, bgcolor: '#1e2433', border: '1px solid #2a3245', maxWidth: 720, mx: 'auto', textAlign: 'center' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
+        <Paper sx={{ p: 4, bgcolor: colors.surface, border: `1px solid ${colors.border}`, maxWidth: 720, mx: 'auto', textAlign: 'center' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             No blast radius data available
           </Typography>
-          <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.7 }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.7 }}>
             This page uses real incident ids derived from the live active threats feed. No threat-backed incidents were available for the selected cluster.
           </Typography>
         </Paper>
@@ -221,15 +222,15 @@ const BlastRadiusAnalysisInner: React.FC = () => {
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <WarningIcon sx={{ fontSize: 32, color: '#ef5350' }} />
+          <WarningIcon sx={{ fontSize: 32, color: colors.danger }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Blast Radius Analysis
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real impact scope for {blastRadius.cluster_name || 'cluster'} · {blastRadius.incident_id}
             </Typography>
           </Box>
@@ -241,15 +242,15 @@ const BlastRadiusAnalysisInner: React.FC = () => {
             value={incidentId}
             onChange={(event) => setIncidentId(event.target.value)}
             size="small"
-            SelectProps={{ MenuProps: { PaperProps: { sx: { bgcolor: '#1e2433', color: '#e8eaf0' } } } }}
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
+            SelectProps={{ MenuProps: { PaperProps: { sx: { bgcolor: colors.surface, color: colors.textPrimary } } } }}
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
             sx={{
               minWidth: 320,
               '& .MuiOutlinedInput-root': {
-                color: '#e8eaf0',
-                bgcolor: '#1e2433',
-                '& fieldset': { borderColor: '#2a3245' },
-                '&:hover fieldset': { borderColor: '#90caf9' },
+                color: colors.textPrimary,
+                bgcolor: colors.surface,
+                '& fieldset': { borderColor: colors.border },
+                '&:hover fieldset': { borderColor: colors.info },
               },
             }}
           >
@@ -259,7 +260,7 @@ const BlastRadiusAnalysisInner: React.FC = () => {
               </MenuItem>
             ))}
           </TextField>
-          <Button variant="contained" sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+          <Button variant="contained" sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
             Live Data
           </Button>
         </Box>
@@ -267,15 +268,15 @@ const BlastRadiusAnalysisInner: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Affected Resources', value: blastRadius.impact_summary.total_affected_resources, color: '#ef5350' },
-          { label: 'Namespaces', value: blastRadius.impact_summary.affected_namespaces, color: '#90caf9' },
-          { label: 'Pods', value: blastRadius.impact_summary.affected_pods, color: '#ffa726' },
-          { label: 'Data Risk', value: blastRadius.impact_summary.data_exposure_risk, color: '#ef5350' },
+          { label: 'Affected Resources', value: blastRadius.impact_summary.total_affected_resources, color: colors.danger },
+          { label: 'Namespaces', value: blastRadius.impact_summary.affected_namespaces, color: colors.info },
+          { label: 'Pods', value: blastRadius.impact_summary.affected_pods, color: colors.warning },
+          { label: 'Data Risk', value: blastRadius.impact_summary.data_exposure_risk, color: colors.danger },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                   {item.label}
                 </Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>
@@ -287,16 +288,16 @@ const BlastRadiusAnalysisInner: React.FC = () => {
         ))}
       </Grid>
 
-      <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-          <SecurityIcon sx={{ color: '#ffa726' }} />
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <SecurityIcon sx={{ color: colors.warning }} />
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Why this blast radius is high
           </Typography>
         </Box>
         <Stack spacing={1}>
           {blastReasons.map((reason) => (
-            <Typography key={reason} variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+            <Typography key={reason} variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
               • {reason}
             </Typography>
           ))}
@@ -305,43 +306,43 @@ const BlastRadiusAnalysisInner: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245', height: '100%' }}>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+          <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}`, height: '100%' }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
               Network Exposure
             </Typography>
             <Stack spacing={1}>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
-                Host network pods: <Box component="span" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{blastRadius.network_exposure.host_network_pods}</Box>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Host network pods: <Box component="span" sx={{ color: colors.textPrimary, fontWeight: 700 }}>{blastRadius.network_exposure.host_network_pods}</Box>
               </Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
-                Privileged pods: <Box component="span" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{blastRadius.network_exposure.privileged_pods}</Box>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Privileged pods: <Box component="span" sx={{ color: colors.textPrimary, fontWeight: 700 }}>{blastRadius.network_exposure.privileged_pods}</Box>
               </Typography>
             </Stack>
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245', height: '100%' }}>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+          <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}`, height: '100%' }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
               Threat Context
             </Typography>
             <Stack spacing={1}>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
-                Threat: <Box component="span" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{selectedThreat?.name || 'N/A'}</Box>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Threat: <Box component="span" sx={{ color: colors.textPrimary, fontWeight: 700 }}>{selectedThreat?.name || 'N/A'}</Box>
               </Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
-                Severity: <Box component="span" sx={{ color: IMPACT_COLOR[(selectedThreat?.severity || '').toLowerCase()] || '#e8eaf0', fontWeight: 700 }}>{selectedThreat?.severity?.toUpperCase() || 'N/A'}</Box>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Severity: <Box component="span" sx={{ color: IMPACT_COLOR[(selectedThreat?.severity || '').toLowerCase()] || colors.textPrimary, fontWeight: 700 }}>{selectedThreat?.severity?.toUpperCase() || 'N/A'}</Box>
               </Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
-                Status: <Box component="span" sx={{ color: '#90caf9', fontWeight: 700 }}>{selectedThreat?.status?.toUpperCase() || 'N/A'}</Box>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Status: <Box component="span" sx={{ color: colors.info, fontWeight: 700 }}>{selectedThreat?.status?.toUpperCase() || 'N/A'}</Box>
               </Typography>
             </Stack>
           </Paper>
         </Grid>
       </Grid>
 
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Affected Resources ({blastRadius.affected_resources.length})
           </Typography>
         </Box>
@@ -350,7 +351,7 @@ const BlastRadiusAnalysisInner: React.FC = () => {
             <TableHead>
               <TableRow>
                 {['Type', 'Name', 'Namespace', 'Impact Level', 'Exposure Type'].map((heading) => (
-                  <TableCell key={heading} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', bgcolor: '#131d2e', borderColor: '#2a3245' }}>
+                  <TableCell key={heading} sx={{ fontWeight: 700, fontSize: 12, color: colors.textSecondary, bgcolor: colors.surfaceAlt, borderColor: colors.border }}>
                     {heading}
                   </TableCell>
                 ))}
@@ -358,16 +359,16 @@ const BlastRadiusAnalysisInner: React.FC = () => {
             </TableHead>
             <TableBody>
               {blastRadius.affected_resources.map((resource, index) => (
-                <TableRow key={`${resource.type}-${resource.name}-${index}`} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={resource.type} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10 }} />
+                <TableRow key={`${resource.type}-${resource.name}-${index}`} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={resource.type} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245', fontWeight: 600 }}>{resource.name}</TableCell>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245' }}>{resource.namespace}</TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={resource.impact_level.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: IMPACT_COLOR[(resource.impact_level || '').toLowerCase()] || '#e8eaf0', fontWeight: 'bold', fontSize: 10 }} />
+                  <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border, fontWeight: 600 }}>{resource.name}</TableCell>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border }}>{resource.namespace}</TableCell>
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={resource.impact_level.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: IMPACT_COLOR[(resource.impact_level || '').toLowerCase()] || colors.textPrimary, fontWeight: 'bold', fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245' }}>{resource.exposure_type}</TableCell>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border }}>{resource.exposure_type}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

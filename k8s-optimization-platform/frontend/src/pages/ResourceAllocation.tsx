@@ -20,6 +20,7 @@ import {
   CheckCircle
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Recommendation {
   cluster_id: string;
@@ -142,7 +143,7 @@ const ResourceAllocation: React.FC = () => {
       )}
 
       {/* Total Savings */}
-      <Paper sx={{ p: 3, mb: 4, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+      <Paper sx={{ p: 3, mb: 4, background: `linear-gradient(135deg, ${colors.gradientStart} 0%, ${colors.gradientEnd} 100%)` }}>
         <Grid container spacing={3} alignItems="center">
           <Grid item xs={12} md={8}>
             <Typography variant="h6" sx={{ color: 'white', mb: 1 }}>

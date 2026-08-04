@@ -9,6 +9,7 @@ import {
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Anomaly {
   id: string;
@@ -183,7 +184,7 @@ const AnomalyDetectionInner: React.FC = () => {
                     <TableCell><Chip label={a.severity} size="small" color={sevColor[a.severity] ?? 'default'} /></TableCell>
                     <TableCell>{a.resource}</TableCell>
                     <TableCell>{a.namespace}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: '#c62828' }}>+{a.deviation_percent}%</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: colors.danger }}>+{a.deviation_percent}%</TableCell>
                     <TableCell align="right">{a.baseline_value}</TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>{a.current_value}</TableCell>
                     <TableCell align="right">{a.confidence}%</TableCell>

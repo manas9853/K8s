@@ -19,19 +19,20 @@ import {
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  hover:  '#252e42',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8b95a9',
-  body:   '#c8cdd8',
-  green:  '#4ade80',
-  red:    '#f87171',
-  yellow: '#f59e0b',
+  bg:     colors.background,
+  card:   colors.surface,
+  hover:  colors.surfaceHover,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  body:   colors.textMuted,
+  green:  colors.success,
+  red:    colors.danger,
+  yellow: colors.warning,
 };
 
 interface Container {
@@ -80,14 +81,14 @@ interface Summary {
 
 // ─── Shared select sx (matches ZombieResources) ───────────────────────────────
 const selectSx = {
-  color: '#c8cdd8', bgcolor: '#0f1724',
-  '& .MuiOutlinedInput-notchedOutline':            { borderColor: '#2a3245' },
-  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: '#8b95a9' },
-  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: '#2a3245' },
-  '& .MuiSvgIcon-root':                            { color: '#8b95a9' },
+  color: colors.textMuted, bgcolor: colors.background,
+  '& .MuiOutlinedInput-notchedOutline':            { borderColor: colors.border },
+  '&:hover .MuiOutlinedInput-notchedOutline':      { borderColor: colors.textSecondary },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline':{ borderColor: colors.border },
+  '& .MuiSvgIcon-root':                            { color: colors.textSecondary },
 };
 
-const menuProps = { PaperProps: { sx: { bgcolor: '#1e2433', color: '#e8eaf0', border: '1px solid #2a3245' } } };
+const menuProps = { PaperProps: { sx: { bgcolor: colors.surface, color: colors.textPrimary, border: `1px solid ${colors.border}` } } };
 
 const fmtDate = (s: string) => {
   if (!s || s === 'Unknown') return '—';
@@ -129,7 +130,7 @@ const DeploymentRow: React.FC<{ d: UnusedDeployment }> = ({ d }) => {
             {d.name}
           </Typography>
           {d.paused && (
-            <Chip label="paused" size="small" sx={{ mt: 0.25, bgcolor: '#451a03', color: T.yellow, fontSize: '0.68rem' }} />
+            <Chip label="paused" size="small" sx={{ mt: 0.25, bgcolor: colors.warningBg, color: T.yellow, fontSize: '0.68rem' }} />
           )}
         </TableCell>
 
@@ -157,7 +158,7 @@ const DeploymentRow: React.FC<{ d: UnusedDeployment }> = ({ d }) => {
             label={`${d.idle_days}d`}
             size="small"
             sx={{
-              bgcolor: d.idle_days > 365 ? '#450a0a' : d.idle_days > 90 ? '#451a03' : T.border,
+              bgcolor: d.idle_days > 365 ? colors.dangerBg : d.idle_days > 90 ? colors.warningBg : T.border,
               color:   d.idle_days > 365 ? T.red      : d.idle_days > 90 ? T.yellow  : T.muted,
               fontWeight: 700, fontSize: '0.72rem',
             }}

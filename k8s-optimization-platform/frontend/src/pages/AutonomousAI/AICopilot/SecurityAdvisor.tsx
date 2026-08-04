@@ -24,22 +24,23 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const SEV: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -76,7 +77,7 @@ const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   const circ = 2 * Math.PI * r;
   const pct  = Math.max(0, Math.min(100, score));
   const dash = (pct / 100) * circ;
-  const color = pct >= 80 ? '#3fb950' : pct >= 60 ? '#d29922' : '#f85149';
+  const color = pct >= 80 ? colors.success : pct >= 60 ? colors.warning : colors.danger;
 
   return (
     <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -114,7 +115,7 @@ const SevBadge: React.FC<{ label: string; count: number; color: string }> = ({ l
 const ComplianceChip: React.FC<{ label: string; status: string }> = ({ label, status }) => {
   const isOk    = status === 'Compliant';
   const isWarn  = status === 'Partial' || status === 'Needs Review';
-  const color   = isOk ? '#3fb950' : isWarn ? '#d29922' : '#f85149';
+  const color   = isOk ? colors.success : isWarn ? colors.warning : colors.danger;
   return (
     <Chip
       label={`${label}: ${status}`}
@@ -177,13 +178,13 @@ const IssueCard: React.FC<{
               onClick={e => { e.stopPropagation(); onApply(issue); }}
               disabled={applying || fixed}
               sx={{
-                bgcolor: fixed ? 'transparent' : '#238636',
-                color: fixed ? '#3fb950' : '#fff',
+                bgcolor: fixed ? 'transparent' : colors.success,
+                color: fixed ? colors.success : '#fff',
                 borderRadius: 1.5,
                 width: 32,
                 height: 32,
                 flexShrink: 0,
-                '&:hover': { bgcolor: fixed ? 'transparent' : '#2ea043' },
+                '&:hover': { bgcolor: fixed ? 'transparent' : colors.success },
                 '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
               }}
             >
@@ -213,8 +214,8 @@ const IssueCard: React.FC<{
               <Typography sx={{ color: DK.muted, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.5 }}>CVE IDs</Typography>
               <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap' }}>
                 {issue.cve_ids.map(cve => (
-                  <Chip key={cve} label={cve} size="small" icon={<BugReportIcon sx={{ fontSize: '14px !important', color: '#f85149 !important' }} />}
-                    sx={{ bgcolor: '#f851491a', color: '#f85149', border: '1px solid #f8514944', fontSize: '0.68rem' }} />
+                  <Chip key={cve} label={cve} size="small" icon={<BugReportIcon sx={{ fontSize: '14px !important', color: `${colors.danger} !important` }} />}
+                    sx={{ bgcolor: `${colors.danger}1a`, color: colors.danger, border: `1px solid ${colors.danger}44`, fontSize: '0.68rem' }} />
                 ))}
               </Box>
             </Box>
@@ -328,14 +329,14 @@ const SecurityAdvisor: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#f85149' }} />
+      <CircularProgress sx={{ color: colors.danger }} />
     </Box>
   );
 
   const issues   = payload?.issues ?? [];
   const summary  = payload?.summary;
   const score    = summary?.security_score ?? 0;
-  const scoreColor = score >= 80 ? '#3fb950' : score >= 60 ? '#d29922' : '#f85149';
+  const scoreColor = score >= 80 ? colors.success : score >= 60 ? colors.warning : colors.danger;
   const criticalIssues = issues.filter(i => i.severity === 'critical' && !fixedIds.has(i.id));
 
   // Group issues by severity order
@@ -354,7 +355,7 @@ const SecurityAdvisor: React.FC = () => {
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Security Advisor</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
             AI-powered security analysis for{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -365,7 +366,7 @@ const SecurityAdvisor: React.FC = () => {
               startIcon={applying ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <ErrorOutlineIcon />}
               disabled={applying !== null}
               onClick={fixAllCritical}
-              sx={{ bgcolor: '#da3633', '&:hover': { bgcolor: '#f85149' }, '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted }, fontWeight: 600, fontSize: '0.8rem' }}
+              sx={{ bgcolor: colors.danger, '&:hover': { bgcolor: colors.danger }, '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted }, fontWeight: 600, fontSize: '0.8rem' }}
             >
               Fix All Critical ({criticalIssues.length})
             </Button>
@@ -454,7 +455,7 @@ const SecurityAdvisor: React.FC = () => {
 
       {issues.length === 0 && (
         <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 4, textAlign: 'center' }}>
-          <CheckCircleOutlineIcon sx={{ fontSize: 40, color: '#3fb950', mb: 1 }} />
+          <CheckCircleOutlineIcon sx={{ fontSize: 40, color: colors.success, mb: 1 }} />
           <Typography sx={{ color: DK.muted }}>No security issues detected — cluster is clean</Typography>
         </Box>
       )}

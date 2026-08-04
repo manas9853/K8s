@@ -10,32 +10,33 @@ import {
   Warning as WarnIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens ─────────────────────────────────────────────────── */
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8892a4',
-  accent:  '#3b82d4',
-  critical: { fg: '#f87171', bg: '#2d1515' },
-  high:     { fg: '#f59e0b', bg: '#2d200a' },
-  medium:   { fg: '#60a5fa', bg: '#0d1f3c' },
-  low:      { fg: '#4ade80', bg: '#0d2d1a' },
+  bg:      colors.background,
+  card:    colors.surface,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  accent:  colors.info,
+  critical: { fg: colors.danger, bg: colors.dangerBg },
+  high:     { fg: colors.warning, bg: colors.warningBg },
+  medium:   { fg: colors.info, bg: colors.infoBg },
+  low:      { fg: colors.success, bg: colors.successBg },
   sevColor: (s: string) => {
     const sl = s.toLowerCase();
-    if (sl === 'critical') return '#f87171';
-    if (sl === 'high')     return '#f59e0b';
-    if (sl === 'medium')   return '#60a5fa';
-    return '#4ade80';
+    if (sl === 'critical') return colors.danger;
+    if (sl === 'high')     return colors.warning;
+    if (sl === 'medium')   return colors.info;
+    return colors.success;
   },
   sevBg: (s: string) => {
     const sl = s.toLowerCase();
-    if (sl === 'critical') return '#2d1515';
-    if (sl === 'high')     return '#2d200a';
-    if (sl === 'medium')   return '#0d1f3c';
-    return '#0d2d1a';
+    if (sl === 'critical') return colors.dangerBg;
+    if (sl === 'high')     return colors.warningBg;
+    if (sl === 'medium')   return colors.infoBg;
+    return colors.successBg;
   },
 };
 
@@ -324,7 +325,7 @@ const PatchRecommendations: React.FC = () => {
           { label:'Critical',  count: data.critical_patches,           fg:T.critical.fg,  bg:T.critical.bg },
           { label:'High',      count: data.high_patches,               fg:T.high.fg,      bg:T.high.bg },
           { label:'Medium',    count: data.medium_patches,             fg:T.medium.fg,    bg:T.medium.bg },
-          { label:'Automated', count: data.automated_patches_available, fg:'#34d399',     bg:'#0d2d1a' },
+          { label:'Automated', count: data.automated_patches_available, fg:colors.success,     bg:colors.successBg },
         ] as Array<{label:string;count:number;fg:string;bg:string}>).map(({ label, count, fg, bg }) => (
           <Box key={label} sx={{ bgcolor:bg, border:`1px solid ${fg}30`, borderRadius:2, p:2, cursor:'pointer',
             '&:hover':{ border:`1px solid ${fg}` } }}

@@ -1,25 +1,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ── Dark palette (matches ImageTrust / SecretExposure) ──────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  deep:   '#151f30',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8892a4',
-  accent: '#3b82f6',
+  bg:     colors.background,
+  card:   colors.surface,
+  deep:   colors.surfaceAlt,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  accent: colors.info,
   // status
-  valid:        { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
-  expiring_soon:{ bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  expired:      { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
+  valid:        { bg: colors.successBg, text: colors.success, border: colors.successBg },
+  expiring_soon:{ bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  expired:      { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
   // cert types
-  ca:      { bg: '#221737', text: '#a78bfa', border: '#3a2060' },
-  ingress: { bg: '#0d1f3c', text: '#60a5fa', border: '#1e3a5f' },
-  chain:   { bg: '#0d2a20', text: '#34d399', border: '#1a4a38' },
-  tls:     { bg: '#1e2433', text: '#94a3b8', border: '#2a3245' },
+  ca:      { bg: colors.purpleBg, text: colors.purple, border: colors.purple },
+  ingress: { bg: colors.infoBg, text: colors.info, border: colors.info },
+  chain:   { bg: colors.successBg, text: colors.success, border: colors.success },
+  tls:     { bg: colors.surface, text: colors.textSecondary, border: colors.border },
 };
 
 type CertStatus = 'valid' | 'expiring_soon' | 'expired';
@@ -59,7 +60,7 @@ interface CertData {
 const statusPal = (s: CertStatus) => T[s] ?? T.tls;
 
 const scoreColor = (score: number) =>
-  score >= 80 ? '#4ade80' : score >= 50 ? '#f59e0b' : '#f87171';
+  score >= 80 ? colors.success : score >= 50 ? colors.warning : colors.danger;
 
 const typePal = (t: string) => {
   const lower = (t ?? '').toLowerCase();
@@ -142,7 +143,7 @@ export default function CertificateManagement() {
   );
   if (error || !data) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ color: '#f87171', fontSize: 15 }}>Error: {error || 'No data'}</div>
+      <div style={{ color: colors.danger, fontSize: 15 }}>Error: {error || 'No data'}</div>
     </div>
   );
 
@@ -170,14 +171,14 @@ export default function CertificateManagement() {
         {/* Score ring */}
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="110" height="110" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#2a3245" strokeWidth="8" />
+            <circle cx="50" cy="50" r="40" fill="none" stroke={colors.border} strokeWidth="8" />
             <circle cx="50" cy="50" r="40" fill="none"
               stroke={scoreColor(score)} strokeWidth="8"
               strokeDasharray={`${scoreDeg} 251.3`}
               strokeLinecap="round"
               transform="rotate(-90 50 50)" />
             <text x="50" y="46" textAnchor="middle" fill={scoreColor(score)} fontSize="18" fontWeight="700">{Math.round(score)}</text>
-            <text x="50" y="62" textAnchor="middle" fill="#8892a4" fontSize="9">Cert Score</text>
+            <text x="50" y="62" textAnchor="middle" fill={colors.textSecondary} fontSize="9">Cert Score</text>
           </svg>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
             {score >= 80 ? '🟢 Good' : score >= 50 ? '🟡 Fair' : '🔴 Poor'}
@@ -188,9 +189,9 @@ export default function CertificateManagement() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           {[
             { label: 'Total Certificates', value: data.total_certificates, col: T.accent },
-            { label: 'Valid',              value: data.valid_certificates,  col: '#4ade80' },
-            { label: 'Expiring Soon',      value: data.expiring_soon,       col: '#f59e0b' },
-            { label: 'Expired',            value: data.expired_certificates, col: '#f87171' },
+            { label: 'Valid',              value: data.valid_certificates,  col: colors.success },
+            { label: 'Expiring Soon',      value: data.expiring_soon,       col: colors.warning },
+            { label: 'Expired',            value: data.expired_certificates, col: colors.danger },
           ].map(s => (
             <div key={s.label} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 12, color: T.muted, marginBottom: 6 }}>{s.label}</div>
@@ -212,7 +213,7 @@ export default function CertificateManagement() {
                 <span style={{ fontFamily: 'monospace', fontSize: 13, color: T.text }}>{r.issuer}</span>
                 <div style={{ color: T.muted, fontSize: 12 }}>{r.count} certs · {r.pct}%</div>
               </div>
-              <div style={{ height: 5, background: '#2a3245', borderRadius: 3 }}>
+              <div style={{ height: 5, background: colors.border, borderRadius: 3 }}>
                 <div style={{ height: '100%', width: `${r.pct}%`, background: T.accent, borderRadius: 3 }} />
               </div>
             </div>
@@ -289,7 +290,7 @@ export default function CertificateManagement() {
 
       {/* ── Recommendation banner if issues ── */}
       {(data.expired_certificates > 0 || data.expiring_soon > 0) && (
-        <div style={{ background: '#2d1515', border: `1px solid ${T.expired.border}`, borderRadius: 10, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ background: colors.dangerBg, border: `1px solid ${T.expired.border}`, borderRadius: 10, padding: '12px 18px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ fontSize: 18 }}>🚨</span>
           <div>
             <div style={{ fontWeight: 600, color: T.expired.text, fontSize: 14 }}>Action Required</div>
@@ -350,9 +351,9 @@ export default function CertificateManagement() {
                 const isUrgent = c.status === 'expired' || c.status === 'expiring_soon';
                 return (
                   <tr key={i}
-                    style={{ borderBottom: `1px solid ${T.border}`, background: c.status === 'expired' ? '#1a0f0f' : c.status === 'expiring_soon' ? '#1a1508' : 'transparent' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#1a2035')}
-                    onMouseLeave={e => (e.currentTarget.style.background = c.status === 'expired' ? '#1a0f0f' : c.status === 'expiring_soon' ? '#1a1508' : 'transparent')}>
+                    style={{ borderBottom: `1px solid ${T.border}`, background: c.status === 'expired' ? colors.dangerBg : c.status === 'expiring_soon' ? colors.warningBg : 'transparent' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = colors.surfaceAlt)}
+                    onMouseLeave={e => (e.currentTarget.style.background = c.status === 'expired' ? colors.dangerBg : c.status === 'expiring_soon' ? colors.warningBg : 'transparent')}>
 
                     {/* Name */}
                     <td style={{ padding: '9px 12px', maxWidth: 200 }}>
@@ -362,7 +363,7 @@ export default function CertificateManagement() {
                     </td>
                     {/* Namespace */}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: T.card, color: '#60a5fa', border: `1px solid ${T.border}` }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: T.card, color: colors.info, border: `1px solid ${T.border}` }}>
                         {c.namespace}
                       </span>
                     </td>
@@ -388,7 +389,7 @@ export default function CertificateManagement() {
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap', textAlign: 'center' }}>
                       <span style={{
                         fontWeight: 700, fontSize: 13,
-                        color: c.days_until_expiry < 0 ? '#f87171' : c.days_until_expiry < 30 ? '#f59e0b' : '#4ade80'
+                        color: c.days_until_expiry < 0 ? colors.danger : c.days_until_expiry < 30 ? colors.warning : colors.success
                       }}>
                         {c.days_until_expiry < 0 ? `${Math.abs(c.days_until_expiry)}d ago` : `${c.days_until_expiry}d`}
                       </span>
@@ -401,11 +402,11 @@ export default function CertificateManagement() {
                     </td>
                     {/* In use */}
                     <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                      <span style={{ fontSize: 14, color: c.is_referenced ? '#4ade80' : '#f87171' }}>{c.is_referenced ? '✓' : '✗'}</span>
+                      <span style={{ fontSize: 14, color: c.is_referenced ? colors.success : colors.danger }}>{c.is_referenced ? '✓' : '✗'}</span>
                     </td>
                     {/* Auto-renew */}
                     <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                      <span style={{ fontSize: 14, color: c.auto_renewal ? '#4ade80' : T.muted }}>{c.auto_renewal ? '✓' : '—'}</span>
+                      <span style={{ fontSize: 14, color: c.auto_renewal ? colors.success : T.muted }}>{c.auto_renewal ? '✓' : '—'}</span>
                     </td>
                     {/* Recommendation */}
                     <td style={{ padding: '9px 12px', maxWidth: 240 }}>

@@ -64,6 +64,7 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import HistoryIcon from '@mui/icons-material/History';
 import UpdateIcon from '@mui/icons-material/Update';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Container {
   name: string;
@@ -502,15 +503,15 @@ const Deployments: React.FC = () => {
       {/* Datadog-style KPI strip */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Deployments', value: String(totalDeployments), color: '#6366f1', sub: 'registered workloads' },
-          { label: 'Healthy', value: String(healthyDeployments), color: '#22c55e', sub: `${totalDeployments > 0 ? Math.round((healthyDeployments / totalDeployments) * 100) : 0}% of total` },
-          { label: 'Degraded', value: String(degradedDeployments), color: '#f59e0b', sub: 'partial replicas' },
-          { label: 'Unhealthy', value: String(unhealthyDeployments), color: '#ef4444', sub: '0 replicas ready' },
-          { label: 'Total Replicas', value: String(totalReplicas), color: '#3b82f6', sub: `${readyReplicas} ready` },
-          { label: 'Open Issues', value: String(totalIssues), color: totalIssues > 0 ? '#ef4444' : '#22c55e', sub: 'across all deploys' },
+          { label: 'Total Deployments', value: String(totalDeployments), color: colors.purple, sub: 'registered workloads' },
+          { label: 'Healthy', value: String(healthyDeployments), color: colors.success, sub: `${totalDeployments > 0 ? Math.round((healthyDeployments / totalDeployments) * 100) : 0}% of total` },
+          { label: 'Degraded', value: String(degradedDeployments), color: colors.warning, sub: 'partial replicas' },
+          { label: 'Unhealthy', value: String(unhealthyDeployments), color: colors.danger, sub: '0 replicas ready' },
+          { label: 'Total Replicas', value: String(totalReplicas), color: colors.info, sub: `${readyReplicas} ready` },
+          { label: 'Open Issues', value: String(totalIssues), color: totalIssues > 0 ? colors.danger : colors.success, sub: 'across all deploys' },
         ].map(({ label, value, color, sub }) => (
           <Grid item xs={12} sm={6} md={2} key={label}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}` }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, borderLeft: `4px solid ${color}` }}>
               <CardContent sx={{ py: '12px !important', px: 2 }}>
                 <Typography variant="caption" color="textSecondary" fontWeight={600}>{label}</Typography>
                 <Typography variant="h4" fontWeight={800} sx={{ color, mt: 0.5 }}>{value}</Typography>
@@ -547,10 +548,10 @@ const Deployments: React.FC = () => {
       </Box>
 
       {/* Deployments Table */}
-      <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+      <TableContainer component={Paper} elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#f8fafc', fontSize: 12 } }}>
+            <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceHover, fontSize: 12 } }}>
               <TableCell>Status</TableCell>
               <TableCell>Name</TableCell>
               <TableCell>Namespace</TableCell>

@@ -13,15 +13,16 @@ import LockIcon from '@mui/icons-material/Lock';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,7 +81,7 @@ const ResourceCard: React.FC<{
   onRollback: () => void;
 }> = ({ item, expanded, applying, done, onExpand, onRollback }) => {
   const isSecret = item.resource_type === 'Secret';
-  const accent = isSecret ? '#a371f7' : '#3b82f6';
+  const accent = isSecret ? colors.purple : colors.info;
   const Icon = isSecret ? LockIcon : SettingsIcon;
   return (
     <Box sx={{
@@ -103,7 +104,7 @@ const ResourceCard: React.FC<{
           </Typography>
         </Box>
         <Chip label={item.resource_type} size="small"
-          sx={{ bgcolor: isSecret ? '#2d1b69' : '#1a2b4a', color: accent, fontSize: '0.68rem', mr: 1 }} />
+          sx={{ bgcolor: isSecret ? colors.purpleBg : colors.infoBg, color: accent, fontSize: '0.68rem', mr: 1 }} />
         <IconButton size="small" sx={{ color: DK.muted }}>
           {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
         </IconButton>
@@ -116,14 +117,14 @@ const ResourceCard: React.FC<{
               <Typography sx={{ color: DK.muted, fontSize: '0.75rem', mb: 0.5 }}>Data keys:</Typography>
               <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                 {item.data_keys.map(k => (
-                  <Chip key={k} label={k} size="small" sx={{ bgcolor: DK.surface, color: '#3b82f6', fontSize: '0.68rem', fontFamily: 'monospace', border: `1px solid ${DK.border}` }} />
+                  <Chip key={k} label={k} size="small" sx={{ bgcolor: DK.surface, color: colors.info, fontSize: '0.68rem', fontFamily: 'monospace', border: `1px solid ${DK.border}` }} />
                 ))}
               </Box>
             </Box>
           )}
           {isSecret && (
-            <Box sx={{ mb: 1.5, p: 1.5, bgcolor: '#1a1230', border: '1px solid #a371f733', borderRadius: 1 }}>
-              <Typography sx={{ color: '#a371f7', fontSize: '0.75rem' }}>
+            <Box sx={{ mb: 1.5, p: 1.5, bgcolor: colors.purpleBg, border: `1px solid ${colors.purple}33`, borderRadius: 1 }}>
+              <Typography sx={{ color: colors.purple, fontSize: '0.75rem' }}>
                 🔒 Secret values are never exposed. Rollback will restore previous key structure from the last applied snapshot.
               </Typography>
             </Box>
@@ -133,7 +134,7 @@ const ResourceCard: React.FC<{
           </Typography>
           {done ? (
             <Chip icon={<CheckCircleOutlineIcon />} label="Rollback Applied" size="small"
-              sx={{ bgcolor: '#0d1117', color: '#3fb950', border: '1px solid #3fb950', fontSize: '0.72rem' }} />
+              sx={{ bgcolor: colors.background, color: colors.success, border: `1px solid ${colors.success}`, fontSize: '0.72rem' }} />
           ) : (
             <Button
               variant="contained" size="small"
@@ -226,7 +227,7 @@ const ConfigurationRollback: React.FC = () => {
 
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
-          <CircularProgress sx={{ color: '#3b82f6' }} />
+          <CircularProgress sx={{ color: colors.info }} />
         </Box>
       )}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -235,9 +236,9 @@ const ConfigurationRollback: React.FC = () => {
         <>
           {/* KPIs */}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 2, mb: 3 }}>
-            <KpiCard label="ConfigMaps" value={data.total_configmaps} accent="#3b82f6" />
-            <KpiCard label="Secrets" value={data.total_secrets} accent="#a371f7" />
-            <KpiCard label="Rolled Back" value={Object.values(done).filter(Boolean).length} accent="#3fb950" />
+            <KpiCard label="ConfigMaps" value={data.total_configmaps} accent={colors.info} />
+            <KpiCard label="Secrets" value={data.total_secrets} accent={colors.purple} />
+            <KpiCard label="Rolled Back" value={Object.values(done).filter(Boolean).length} accent={colors.success} />
           </Box>
 
           {/* Tabs */}
@@ -245,7 +246,7 @@ const ConfigurationRollback: React.FC = () => {
             <Tabs value={tab} onChange={(_, v) => setTab(v)}
               sx={{ '& .MuiTab-root': { color: DK.muted, textTransform: 'none', fontWeight: 600, minWidth: 140 },
                     '& .Mui-selected': { color: DK.text },
-                    '& .MuiTabs-indicator': { bgcolor: '#3b82f6' },
+                    '& .MuiTabs-indicator': { bgcolor: colors.info },
                     borderBottom: `1px solid ${DK.border}` }}>
               <Tab label={`ConfigMaps (${data.total_configmaps})`} />
               <Tab label={`Secrets (${data.total_secrets})`} />

@@ -12,15 +12,16 @@ import {
 } from '@mui/material';
 import { useCluster } from '../contexts/ClusterContext';
 import type { ClusterInfo } from '../contexts/ClusterContext';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens — matches Login dark K8s theme ── */
 const C = {
-  bg:             '#050d1a',
+  bg:             colors.background,
   bgPanel:        '#071022',
-  bgCard:         '#0b1628',
-  bgSurface:      '#0f1e35',
+  bgCard:         colors.surfaceAlt,
+  bgSurface:      colors.surfaceAlt,
   borderDim:      '#1a2e4a',
-  border:         '#1e3a5f',
+  border:         colors.info,
   borderBright:   '#2a5080',
   cyan:           '#00d4ff',
   cyanDim:        '#00a8cc',
@@ -29,14 +30,14 @@ const C = {
   green:          '#39ff14',
   greenDim:       '#22cc00',
   greenGlow:      'rgba(57,255,20,0.12)',
-  amber:          '#f59e0b',
+  amber:          colors.warning,
   amberGlow:      'rgba(245,158,11,0.15)',
-  red:            '#ef4444',
+  red:            colors.danger,
   redGlow:        'rgba(239,68,68,0.15)',
-  primary:        '#2563eb',
-  textPrimary:    '#e2f0ff',
-  textSecondary:  '#7ca5cc',
-  textMuted:      '#3d6080',
+  primary:        colors.info,
+  textPrimary:    colors.infoBg,
+  textSecondary:  colors.info,
+  textMuted:      colors.info,
 };
 
 /* ── Hex grid background (identical to Login) ── */

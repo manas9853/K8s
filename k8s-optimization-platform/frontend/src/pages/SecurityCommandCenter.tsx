@@ -20,24 +20,25 @@ import {
   Bolt as BoltIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme ───────────────────────────────────────────────────────────────
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  hover:   '#252e42',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8b95a9',
-  body:    '#c8cdd8',
-  red:     '#f87171',
-  redDim:  '#2d1515',
-  yellow:  '#f59e0b',
-  yellowDim:'#2d200a',
-  blue:    '#60a5fa',
-  blueDim: '#0d1f3c',
-  green:   '#4ade80',
-  greenDim:'#0d2d1a',
+  bg:      colors.background,
+  card:    colors.surface,
+  hover:   colors.surfaceHover,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  body:    colors.textMuted,
+  red:     colors.danger,
+  redDim:  colors.dangerBg,
+  yellow:  colors.warning,
+  yellowDim:colors.warningBg,
+  blue:    colors.info,
+  blueDim: colors.infoBg,
+  green:   colors.success,
+  greenDim:colors.successBg,
 };
 
 // ─── Severity palette (dark) ──────────────────────────────────────────────────
@@ -81,7 +82,7 @@ const ScoreGauge: React.FC<{ score: number; size?: number }> = ({ score, size = 
   const r = (size - 16) / 2;
   const circ = 2 * Math.PI * r;
   const color = score >= 80 ? T.green : score >= 60 ? T.yellow : T.red;
-  const track = '#2a3245';
+  const track = colors.border;
   const dash  = (Math.min(score, 100) / 100) * circ;
   return (
     <Box sx={{ position: 'relative', width: size, height: size, mx: 'auto' }}>
@@ -194,7 +195,7 @@ const SecurityCommandCenter: React.FC = () => {
 
   const cellSx  = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.5 };
   const headSx  = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
-    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: '#161f30' };
+    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: colors.surfaceAlt };
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

@@ -9,6 +9,7 @@ import {
 import { Refresh, CalendarToday, TrendingUp, AccountBalance } from '@mui/icons-material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface TrendItem { month: string; current_cost: number; optimized_cost: number; savings: number; }
 interface CostData {
@@ -102,37 +103,37 @@ const AnnualSavings: React.FC = () => {
   const payback  = data.monthly_savings > 0 ? implCost / data.monthly_savings : 0;
   const roi      = implCost > 0 ? ((data.yearly_savings - implCost) / implCost) * 100 : 0;
 
-  const tooltipStyle = { backgroundColor: '#1e2433', border: '1px solid #2a3245', color: '#e8eaf0' };
+  const tooltipStyle = { backgroundColor: colors.surface, border: `1px solid ${colors.border}`, color: colors.textPrimary };
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
       <CostAccuracyBanner clusterName={activeClusterId} />
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>Annual Savings Projection</Typography>
-          <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>12-month cost savings forecast and ROI analysis</Typography>
+          <Typography variant="h4" sx={{ color: colors.textPrimary, fontWeight: 700 }}>Annual Savings Projection</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5 }}>12-month cost savings forecast and ROI analysis</Typography>
         </Box>
-        <IconButton onClick={fetchData} sx={{ color: '#4ade80' }}><Refresh /></IconButton>
+        <IconButton onClick={fetchData} sx={{ color: colors.success }}><Refresh /></IconButton>
       </Box>
 
       {/* KPI cards */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Annual Savings', value: fmt(data.yearly_savings), sub: `${data.savings_percent.toFixed(1)}% reduction`, icon: <CalendarToday />, accent: '#4ade80' },
-          { label: 'Current Annual Cost',  value: fmt(data.current_yearly_cost),   sub: 'Before optimisation', icon: <AccountBalance />, accent: '#f87171' },
-          { label: 'Optimised Annual Cost',value: fmt(data.optimized_yearly_cost), sub: 'After optimisation',  icon: <TrendingUp />,    accent: '#4ade80' },
-          { label: 'Annual ROI',           value: `${roi.toFixed(0)}%`,            sub: `Payback: ${payback.toFixed(1)} months`, icon: <TrendingUp />, accent: '#e8eaf0' },
+          { label: 'Total Annual Savings', value: fmt(data.yearly_savings), sub: `${data.savings_percent.toFixed(1)}% reduction`, icon: <CalendarToday />, accent: colors.success },
+          { label: 'Current Annual Cost',  value: fmt(data.current_yearly_cost),   sub: 'Before optimisation', icon: <AccountBalance />, accent: colors.danger },
+          { label: 'Optimised Annual Cost',value: fmt(data.optimized_yearly_cost), sub: 'After optimisation',  icon: <TrendingUp />,    accent: colors.success },
+          { label: 'Annual ROI',           value: `${roi.toFixed(0)}%`,            sub: `Payback: ${payback.toFixed(1)} months`, icon: <TrendingUp />, accent: colors.textPrimary },
         ].map(({ label, value, sub, icon, accent }) => (
           <Grid item xs={12} md={3} key={label}>
-            <Card sx={{ bgcolor: '#1e2433', border: `1px solid ${accent}22` }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${accent}22` }}>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <Box sx={{ color: accent }}>{icon}</Box>
-                  <Typography variant="body2" sx={{ color: '#8b95a9', textTransform: 'uppercase', fontSize: 11 }}>{label}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary, textTransform: 'uppercase', fontSize: 11 }}>{label}</Typography>
                 </Box>
                 <Typography variant="h4" sx={{ color: accent, fontWeight: 700 }}>{value}</Typography>
-                <Typography variant="body2" sx={{ color: '#8b95a9' }}>{sub}</Typography>
+                <Typography variant="body2" sx={{ color: colors.textSecondary }}>{sub}</Typography>
               </CardContent>
             </Card>
           </Grid>
@@ -140,41 +141,41 @@ const AnnualSavings: React.FC = () => {
       </Grid>
 
       {/* ROI summary */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Investment & ROI Analysis</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Investment & ROI Analysis</Typography>
         <Grid container spacing={3} textAlign="center">
           <Grid item xs={12} md={4}>
-            <AccountBalance sx={{ fontSize: 40, color: '#8b95a9', mb: 1 }} />
-            <Typography variant="h5" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{fmt(implCost)}</Typography>
-            <Typography variant="body2" sx={{ color: '#8b95a9' }}>Estimated Implementation Cost</Typography>
+            <AccountBalance sx={{ fontSize: 40, color: colors.textSecondary, mb: 1 }} />
+            <Typography variant="h5" sx={{ color: colors.textPrimary, fontWeight: 700 }}>{fmt(implCost)}</Typography>
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>Estimated Implementation Cost</Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <CalendarToday sx={{ fontSize: 40, color: '#4ade80', mb: 1 }} />
-            <Typography variant="h5" sx={{ color: '#4ade80', fontWeight: 700 }}>{payback.toFixed(1)} months</Typography>
-            <Typography variant="body2" sx={{ color: '#8b95a9' }}>Payback Period</Typography>
+            <CalendarToday sx={{ fontSize: 40, color: colors.success, mb: 1 }} />
+            <Typography variant="h5" sx={{ color: colors.success, fontWeight: 700 }}>{payback.toFixed(1)} months</Typography>
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>Payback Period</Typography>
           </Grid>
           <Grid item xs={12} md={4}>
-            <TrendingUp sx={{ fontSize: 40, color: '#4ade80', mb: 1 }} />
-            <Typography variant="h5" sx={{ color: '#4ade80', fontWeight: 700 }}>{roi.toFixed(0)}%</Typography>
-            <Typography variant="body2" sx={{ color: '#8b95a9' }}>Annual ROI</Typography>
+            <TrendingUp sx={{ fontSize: 40, color: colors.success, mb: 1 }} />
+            <Typography variant="h5" sx={{ color: colors.success, fontWeight: 700 }}>{roi.toFixed(0)}%</Typography>
+            <Typography variant="body2" sx={{ color: colors.textSecondary }}>Annual ROI</Typography>
           </Grid>
         </Grid>
       </Paper>
 
       {/* Quarterly bar chart */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Quarterly Savings Projection</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Quarterly Savings Projection</Typography>
         <Box sx={{ height: 300 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={quarters} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
-              <XAxis dataKey="quarter" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
-              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+              <XAxis dataKey="quarter" stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
+              <YAxis tickFormatter={fmtK} stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
               <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
-              <Legend wrapperStyle={{ color: '#8b95a9' }} />
-              <Bar dataKey="current_cost"   fill="#f87171" name="Current Cost" radius={[4,4,0,0]} />
-              <Bar dataKey="optimized_cost" fill="#4ade80" name="Optimised Cost" radius={[4,4,0,0]} />
-              <Bar dataKey="savings"        fill="#e8eaf0" name="Savings" radius={[4,4,0,0]} />
+              <Legend wrapperStyle={{ color: colors.textSecondary }} />
+              <Bar dataKey="current_cost"   fill={colors.danger} name="Current Cost" radius={[4,4,0,0]} />
+              <Bar dataKey="optimized_cost" fill={colors.success} name="Optimised Cost" radius={[4,4,0,0]} />
+              <Bar dataKey="savings"        fill={colors.textPrimary} name="Savings" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </Box>
@@ -185,31 +186,31 @@ const AnnualSavings: React.FC = () => {
             <TableHead>
               <TableRow>
                 {['Quarter','Current Cost','Optimised Cost','Savings','Savings %'].map(h => (
-                  <TableCell key={h} sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}
+                  <TableCell key={h} sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, textTransform: 'uppercase' }}
                     align={h === 'Quarter' ? 'left' : 'right'}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {quarters.map(q => (
-                <TableRow key={q.quarter} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
-                  <TableCell sx={{ borderColor: '#2a3245' }}><Chip label={q.quarter} size="small" sx={{ bgcolor: '#2a3245', color: '#e8eaf0' }} /></TableCell>
-                  <TableCell align="right" sx={{ color: '#f87171', borderColor: '#2a3245' }}>{fmt(q.current_cost)}</TableCell>
-                  <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(q.optimized_cost)}</TableCell>
-                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={fmt(q.savings)} size="small" sx={{ bgcolor: '#14532d', color: '#4ade80' }} />
+                <TableRow key={q.quarter} sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                  <TableCell sx={{ borderColor: colors.border }}><Chip label={q.quarter} size="small" sx={{ bgcolor: colors.border, color: colors.textPrimary }} /></TableCell>
+                  <TableCell align="right" sx={{ color: colors.danger, borderColor: colors.border }}>{fmt(q.current_cost)}</TableCell>
+                  <TableCell align="right" sx={{ color: colors.success, borderColor: colors.border }}>{fmt(q.optimized_cost)}</TableCell>
+                  <TableCell align="right" sx={{ borderColor: colors.border }}>
+                    <Chip label={fmt(q.savings)} size="small" sx={{ bgcolor: colors.successBg, color: colors.success }} />
                   </TableCell>
-                  <TableCell align="right" sx={{ color: '#8b95a9', borderColor: '#2a3245' }}>{data.savings_percent.toFixed(1)}%</TableCell>
+                  <TableCell align="right" sx={{ color: colors.textSecondary, borderColor: colors.border }}>{data.savings_percent.toFixed(1)}%</TableCell>
                 </TableRow>
               ))}
-              <TableRow sx={{ bgcolor: '#252e42' }}>
-                <TableCell sx={{ color: '#e8eaf0', fontWeight: 700, borderColor: '#2a3245' }}>Annual Total</TableCell>
-                <TableCell align="right" sx={{ color: '#f87171', fontWeight: 700, borderColor: '#2a3245' }}>{fmt(data.current_yearly_cost)}</TableCell>
-                <TableCell align="right" sx={{ color: '#4ade80', fontWeight: 700, borderColor: '#2a3245' }}>{fmt(data.optimized_yearly_cost)}</TableCell>
-                <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={fmt(data.yearly_savings)} sx={{ bgcolor: '#14532d', color: '#4ade80', fontWeight: 700 }} />
+              <TableRow sx={{ bgcolor: colors.surfaceHover }}>
+                <TableCell sx={{ color: colors.textPrimary, fontWeight: 700, borderColor: colors.border }}>Annual Total</TableCell>
+                <TableCell align="right" sx={{ color: colors.danger, fontWeight: 700, borderColor: colors.border }}>{fmt(data.current_yearly_cost)}</TableCell>
+                <TableCell align="right" sx={{ color: colors.success, fontWeight: 700, borderColor: colors.border }}>{fmt(data.optimized_yearly_cost)}</TableCell>
+                <TableCell align="right" sx={{ borderColor: colors.border }}>
+                  <Chip label={fmt(data.yearly_savings)} sx={{ bgcolor: colors.successBg, color: colors.success, fontWeight: 700 }} />
                 </TableCell>
-                <TableCell align="right" sx={{ color: '#e8eaf0', fontWeight: 700, borderColor: '#2a3245' }}>{data.savings_percent.toFixed(1)}%</TableCell>
+                <TableCell align="right" sx={{ color: colors.textPrimary, fontWeight: 700, borderColor: colors.border }}>{data.savings_percent.toFixed(1)}%</TableCell>
               </TableRow>
             </TableBody>
           </Table>
@@ -217,31 +218,31 @@ const AnnualSavings: React.FC = () => {
       </Paper>
 
       {/* Cumulative table */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Cumulative Savings Over 6 Months</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Cumulative Savings Over 6 Months</Typography>
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
                 {['Month','Monthly Savings','Cumulative Savings','Progress'].map(h => (
-                  <TableCell key={h} sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}
+                  <TableCell key={h} sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, textTransform: 'uppercase' }}
                     align={h === 'Month' ? 'left' : 'right'}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {cumulative12.map((m, i) => (
-                <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
-                  <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245' }}>{m.month}</TableCell>
-                  <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(m.savings)}</TableCell>
-                  <TableCell align="right" sx={{ color: '#4ade80', fontWeight: 700, borderColor: '#2a3245' }}>{fmt(m.cumulative)}</TableCell>
-                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                <TableRow key={i} sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                  <TableCell sx={{ color: colors.textMuted, borderColor: colors.border }}>{m.month}</TableCell>
+                  <TableCell align="right" sx={{ color: colors.success, borderColor: colors.border }}>{fmt(m.savings)}</TableCell>
+                  <TableCell align="right" sx={{ color: colors.success, fontWeight: 700, borderColor: colors.border }}>{fmt(m.cumulative)}</TableCell>
+                  <TableCell align="right" sx={{ borderColor: colors.border }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end' }}>
                       <LinearProgress variant="determinate"
                         value={data.yearly_savings > 0 ? Math.min((m.cumulative / data.yearly_savings) * 100, 100) : 0}
-                        sx={{ width: 80, height: 6, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: '#4ade80' } }} />
+                        sx={{ width: 80, height: 6, borderRadius: 3, bgcolor: colors.border, '& .MuiLinearProgress-bar': { bgcolor: colors.success } }} />
                       <Chip label={`${data.yearly_savings > 0 ? Math.min(((m.cumulative / data.yearly_savings) * 100), 100).toFixed(0) : 0}%`}
-                        size="small" sx={{ bgcolor: i === cumulative12.length - 1 ? '#14532d' : '#2a3245', color: '#4ade80', fontSize: 11 }} />
+                        size="small" sx={{ bgcolor: i === cumulative12.length - 1 ? colors.successBg : colors.border, color: colors.success, fontSize: 11 }} />
                     </Box>
                   </TableCell>
                 </TableRow>

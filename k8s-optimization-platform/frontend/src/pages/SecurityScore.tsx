@@ -11,22 +11,23 @@ import {
   ArrowForward as ArrowForwardIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens ─────────────────────────────────────────────────── */
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8892a4',
-  accent:  '#3b82d4',
+  bg:      colors.background,
+  card:    colors.surface,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  accent:  colors.info,
   // severity
-  critical: { fg: '#f87171', bg: '#2d1515' },
-  high:     { fg: '#f59e0b', bg: '#2d200a' },
-  medium:   { fg: '#60a5fa', bg: '#0d1f3c' },
-  low:      { fg: '#4ade80', bg: '#0d2d1a' },
+  critical: { fg: colors.danger, bg: colors.dangerBg },
+  high:     { fg: colors.warning, bg: colors.warningBg },
+  medium:   { fg: colors.info, bg: colors.infoBg },
+  low:      { fg: colors.success, bg: colors.successBg },
   // score bands
-  scoreColor: (s: number) => s >= 80 ? '#4ade80' : s >= 60 ? '#f59e0b' : s >= 40 ? '#f87171' : '#f43f5e',
+  scoreColor: (s: number) => s >= 80 ? colors.success : s >= 60 ? colors.warning : s >= 40 ? colors.danger : colors.danger,
 };
 
 /* ── Interfaces ─────────────────────────────────────────────────────── */
@@ -139,9 +140,9 @@ const SecurityScore: React.FC = () => {
 
   const SCORE_AREAS = [
     { key: 'vulnerability_score',    label: 'Vulnerabilities',  path: '/cve-dashboard',              color: T.critical.fg },
-    { key: 'compliance_score',       label: 'Compliance',       path: '/compliance/dashboard',        color: '#a78bfa' },
+    { key: 'compliance_score',       label: 'Compliance',       path: '/compliance/dashboard',        color: colors.purple },
     { key: 'configuration_score',    label: 'Configuration',    path: '/runtime-security',            color: T.medium.fg },
-    { key: 'network_security_score', label: 'Network Security', path: '/network-policies-security',  color: '#34d399' },
+    { key: 'network_security_score', label: 'Network Security', path: '/network-policies-security',  color: colors.success },
     { key: 'rbac_score',             label: 'RBAC',             path: '/excessive-permissions',       color: T.high.fg },
   ];
 
@@ -204,9 +205,9 @@ const SecurityScore: React.FC = () => {
               <Typography sx={{ fontSize: 11, color: T.muted, mb: 0.3 }}>vs Last Week</Typography>
               <Box display="flex" alignItems="center" gap={0.5}>
                 {weekUp
-                  ? <TrendingUpIcon sx={{ color: '#4ade80', fontSize: 20 }} />
+                  ? <TrendingUpIcon sx={{ color: colors.success, fontSize: 20 }} />
                   : <TrendingDownIcon sx={{ color: T.critical.fg, fontSize: 20 }} />}
-                <Typography sx={{ fontSize: 22, fontWeight: 700, color: weekUp ? '#4ade80' : T.critical.fg }}>
+                <Typography sx={{ fontSize: 22, fontWeight: 700, color: weekUp ? colors.success : T.critical.fg }}>
                   {weekUp ? '+' : ''}{weekDelta}
                 </Typography>
               </Box>
@@ -216,9 +217,9 @@ const SecurityScore: React.FC = () => {
               <Typography sx={{ fontSize: 11, color: T.muted, mb: 0.3 }}>vs Last Month</Typography>
               <Box display="flex" alignItems="center" gap={0.5}>
                 {monthUp
-                  ? <TrendingUpIcon sx={{ color: '#4ade80', fontSize: 20 }} />
+                  ? <TrendingUpIcon sx={{ color: colors.success, fontSize: 20 }} />
                   : <TrendingDownIcon sx={{ color: T.critical.fg, fontSize: 20 }} />}
-                <Typography sx={{ fontSize: 22, fontWeight: 700, color: monthUp ? '#4ade80' : T.critical.fg }}>
+                <Typography sx={{ fontSize: 22, fontWeight: 700, color: monthUp ? colors.success : T.critical.fg }}>
                   {monthUp ? '+' : ''}{monthDelta}
                 </Typography>
               </Box>
@@ -251,7 +252,7 @@ const SecurityScore: React.FC = () => {
             {([
               { label:'No Resource Limits', count: os.no_resource_requests,   fg: T.high.fg },
               { label:'Mem Pressure >90%',  count: os.high_memory_pressure,   fg: T.critical.fg },
-              { label:'Stale Secrets',      count: os.stale_secrets_high,     fg: '#a78bfa' },
+              { label:'Stale Secrets',      count: os.stale_secrets_high,     fg: colors.purple },
               { label:'Total Pods',         count: os.total_pods,             fg: T.muted },
             ] as Array<{label:string;count:number;fg:string}>).map(({ label, count, fg }) => (
               <Box key={label} sx={{ display:'flex', alignItems:'center', gap: 0.8 }}>
@@ -303,7 +304,7 @@ const SecurityScore: React.FC = () => {
         <Box display="flex" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
           <Typography sx={{ fontSize: 15, fontWeight: 700, color: T.text }}>Namespace Security Heatmap</Typography>
           <Box display="flex" gap={1.5} flexWrap="wrap">
-            {([['≥80','#4ade80'],['60–79','#f59e0b'],['40–59','#f87171'],['<40','#f43f5e']] as [string,string][]).map(([l,c]) => (
+            {([['≥80',colors.success],['60–79',colors.warning],['40–59',colors.danger],['<40',colors.danger]] as [string,string][]).map(([l,c]) => (
               <Box key={l} display="flex" alignItems="center" gap={0.4}>
                 <Box sx={{ width: 8, height: 8, borderRadius:'50%', bgcolor: c }} />
                 <Typography sx={{ fontSize: 11, color: c }}>{l}</Typography>
@@ -360,7 +361,7 @@ const SecurityScore: React.FC = () => {
                       </Typography>
                     </td>
                     <td style={{ padding:'6px 8px' }}>
-                      <Typography sx={{ fontSize:13, color: ns.stale_secrets > 0 ? '#a78bfa' : T.muted }}>
+                      <Typography sx={{ fontSize:13, color: ns.stale_secrets > 0 ? colors.purple : T.muted }}>
                         {ns.stale_secrets || '—'}
                       </Typography>
                     </td>

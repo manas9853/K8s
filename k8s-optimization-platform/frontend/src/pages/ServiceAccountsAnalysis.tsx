@@ -8,6 +8,7 @@ import {
   ManageAccounts as SAIcon, Warning as WarningIcon, CheckCircle as CheckIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface ServiceAccount {
   name: string;
@@ -35,11 +36,11 @@ interface ServiceAccountsData {
 }
 
 const RISK_COLOR: Record<string, string> = {
-  critical: '#ef5350', high: '#ffa726', medium: '#90caf9', low: '#a5d6a7',
+  critical: colors.danger, high: colors.warning, medium: colors.info, low: colors.success,
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  active: '#a5d6a7', default: '#ffa726', unused: '#ef5350', inactive: '#8892a4',
+  active: colors.success, default: colors.warning, unused: colors.danger, inactive: colors.textSecondary,
 };
 
 const ServiceAccountsAnalysis: React.FC = () => {
@@ -72,32 +73,32 @@ const ServiceAccountsAnalysis: React.FC = () => {
   }, [clusterParam]);
 
   if (loading) return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
       <CircularProgress />
     </Box>
   );
-  if (error) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">Failed to load data</Alert></Box>;
+  if (error) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">Failed to load data</Alert></Box>;
 
   const accounts = Array.isArray(data.service_accounts) ? data.service_accounts : [];
   const highRisk = accounts.filter(a => ['high', 'critical'].includes(a.risk_level.toLowerCase()));
   const score = data.service_account_score ?? 0;
-  const scoreColor = score >= 80 ? '#a5d6a7' : score >= 60 ? '#ffa726' : '#ef5350';
+  const scoreColor = score >= 80 ? colors.success : score >= 60 ? colors.warning : colors.danger;
 
   const r = 54; const circ = 2 * Math.PI * r;
   const dash = (Math.min(score, 100) / 100) * circ;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
 
       {/* HEADER */}
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <SAIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+        <SAIcon sx={{ fontSize: 32, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Service Accounts Analysis
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             RBAC service account audit · {data.total_service_accounts} accounts ·{' '}
             Last scan {data.last_scan ? new Date(data.last_scan).toLocaleString() : 'N/A'}
           </Typography>
@@ -109,22 +110,22 @@ const ServiceAccountsAnalysis: React.FC = () => {
 
         {/* Score ring */}
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>SA Score</Typography>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>SA Score</Typography>
               <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
                 <svg width={130} height={130}>
-                  <circle cx={65} cy={65} r={r} fill="none" stroke="#2a3245" strokeWidth={11} />
+                  <circle cx={65} cy={65} r={r} fill="none" stroke={colors.border} strokeWidth={11} />
                   <circle cx={65} cy={65} r={r} fill="none" stroke={scoreColor} strokeWidth={11}
                     strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
                     transform="rotate(-90 65 65)" />
                 </svg>
                 <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
                   <Typography variant="h4" fontWeight="bold" sx={{ color: scoreColor }}>{score}</Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>/ 100</Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>/ 100</Typography>
                 </Box>
               </Box>
-              <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mt: 1 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 1 }}>
                 {highRisk.length > 0
                   ? `${highRisk.length} high-risk account${highRisk.length > 1 ? 's' : ''}`
                   : 'No high-risk accounts'}
@@ -137,15 +138,15 @@ const ServiceAccountsAnalysis: React.FC = () => {
         <Grid item xs={12} md={9}>
           <Grid container spacing={2} mb={2}>
             {[
-              { label: 'Total Accounts',   count: data.total_service_accounts ?? 0, color: '#90caf9' },
-              { label: 'Active',           count: data.active ?? 0,                  color: '#a5d6a7' },
-              { label: 'Using Default SA', count: data.using_default ?? 0,           color: '#ffa726' },
-              { label: 'Unused',           count: data.unused ?? 0,                  color: '#ef5350' },
+              { label: 'Total Accounts',   count: data.total_service_accounts ?? 0, color: colors.info },
+              { label: 'Active',           count: data.active ?? 0,                  color: colors.success },
+              { label: 'Using Default SA', count: data.using_default ?? 0,           color: colors.warning },
+              { label: 'Unused',           count: data.unused ?? 0,                  color: colors.danger },
             ].map(({ label, count, color }) => (
               <Grid item xs={6} md={3} key={label}>
-                <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+                <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
                   <CardContent sx={{ pb: '8px !important' }}>
-                    <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{label}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{label}</Typography>
                     <Typography variant="h4" fontWeight="bold" sx={{ color }}>{count}</Typography>
                   </CardContent>
                 </Card>
@@ -154,8 +155,8 @@ const ServiceAccountsAnalysis: React.FC = () => {
           </Grid>
 
           {data.recommendation && (
-            <Paper sx={{ p: 2, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>{data.recommendation}</Typography>
+            <Paper sx={{ p: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>{data.recommendation}</Typography>
             </Paper>
           )}
         </Grid>
@@ -163,39 +164,39 @@ const ServiceAccountsAnalysis: React.FC = () => {
 
       {/* HIGH-RISK SPOTLIGHT */}
       {highRisk.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <WarningIcon sx={{ color: '#ffa726' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <WarningIcon sx={{ color: colors.warning }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               High-Risk Service Accounts
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>
               Review and remediate
             </Typography>
           </Box>
           <Stack spacing={1}>
             {highRisk.slice(0, 5).map((item, i) => (
-              <Box key={i} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={i} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={1}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {item.name}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {item.namespace} · {item.pods_using} pods · age {item.age_days}d
                     </Typography>
-                    <Typography variant="body2" sx={{ color: '#8892a4', display: 'block', mt: 0.5, fontSize: 12 }}>
+                    <Typography variant="body2" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5, fontSize: 12 }}>
                       {item.recommendation}
                     </Typography>
                   </Box>
                   <Box display="flex" gap={1} alignItems="center" flexShrink={0}>
                     <Chip label={item.status} size="small"
-                      sx={{ bgcolor: '#2a3245', color: STATUS_COLOR[item.status] ?? '#e8eaf0', fontSize: 10 }} />
+                      sx={{ bgcolor: colors.border, color: STATUS_COLOR[item.status] ?? colors.textPrimary, fontSize: 10 }} />
                     <Chip label={item.risk_level.toUpperCase()} size="small"
-                      sx={{ bgcolor: '#2a3245', color: RISK_COLOR[item.risk_level] ?? '#e8eaf0', fontWeight: 'bold', fontSize: 10 }} />
+                      sx={{ bgcolor: colors.border, color: RISK_COLOR[item.risk_level] ?? colors.textPrimary, fontWeight: 'bold', fontSize: 10 }} />
                     {item.auto_mount_token && (
                       <Chip label="auto-mount" size="small"
-                        sx={{ bgcolor: '#2a3245', color: '#ffa726', fontSize: 10 }} />
+                        sx={{ bgcolor: colors.border, color: colors.warning, fontSize: 10 }} />
                     )}
                   </Box>
                 </Box>
@@ -206,15 +207,15 @@ const ServiceAccountsAnalysis: React.FC = () => {
       )}
 
       {/* ALL ACCOUNTS TABLE */}
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             All Service Accounts ({accounts.length})
           </Typography>
         </Box>
         {accounts.length === 0 ? (
           <Box p={4} textAlign="center">
-            <Typography variant="body1" sx={{ color: '#8892a4' }}>No service accounts found.</Typography>
+            <Typography variant="body1" sx={{ color: colors.textSecondary }}>No service accounts found.</Typography>
           </Box>
         ) : (
           <TableContainer>
@@ -223,46 +224,46 @@ const ServiceAccountsAnalysis: React.FC = () => {
                 <TableRow>
                   {['Name', 'Namespace', 'Status', 'Risk', 'Pods', 'Age (days)', 'Auto-Mount', 'Secrets', 'Recommendation'].map(h => (
                     <TableCell key={h} sx={{
-                      fontWeight: 700, fontSize: 12, color: '#8892a4',
-                      bgcolor: '#131d2e', borderColor: '#2a3245', whiteSpace: 'nowrap'
+                      fontWeight: 700, fontSize: 12, color: colors.textSecondary,
+                      bgcolor: colors.surfaceAlt, borderColor: colors.border, whiteSpace: 'nowrap'
                     }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {accounts.slice(0, 50).map((item, i) => (
-                  <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+                  <TableRow key={i} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                    <TableCell sx={{ fontWeight: 600, fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
                       {item.name}
                     </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+                    <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
                       {item.namespace}
                     </TableCell>
-                    <TableCell sx={{ borderColor: '#2a3245' }}>
+                    <TableCell sx={{ borderColor: colors.border }}>
                       <Chip label={item.status} size="small"
-                        sx={{ bgcolor: '#2a3245', color: STATUS_COLOR[item.status] ?? '#e8eaf0', fontSize: 10 }} />
+                        sx={{ bgcolor: colors.border, color: STATUS_COLOR[item.status] ?? colors.textPrimary, fontSize: 10 }} />
                     </TableCell>
-                    <TableCell sx={{ borderColor: '#2a3245' }}>
+                    <TableCell sx={{ borderColor: colors.border }}>
                       <Chip label={item.risk_level.toUpperCase()} size="small"
-                        sx={{ bgcolor: '#2a3245', color: RISK_COLOR[item.risk_level] ?? '#e8eaf0', fontWeight: 'bold', fontSize: 10 }} />
+                        sx={{ bgcolor: colors.border, color: RISK_COLOR[item.risk_level] ?? colors.textPrimary, fontWeight: 'bold', fontSize: 10 }} />
                     </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245', textAlign: 'center' }}>
+                    <TableCell sx={{ fontSize: 12, color: colors.textPrimary, borderColor: colors.border, textAlign: 'center' }}>
                       {item.pods_using}
                     </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245', textAlign: 'center' }}>
+                    <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border, textAlign: 'center' }}>
                       {item.age_days}
                     </TableCell>
-                    <TableCell sx={{ borderColor: '#2a3245', textAlign: 'center' }}>
+                    <TableCell sx={{ borderColor: colors.border, textAlign: 'center' }}>
                       {item.auto_mount_token
-                        ? <WarningIcon sx={{ fontSize: 16, color: '#ffa726' }} />
-                        : <CheckIcon sx={{ fontSize: 16, color: '#a5d6a7' }} />}
+                        ? <WarningIcon sx={{ fontSize: 16, color: colors.warning }} />
+                        : <CheckIcon sx={{ fontSize: 16, color: colors.success }} />}
                     </TableCell>
-                    <TableCell sx={{ borderColor: '#2a3245', textAlign: 'center' }}>
+                    <TableCell sx={{ borderColor: colors.border, textAlign: 'center' }}>
                       {item.has_secrets
-                        ? <CheckIcon sx={{ fontSize: 16, color: '#a5d6a7' }} />
-                        : <Typography variant="caption" sx={{ color: '#8892a4' }}>—</Typography>}
+                        ? <CheckIcon sx={{ fontSize: 16, color: colors.success }} />
+                        : <Typography variant="caption" sx={{ color: colors.textSecondary }}>—</Typography>}
                     </TableCell>
-                    <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', maxWidth: 200 }}>
+                    <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, maxWidth: 200 }}>
                       {item.recommendation}
                     </TableCell>
                   </TableRow>

@@ -31,6 +31,7 @@ import {
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface HeatmapCell {
   cluster: string;
@@ -118,7 +119,7 @@ const Heatmap: React.FC = () => {
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'critical':
-        return '#d32f2f';
+        return colors.danger;
       case 'high':
         return '#f57c00';
       case 'medium':
@@ -146,7 +147,7 @@ const Heatmap: React.FC = () => {
   };
 
   const getWasteColor = (percentage: number) => {
-    if (percentage >= 60) return '#d32f2f';
+    if (percentage >= 60) return colors.danger;
     if (percentage >= 40) return '#f57c00';
     if (percentage >= 20) return '#fbc02d';
     return '#388e3c';
@@ -205,7 +206,7 @@ const Heatmap: React.FC = () => {
       {summary && (
         <Grid container spacing={3} sx={{ mb: 3 }}>
           <Grid item xs={12} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+            <Card sx={{ background: `linear-gradient(135deg, ${colors.gradientStart} 0%, ${colors.gradientEnd} 100%)` }}>
               <CardContent>
                 <Typography variant="h6" color="white" gutterBottom>
                   Total Waste

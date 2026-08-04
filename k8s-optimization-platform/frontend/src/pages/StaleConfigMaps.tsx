@@ -13,19 +13,20 @@ import {
   Storage as StorageIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  hover:   '#252e42',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8b95a9',
-  body:    '#c8cdd8',
-  green:   '#4ade80',
-  red:     '#f87171',
-  yellow:  '#f59e0b',
+  bg:      colors.background,
+  card:    colors.surface,
+  hover:   colors.surfaceHover,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  body:    colors.textMuted,
+  green:   colors.success,
+  red:     colors.danger,
+  yellow:  colors.warning,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -151,7 +152,7 @@ const StaleConfigMaps: React.FC = () => {
 
   if (error) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
 
@@ -250,7 +251,7 @@ const StaleConfigMaps: React.FC = () => {
           <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: '#161f30' }}>
+                <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
                   <TableCell sx={headSx}>Name</TableCell>
                   <TableCell sx={headSx}>Namespace</TableCell>
                   <TableCell sx={headSx}>Reason</TableCell>

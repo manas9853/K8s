@@ -7,21 +7,22 @@ import React, { useState } from 'react';
 import { useUser } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { colors } from '../theme/colors';
 
 const C = {
-  bg:             '#050d1a',
-  bgCard:         '#0b1628',
-  bgSurface:      '#0f1e35',
+  bg:             colors.background,
+  bgCard:         colors.surfaceAlt,
+  bgSurface:      colors.surfaceAlt,
   borderDim:      '#1a2e4a',
-  border:         '#1e3a5f',
+  border:         colors.info,
   cyan:           '#00d4ff',
   cyanGlow:       'rgba(0,212,255,0.15)',
   cyanGlowStrong: 'rgba(0,212,255,0.25)',
   green:          '#39ff14',
-  primary:        '#2563eb',
-  textPrimary:    '#e2f0ff',
-  textSecondary:  '#7ca5cc',
-  textMuted:      '#3d6080',
+  primary:        colors.info,
+  textPrimary:    colors.infoBg,
+  textSecondary:  colors.info,
+  textMuted:      colors.info,
   errorRed:       '#ff4d6a',
 };
 
@@ -289,7 +290,7 @@ const Onboarding: React.FC = () => {
                   border:`1px solid rgba(255,77,106,0.25)`, borderRadius:'8px', fontSize:'12px', color:C.errorRed,
                   fontFamily:"'JetBrains Mono',monospace" }}>{error}</div>}
                 <button type="submit" className="ob-btn" disabled={busy || !orgName.trim()} style={{
-                  width:'100%', height:'44px', background:'linear-gradient(135deg,#1e40af,#1d4ed8)',
+                  width:'100%', height:'44px', background:`linear-gradient(135deg,#1e40af,${colors.info})`,
                   border:`1px solid rgba(0,212,255,0.3)`, borderRadius:'8px',
                   color:C.textPrimary, fontWeight:700, fontSize:'14px', letterSpacing:'0.04em',
                   cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',
@@ -330,7 +331,7 @@ const Onboarding: React.FC = () => {
                   border:`1px solid rgba(255,77,106,0.25)`, borderRadius:'8px', fontSize:'12px', color:C.errorRed,
                   fontFamily:"'JetBrains Mono',monospace" }}>{error}</div>}
                 <button type="submit" className="ob-btn" disabled={busy || !joinOrgId.trim()} style={{
-                  width:'100%', height:'44px', background:'linear-gradient(135deg,#1e40af,#1d4ed8)',
+                  width:'100%', height:'44px', background:`linear-gradient(135deg,#1e40af,${colors.info})`,
                   border:`1px solid rgba(0,212,255,0.3)`, borderRadius:'8px',
                   color:C.textPrimary, fontWeight:700, fontSize:'14px', letterSpacing:'0.04em',
                   cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', gap:'8px',

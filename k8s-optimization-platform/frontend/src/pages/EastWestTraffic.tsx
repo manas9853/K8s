@@ -25,6 +25,7 @@ import {
   Warning as WarningIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface TrafficFlow {
   source_namespace: string;
@@ -49,9 +50,9 @@ interface EastWestData {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  high: '#ef5350',
-  medium: '#ffa726',
-  low: '#a5d6a7',
+  high: colors.danger,
+  medium: colors.warning,
+  low: colors.success,
 };
 
 const EastWestTraffic: React.FC = () => {
@@ -92,7 +93,7 @@ const EastWestTraffic: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -100,7 +101,7 @@ const EastWestTraffic: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -108,7 +109,7 @@ const EastWestTraffic: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load east-west traffic data</Alert>
       </Box>
     );
@@ -117,20 +118,20 @@ const EastWestTraffic: React.FC = () => {
   const flows = Array.isArray(data.traffic_flows) ? data.traffic_flows : [];
   const highRiskFlows = flows.filter((flow) => flow.risk_level === 'high');
   const score = data.east_west_score ?? 0;
-  const scoreColor = score >= 80 ? '#a5d6a7' : score >= 50 ? '#ffa726' : '#ef5350';
+  const scoreColor = score >= 80 ? colors.success : score >= 50 ? colors.warning : colors.danger;
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const dash = (Math.min(score, 100) / 100) * circumference;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <TrafficIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+        <TrafficIcon sx={{ fontSize: 32, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             East-West Traffic
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Real namespace exposure view · {data.namespaces_analyzed ?? 0} namespaces analysed · Last scan{' '}
             {data.last_scan ? new Date(data.last_scan).toLocaleString() : 'N/A'}
           </Typography>
@@ -139,14 +140,14 @@ const EastWestTraffic: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>
                 East-West Score
               </Typography>
               <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
                 <svg width={130} height={130}>
-                  <circle cx={65} cy={65} r={radius} fill="none" stroke="#2a3245" strokeWidth={11} />
+                  <circle cx={65} cy={65} r={radius} fill="none" stroke={colors.border} strokeWidth={11} />
                   <circle
                     cx={65}
                     cy={65}
@@ -163,12 +164,12 @@ const EastWestTraffic: React.FC = () => {
                   <Typography variant="h4" fontWeight="bold" sx={{ color: scoreColor }}>
                     {score}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                     / 100
                   </Typography>
                 </Box>
               </Box>
-              <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mt: 1 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 1 }}>
                 {highRiskFlows.length} high-risk flow{highRiskFlows.length !== 1 ? 's' : ''}
               </Typography>
             </CardContent>
@@ -178,15 +179,15 @@ const EastWestTraffic: React.FC = () => {
         <Grid item xs={12} md={9}>
           <Grid container spacing={2} mb={2}>
             {[
-              { label: 'Total Flows', count: data.total_traffic_flows ?? 0, color: '#90caf9' },
-              { label: 'Restricted', count: data.restricted_flows ?? 0, color: '#a5d6a7' },
-              { label: 'Unrestricted', count: data.unrestricted_flows ?? 0, color: '#ef5350' },
-              { label: 'High Risk', count: highRiskFlows.length, color: '#ef5350' },
+              { label: 'Total Flows', count: data.total_traffic_flows ?? 0, color: colors.info },
+              { label: 'Restricted', count: data.restricted_flows ?? 0, color: colors.success },
+              { label: 'Unrestricted', count: data.unrestricted_flows ?? 0, color: colors.danger },
+              { label: 'High Risk', count: highRiskFlows.length, color: colors.danger },
             ].map(({ label, count, color }) => (
               <Grid item xs={6} md={3} key={label}>
-                <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+                <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
                   <CardContent sx={{ pb: '8px !important' }}>
-                    <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                       {label}
                     </Typography>
                     <Typography variant="h4" fontWeight="bold" sx={{ color }}>
@@ -199,8 +200,8 @@ const EastWestTraffic: React.FC = () => {
           </Grid>
 
           {Array.isArray(data.recommendations) && data.recommendations.length > 0 && (
-            <Paper sx={{ p: 2, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
+            <Paper sx={{ p: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
                 {data.recommendations[0]}
               </Typography>
             </Paper>
@@ -209,35 +210,35 @@ const EastWestTraffic: React.FC = () => {
       </Grid>
 
       {highRiskFlows.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <WarningIcon sx={{ color: '#ef5350' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <WarningIcon sx={{ color: colors.danger }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Unrestricted Cross-Namespace Flows
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>
               {highRiskFlows.length} flows need immediate policy review
             </Typography>
           </Box>
           <Stack spacing={1}>
             {highRiskFlows.slice(0, 5).map((flow, index) => (
-              <Box key={`${flow.source_namespace}-${flow.target_namespace}-${index}`} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={`${flow.source_namespace}-${flow.target_namespace}-${index}`} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={1} mb={0.5}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {flow.source_namespace} → {flow.target_namespace}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {flow.connection_count.toLocaleString()} observed connections · {flow.protocols.join(', ') || 'N/A'}
                     </Typography>
                   </Box>
                   <Chip
                     label="HIGH"
                     size="small"
-                    sx={{ bgcolor: '#2a3245', color: '#ef5350', fontWeight: 'bold', fontSize: 10 }}
+                    sx={{ bgcolor: colors.border, color: colors.danger, fontWeight: 'bold', fontSize: 10 }}
                   />
                 </Box>
-                <Typography variant="body2" sx={{ color: '#8892a4', fontSize: 11, mt: 1 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: 11, mt: 1 }}>
                   {flow.recommendation}
                 </Typography>
               </Box>
@@ -246,9 +247,9 @@ const EastWestTraffic: React.FC = () => {
         </Paper>
       )}
 
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Flow Analysis ({flows.length})
           </Typography>
         </Box>
@@ -261,22 +262,22 @@ const EastWestTraffic: React.FC = () => {
                 mx: 'auto',
                 textAlign: 'center',
                 p: 4,
-                border: '1px solid #2a3245',
+                border: `1px solid ${colors.border}`,
                 borderRadius: 2,
-                bgcolor: '#131d2e',
+                bgcolor: colors.surfaceAlt,
               }}
             >
-              <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: '#e8eaf0' }}>
+              <Typography variant="h6" fontWeight="bold" gutterBottom sx={{ color: colors.textPrimary }}>
                 No east-west traffic flows were generated from the latest scan
               </Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.7, mb: 2 }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.7, mb: 2 }}>
                 This view only produces flow records when the backend finds namespaces running pods with
                 host network access. The current scan analysed {data.namespaces_analyzed ?? 0} namespaces but
                 did not find any source namespace that matched that condition.
               </Typography>
               <Stack spacing={1} alignItems="center">
                 {(data.recommendations || []).slice(0, 2).map((recommendation, index) => (
-                  <Typography key={index} variant="body2" sx={{ color: '#90caf9' }}>
+                  <Typography key={index} variant="body2" sx={{ color: colors.info }}>
                     • {recommendation}
                   </Typography>
                 ))}
@@ -294,9 +295,9 @@ const EastWestTraffic: React.FC = () => {
                       sx={{
                         fontWeight: 700,
                         fontSize: 12,
-                        color: '#8892a4',
-                        bgcolor: '#131d2e',
-                        borderColor: '#2a3245',
+                        color: colors.textSecondary,
+                        bgcolor: colors.surfaceAlt,
+                        borderColor: colors.border,
                         whiteSpace: 'nowrap',
                       }}
                     >
@@ -307,50 +308,50 @@ const EastWestTraffic: React.FC = () => {
               </TableHead>
               <TableBody>
                 {flows.slice(0, 100).map((flow, index) => {
-                  const severityColor = SEVERITY_COLOR[flow.risk_level] ?? '#90caf9';
+                  const severityColor = SEVERITY_COLOR[flow.risk_level] ?? colors.info;
                   return (
-                    <TableRow key={`${flow.source_namespace}-${flow.target_namespace}-${index}`} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+                    <TableRow key={`${flow.source_namespace}-${flow.target_namespace}-${index}`} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
                         {flow.source_namespace}
                       </TableCell>
-                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
                         {flow.target_namespace}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
                         {flow.connection_count.toLocaleString()}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Box display="flex" flexWrap="wrap" gap={0.5}>
                           {flow.protocols.map((protocol) => (
                             <Chip
                               key={protocol}
                               label={protocol}
                               size="small"
-                              sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10, height: 20 }}
+                              sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10, height: 20 }}
                             />
                           ))}
                         </Box>
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Box display="flex" alignItems="center" gap={0.75}>
                           {flow.has_network_policy ? (
-                            <RestrictedIcon sx={{ fontSize: 16, color: '#a5d6a7' }} />
+                            <RestrictedIcon sx={{ fontSize: 16, color: colors.success }} />
                           ) : (
-                            <UnrestrictedIcon sx={{ fontSize: 16, color: '#ef5350' }} />
+                            <UnrestrictedIcon sx={{ fontSize: 16, color: colors.danger }} />
                           )}
-                          <Typography variant="caption" sx={{ color: flow.has_network_policy ? '#a5d6a7' : '#ef5350' }}>
+                          <Typography variant="caption" sx={{ color: flow.has_network_policy ? colors.success : colors.danger }}>
                             {flow.has_network_policy ? 'Restricted' : 'None'}
                           </Typography>
                         </Box>
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Chip
                           label={flow.risk_level.toUpperCase()}
                           size="small"
-                          sx={{ bgcolor: '#2a3245', color: severityColor, fontWeight: 'bold', fontSize: 10 }}
+                          sx={{ bgcolor: colors.border, color: severityColor, fontWeight: 'bold', fontSize: 10 }}
                         />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', maxWidth: 260 }}>
+                      <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, maxWidth: 260 }}>
                         {flow.recommendation}
                       </TableCell>
                     </TableRow>
@@ -363,13 +364,13 @@ const EastWestTraffic: React.FC = () => {
       </Paper>
 
       {Array.isArray(data.recommendations) && data.recommendations.length > 0 && (
-        <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Recommended Actions
           </Typography>
           <Stack spacing={1}>
             {data.recommendations.map((recommendation, index) => (
-              <Typography key={index} variant="body2" sx={{ color: '#8892a4' }}>
+              <Typography key={index} variant="body2" sx={{ color: colors.textSecondary }}>
                 • {recommendation}
               </Typography>
             ))}

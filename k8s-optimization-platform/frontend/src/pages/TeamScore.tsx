@@ -13,25 +13,26 @@ import {
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  hover:  '#252e42',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8b95a9',
-  body:   '#c8cdd8',
-  green:  '#4ade80',
-  red:    '#f87171',
-  yellow: '#f59e0b',
+  bg:     colors.background,
+  card:   colors.surface,
+  hover:  colors.surfaceHover,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  body:   colors.textMuted,
+  green:  colors.success,
+  red:    colors.danger,
+  yellow: colors.warning,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const scoreColor = (s: number) => s >= 80 ? T.green : s >= 55 ? T.yellow : T.red;
 const gradeColors: Record<string, string> = { A: T.green, 'A-': T.green, 'A+': T.green, B: T.green, 'B+': T.green, 'B-': T.green, C: T.yellow, 'C+': T.yellow, D: T.red, F: T.red };
-const gradeBg:    Record<string, string>  = { A: '#052e16', 'A-': '#052e16', 'A+': '#052e16', B: '#052e16', 'B+': '#052e16', 'B-': '#052e16', C: '#451a03', 'C+': '#451a03', D: '#450a0a', F: '#450a0a' };
+const gradeBg:    Record<string, string>  = { A: colors.successBg, 'A-': colors.successBg, 'A+': colors.successBg, B: colors.successBg, 'B+': colors.successBg, 'B-': colors.successBg, C: colors.warningBg, 'C+': colors.warningBg, D: colors.dangerBg, F: colors.dangerBg };
 
 const ScoreGauge: React.FC<{ value: number; size?: number }> = ({ value, size = 48 }) => {
   const col = scoreColor(value);
@@ -110,7 +111,7 @@ const TeamScore: React.FC = () => {
 
   const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.5 };
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
-    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: '#161f30' };
+    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: colors.surfaceAlt };
 
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -119,7 +120,7 @@ const TeamScore: React.FC = () => {
   );
   if (error) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
 
@@ -139,7 +140,7 @@ const TeamScore: React.FC = () => {
       </Box>
 
       {/* Info banner — explain grouping strategy */}
-      <Paper sx={{ bgcolor: '#0d1a2e', border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+      <Paper sx={{ bgcolor: colors.infoBg, border: `1px solid ${T.border}`, borderRadius: 2, p: 2, mb: 3, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
         <InfoIcon sx={{ color: T.muted, fontSize: 18, mt: 0.2, flexShrink: 0 }} />
         <Typography sx={{ fontSize: 12, color: T.body }}>
           Teams are derived from the <strong style={{ color: T.text }}>namespace prefix</strong> (e.g.{' '}
@@ -242,7 +243,7 @@ const TeamScore: React.FC = () => {
                 </TableCell>
                 <TableCell sx={{ ...cellSx, textAlign: 'center' }}>
                   <Chip label={row.grade} size="small"
-                    sx={{ bgcolor: gradeBg[row.grade] ?? '#450a0a', color: gradeColors[row.grade] ?? T.red,
+                    sx={{ bgcolor: gradeBg[row.grade] ?? colors.dangerBg, color: gradeColors[row.grade] ?? T.red,
                       border: `1px solid ${(gradeColors[row.grade] ?? T.red)}44`, fontWeight: 700, fontSize: 11 }} />
                 </TableCell>
                 <TableCell sx={cellSx}><MiniBar value={row.cpu_efficiency} /></TableCell>

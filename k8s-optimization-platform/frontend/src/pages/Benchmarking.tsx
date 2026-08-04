@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface BenchmarkMetric {
   name: string;
@@ -130,7 +131,7 @@ const Benchmarking: React.FC = () => {
                 <YAxis domain={[0, 100]} />
                 <Tooltip />
                 <Legend />
-                <Bar dataKey="overall_score" fill="#1a56db" name="Overall Score" />
+                <Bar dataKey="overall_score" fill={colors.info} name="Overall Score" />
               </BarChart>
             </ResponsiveContainer>
           </Paper>

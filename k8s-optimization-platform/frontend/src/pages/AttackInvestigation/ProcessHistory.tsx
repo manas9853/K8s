@@ -21,6 +21,7 @@ import {
 import { Terminal as TerminalIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface ProcessEntry {
   timestamp: string;
@@ -105,7 +106,7 @@ const ProcessHistoryInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -113,7 +114,7 @@ const ProcessHistoryInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -121,44 +122,44 @@ const ProcessHistoryInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load process history</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <TerminalIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <TerminalIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Process History
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real runtime process evidence for {data.pod_name} in {data.cluster_name || 'cluster'}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Pod', value: data.pod_name, color: '#e8eaf0', mono: true },
-          { label: 'Namespace', value: data.namespace, color: '#e8eaf0', mono: true },
-          { label: 'Observed Processes', value: String(processes.length), color: '#90caf9', mono: false },
-          { label: 'Running Processes', value: String(runningProcesses), color: runningProcesses > 0 ? '#ffa726' : '#a5d6a7', mono: false },
-          { label: 'Root Processes', value: String(rootProcesses), color: rootProcesses > 0 ? '#ef5350' : '#a5d6a7', mono: false },
-          { label: 'Shell Processes', value: String(shellProcesses), color: shellProcesses > 0 ? '#ef5350' : '#a5d6a7', mono: false },
+          { label: 'Pod', value: data.pod_name, color: colors.textPrimary, mono: true },
+          { label: 'Namespace', value: data.namespace, color: colors.textPrimary, mono: true },
+          { label: 'Observed Processes', value: String(processes.length), color: colors.info, mono: false },
+          { label: 'Running Processes', value: String(runningProcesses), color: runningProcesses > 0 ? colors.warning : colors.success, mono: false },
+          { label: 'Root Processes', value: String(rootProcesses), color: rootProcesses > 0 ? colors.danger : colors.success, mono: false },
+          { label: 'Shell Processes', value: String(shellProcesses), color: shellProcesses > 0 ? colors.danger : colors.success, mono: false },
         ].map((item) => (
           <Grid item xs={12} sm={6} md={2} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', height: '100%' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, height: '100%' }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{item.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{item.label}</Typography>
                 <Typography variant="h6" fontWeight="bold" sx={{ color: item.color, fontFamily: item.mono ? 'monospace' : 'inherit', wordBreak: 'break-all', fontSize: item.mono ? 13 : 24 }}>
                   {item.value}
                 </Typography>
@@ -169,30 +170,30 @@ const ProcessHistoryInner: React.FC = () => {
       </Grid>
 
       {processes.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Why these processes matter
           </Typography>
           <Stack spacing={1.5}>
             {processes.map((entry, index) => (
-              <Box key={`${entry.timestamp}-${entry.pid}-${index}`} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={`${entry.timestamp}-${entry.pid}-${index}`} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" justifyContent="space-between" gap={1} flexWrap="wrap" mb={1}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0', fontFamily: 'monospace' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary, fontFamily: 'monospace' }}>
                       {entry.command}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       PID {entry.pid} · PPID {entry.ppid} · {formatTimestamp(entry.timestamp)}
                     </Typography>
                   </Box>
                   <Box display="flex" gap={1}>
-                    <Chip label={entry.user} size="small" sx={{ bgcolor: '#2a3245', color: entry.user === 'root' ? '#ef5350' : '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
-                    <Chip label={entry.exit_code === null ? 'running' : `exit ${entry.exit_code}`} size="small" sx={{ bgcolor: '#2a3245', color: entry.exit_code === null ? '#ffa726' : entry.exit_code === 0 ? '#a5d6a7' : '#ef5350', fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={entry.user} size="small" sx={{ bgcolor: colors.border, color: entry.user === 'root' ? colors.danger : colors.info, fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={entry.exit_code === null ? 'running' : `exit ${entry.exit_code}`} size="small" sx={{ bgcolor: colors.border, color: entry.exit_code === null ? colors.warning : entry.exit_code === 0 ? colors.success : colors.danger, fontWeight: 'bold', fontSize: 10 }} />
                   </Box>
                 </Box>
                 <Stack spacing={0.75}>
                   {buildReason(entry, data.pod_name, data.namespace).map((reason) => (
-                    <Typography key={reason} variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+                    <Typography key={reason} variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
                       • {reason}
                     </Typography>
                   ))}
@@ -203,15 +204,15 @@ const ProcessHistoryInner: React.FC = () => {
         </Paper>
       )}
 
-      <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Command Execution History
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               {['Timestamp', 'PID', 'PPID', 'User', 'Command', 'Duration', 'Exit Code'].map((header) => (
-                <TableCell key={header} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>
+                <TableCell key={header} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>
                   {header}
                 </TableCell>
               ))}
@@ -219,19 +220,19 @@ const ProcessHistoryInner: React.FC = () => {
           </TableHead>
           <TableBody>
             {processes.map((entry, index) => (
-              <TableRow key={`${entry.timestamp}-${entry.pid}-${index}`} hover sx={{ '&:hover': { bgcolor: '#232d3f' }, bgcolor: '#131d2e' }}>
-                <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12, minWidth: 145 }}>{formatTimestamp(entry.timestamp)}</TableCell>
-                <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245', fontFamily: 'monospace' }}>{entry.pid}</TableCell>
-                <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontFamily: 'monospace' }}>{entry.ppid}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={entry.user} size="small" sx={{ bgcolor: '#2a3245', color: entry.user === 'root' ? '#ef5350' : '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
+              <TableRow key={`${entry.timestamp}-${entry.pid}-${index}`} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, bgcolor: colors.surfaceAlt }}>
+                <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, minWidth: 145 }}>{formatTimestamp(entry.timestamp)}</TableCell>
+                <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border, fontFamily: 'monospace' }}>{entry.pid}</TableCell>
+                <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontFamily: 'monospace' }}>{entry.ppid}</TableCell>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={entry.user} size="small" sx={{ bgcolor: colors.border, color: entry.user === 'root' ? colors.danger : colors.info, fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ color: entry.user === 'root' ? '#ef5350' : '#e8eaf0', borderColor: '#2a3245', fontFamily: 'monospace', fontSize: 12, minWidth: 220, fontWeight: entry.user === 'root' ? 700 : 400 }}>
+                <TableCell sx={{ color: entry.user === 'root' ? colors.danger : colors.textPrimary, borderColor: colors.border, fontFamily: 'monospace', fontSize: 12, minWidth: 220, fontWeight: entry.user === 'root' ? 700 : 400 }}>
                   {entry.command}
                 </TableCell>
-                <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12 }}>{entry.duration}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={entry.exit_code === null ? 'running' : String(entry.exit_code)} size="small" sx={{ bgcolor: '#2a3245', color: entry.exit_code === null ? '#ffa726' : entry.exit_code === 0 ? '#a5d6a7' : '#ef5350', fontWeight: 'bold', fontSize: 10 }} />
+                <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12 }}>{entry.duration}</TableCell>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={entry.exit_code === null ? 'running' : String(entry.exit_code)} size="small" sx={{ bgcolor: colors.border, color: entry.exit_code === null ? colors.warning : entry.exit_code === 0 ? colors.success : colors.danger, fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
               </TableRow>
             ))}

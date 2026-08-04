@@ -11,15 +11,16 @@ import ShieldOutlinedIcon from '@mui/icons-material/ShieldOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -124,12 +125,12 @@ const AutonomousMode: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#58a6ff' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
   const cs = payload?.cluster_summary;
-  const glowColor = enabled ? '#238636' : DK.border;
+  const glowColor = enabled ? colors.success : DK.border;
   const activities = payload?.recent_activities ?? [];
 
   return (
@@ -141,7 +142,7 @@ const AutonomousMode: React.FC = () => {
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Autonomous Mode</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
             Fully automated AI optimization —{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh">
@@ -174,17 +175,17 @@ const AutonomousMode: React.FC = () => {
               width: 12,
               height: 12,
               borderRadius: '50%',
-              bgcolor: enabled ? '#3fb950' : DK.muted,
-              boxShadow: enabled ? '0 0 0 0 #3fb95088' : 'none',
+              bgcolor: enabled ? colors.success : DK.muted,
+              boxShadow: enabled ? `0 0 0 0 ${colors.success}88` : 'none',
               animation: enabled ? 'pulse 2s infinite' : 'none',
               '@keyframes pulse': {
-                '0%':   { boxShadow: '0 0 0 0 #3fb95066' },
+                '0%':   { boxShadow: `0 0 0 0 ${colors.success}66` },
                 '70%':  { boxShadow: '0 0 0 10px transparent' },
                 '100%': { boxShadow: '0 0 0 0 transparent' },
               },
             }}
           />
-          <Typography sx={{ color: enabled ? '#3fb950' : DK.muted, fontWeight: 700, fontSize: '0.88rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+          <Typography sx={{ color: enabled ? colors.success : DK.muted, fontWeight: 700, fontSize: '0.88rem', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
             {enabled ? 'AUTONOMOUS MODE: ACTIVE' : 'AUTONOMOUS MODE: INACTIVE'}
           </Typography>
         </Box>
@@ -192,7 +193,7 @@ const AutonomousMode: React.FC = () => {
         {/* Big icon */}
         <AutoModeIcon sx={{
           fontSize: 64,
-          color: enabled ? '#3fb950' : DK.border,
+          color: enabled ? colors.success : DK.border,
           transition: 'color 0.4s ease',
           animation: enabled ? 'spin 8s linear infinite' : 'none',
           '@keyframes spin': { from: { transform: 'rotate(0deg)' }, to: { transform: 'rotate(360deg)' } },
@@ -208,20 +209,20 @@ const AutonomousMode: React.FC = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem' }}>Disabled</Typography>
           {toggling
-            ? <CircularProgress size={28} sx={{ color: '#3fb950' }} />
+            ? <CircularProgress size={28} sx={{ color: colors.success }} />
             : (
               <Switch
                 checked={enabled}
                 onChange={handleToggle}
                 sx={{
                   transform: 'scale(1.3)',
-                  '& .MuiSwitch-switchBase.Mui-checked': { color: '#3fb950' },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#3fb950' },
+                  '& .MuiSwitch-switchBase.Mui-checked': { color: colors.success },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: colors.success },
                 }}
               />
             )
           }
-          <Typography sx={{ color: enabled ? '#3fb950' : DK.muted, fontSize: '0.83rem', fontWeight: enabled ? 700 : 400 }}>Enabled</Typography>
+          <Typography sx={{ color: enabled ? colors.success : DK.muted, fontSize: '0.83rem', fontWeight: enabled ? 700 : 400 }}>Enabled</Typography>
         </Box>
       </Box>
 
@@ -234,8 +235,8 @@ const AutonomousMode: React.FC = () => {
           onClick={handleEmergencyStop}
           disabled={!enabled || toggling}
           sx={{
-            bgcolor: '#da3633',
-            '&:hover': { bgcolor: '#f85149' },
+            bgcolor: colors.danger,
+            '&:hover': { bgcolor: colors.danger },
             '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
             fontWeight: 700,
             fontSize: '0.9rem',
@@ -257,9 +258,9 @@ const AutonomousMode: React.FC = () => {
             <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.88rem', mb: 2 }}>Cluster Snapshot</Typography>
             <Grid container spacing={1.5}>
               <Grid item xs={6}><KpiCard label="Total Pods" value={cs?.total_pods ?? 0} /></Grid>
-              <Grid item xs={6}><KpiCard label="OOM Pods" value={cs?.oom_pods ?? 0} accent="#f85149" /></Grid>
-              <Grid item xs={6}><KpiCard label="Unstable Pods" value={cs?.unstable_pods ?? 0} accent="#d29922" /></Grid>
-              <Grid item xs={6}><KpiCard label="Auto-Fixable" value={cs?.fixable_automatically ?? 0} accent="#3fb950" /></Grid>
+              <Grid item xs={6}><KpiCard label="OOM Pods" value={cs?.oom_pods ?? 0} accent={colors.danger} /></Grid>
+              <Grid item xs={6}><KpiCard label="Unstable Pods" value={cs?.unstable_pods ?? 0} accent={colors.warning} /></Grid>
+              <Grid item xs={6}><KpiCard label="Auto-Fixable" value={cs?.fixable_automatically ?? 0} accent={colors.success} /></Grid>
             </Grid>
           </Box>
         </Grid>
@@ -268,13 +269,13 @@ const AutonomousMode: React.FC = () => {
         <Grid item xs={12} md={6}>
           <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2.5, height: '100%' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-              <ShieldOutlinedIcon sx={{ fontSize: 18, color: '#d29922' }} />
+              <ShieldOutlinedIcon sx={{ fontSize: 18, color: colors.warning }} />
               <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.88rem' }}>Safety Guardrails</Typography>
             </Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
               {(payload?.guardrails ?? []).map((g, i) => (
                 <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                  <WarningAmberIcon sx={{ fontSize: 14, color: '#d29922', flexShrink: 0, mt: '3px' }} />
+                  <WarningAmberIcon sx={{ fontSize: 14, color: colors.warning, flexShrink: 0, mt: '3px' }} />
                   <Typography sx={{ color: DK.muted, fontSize: '0.8rem', lineHeight: 1.5 }}>{g}</Typography>
                 </Box>
               ))}
@@ -286,7 +287,7 @@ const AutonomousMode: React.FC = () => {
       {/* Activity feed */}
       <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, overflow: 'hidden' }}>
         <Box sx={{ px: 2, py: 1.5, borderBottom: `1px solid ${DK.border}`, display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: enabled ? '#3fb950' : DK.muted }} />
+          <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: enabled ? colors.success : DK.muted }} />
           <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.85rem' }}>
             Recent Activity Feed
           </Typography>
@@ -299,7 +300,7 @@ const AutonomousMode: React.FC = () => {
         ) : (
           activities.map((act, i) => (
             <Box key={act.id} sx={{ display: 'flex', alignItems: 'center', gap: 2, px: 2, py: 1.25, borderBottom: i < activities.length - 1 ? `1px solid ${DK.border}` : 'none' }}>
-              <Box sx={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, bgcolor: act.result === 'success' ? '#3fb950' : '#f85149' }} />
+              <Box sx={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, bgcolor: act.result === 'success' ? colors.success : colors.danger }} />
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography sx={{ color: DK.text, fontSize: '0.82rem' }} noWrap>{act.action}</Typography>
                 <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }} noWrap>{act.resource}</Typography>
@@ -310,7 +311,7 @@ const AutonomousMode: React.FC = () => {
               <Chip
                 label={act.result}
                 size="small"
-                sx={{ bgcolor: act.result === 'success' ? '#3fb9501a' : '#f851491a', color: act.result === 'success' ? '#3fb950' : '#f85149', border: `1px solid ${act.result === 'success' ? '#3fb95044' : '#f8514944'}`, fontSize: '0.65rem', height: 18 }}
+                sx={{ bgcolor: act.result === 'success' ? `${colors.success}1a` : `${colors.danger}1a`, color: act.result === 'success' ? colors.success : colors.danger, border: `1px solid ${act.result === 'success' ? `${colors.success}44` : `${colors.danger}44`}`, fontSize: '0.65rem', height: 18 }}
               />
             </Box>
           ))

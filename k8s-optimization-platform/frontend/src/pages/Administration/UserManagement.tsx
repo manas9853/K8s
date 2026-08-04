@@ -19,6 +19,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import axios from 'axios';
+import { colors } from '../../theme/colors';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -331,7 +332,7 @@ const UserManagement: React.FC = () => {
 
       {/* Pending approval section */}
       {isAdmin && pending > 0 && (
-        <Paper elevation={2} sx={{ mb: 3, p: 2, border: '1px solid', borderColor: 'warning.light', bgcolor: '#fffde7' }}>
+        <Paper elevation={2} sx={{ mb: 3, p: 2, border: '1px solid', borderColor: 'warning.light', bgcolor: colors.warningBg }}>
           <Typography variant="h6" sx={{ mb: 1, fontWeight: 700, color: 'warning.dark' }}>
             ⚠ Pending Approvals ({pending})
           </Typography>

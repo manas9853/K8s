@@ -63,19 +63,20 @@ import InfoIcon from '@mui/icons-material/Info';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import DnsIcon from '@mui/icons-material/Dns';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  hover:  '#252e42',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8b95a9',
-  body:   '#c8cdd8',
-  green:  '#4ade80',
-  red:    '#f87171',
-  yellow: '#f59e0b',
+  bg:     colors.background,
+  card:   colors.surface,
+  hover:  colors.surfaceHover,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  body:   colors.textMuted,
+  green:  colors.success,
+  red:    colors.danger,
+  yellow: colors.warning,
 };
 const selectSx = {
   color: T.text, fontSize: 13, height: 38,
@@ -415,7 +416,7 @@ const DaemonSets: React.FC = () => {
         <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
           Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
         </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}>Go to Cluster Onboarding</Button>
+        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: colors.success } }}>Go to Cluster Onboarding</Button>
       </Box>
     );
   }
@@ -458,7 +459,7 @@ const DaemonSets: React.FC = () => {
         ))}
       </Grid>
 
-      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
 
       {/* Search and Actions */}
       <Box display="flex" gap={2} mb={2}>
@@ -488,7 +489,7 @@ const DaemonSets: React.FC = () => {
       <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: '#161f30' }}>
+            <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
               <TableCell sx={headSx}>Status</TableCell>
               <TableCell sx={headSx}>Name</TableCell>
               <TableCell sx={headSx}>Namespace</TableCell>
@@ -537,7 +538,7 @@ const DaemonSets: React.FC = () => {
                     </TableCell>
                     <TableCell sx={cellSx}>
                       <Chip label={issueCount === 0 ? 'Healthy' : `${issueCount} issues`} size="small"
-                        sx={{ bgcolor: issueCount === 0 ? '#052e16' : '#450a0a', color: issueCount === 0 ? T.green : T.red,
+                        sx={{ bgcolor: issueCount === 0 ? colors.successBg : colors.dangerBg, color: issueCount === 0 ? T.green : T.red,
                           border: `1px solid ${issueCount === 0 ? T.green+'44' : T.red+'44'}`, fontSize: 11, height: 20 }} />
                     </TableCell>
                     <TableCell sx={{ ...cellSx, color: T.muted }}>{ds.age}</TableCell>
@@ -642,7 +643,7 @@ const DaemonSets: React.FC = () => {
                 <Box>
                   {generateInvestigations(selectedDaemonSet).map((inv, idx) => (
                     <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`,
-                      bgcolor: inv.type === 'error' ? '#1a0a0a' : inv.type === 'warning' ? '#1a1200' : '#0a1a0a' }}>
+                      bgcolor: inv.type === 'error' ? colors.dangerBg : inv.type === 'warning' ? colors.warningBg : colors.successBg }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         {inv.type === 'error' && <ErrorIcon sx={{ fontSize: 16, color: T.red }} />}
                         {inv.type === 'warning' && <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />}
@@ -654,7 +655,7 @@ const DaemonSets: React.FC = () => {
                     </Box>
                   ))}
                   {generateInvestigations(selectedDaemonSet).length === 0 && (
-                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: colors.successBg }}>
                       <Typography sx={{ fontSize: 13, color: T.green }}>No issues found — DaemonSet is healthy</Typography>
                     </Box>
                   )}
@@ -668,7 +669,7 @@ const DaemonSets: React.FC = () => {
                     <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`, bgcolor: T.bg }}>
                       <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                         <Chip label={rec.category} size="small" sx={{ bgcolor: T.border, color: T.text, fontSize: 11, height: 20 }} />
-                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? '#450a0a' : rec.priority === 'medium' ? '#451a03' : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
+                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? colors.dangerBg : rec.priority === 'medium' ? colors.warningBg : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
                       </Box>
                       <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{rec.title}</Typography>
                       <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>{rec.description}</Typography>
@@ -702,7 +703,7 @@ const DaemonSets: React.FC = () => {
               {/* Actions Tab */}
               {activeTab === 4 && (
                 <Box>
-                  <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}
+                  <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: T.green, color: '#000', '&:hover': { bgcolor: colors.success } }}
                     onClick={() => handleRestartPods(selectedDaemonSet)} disabled={actionLoading}
                     startIcon={actionLoading ? <CircularProgress size={16} /> : <RefreshIcon />}>
                     Restart All Pods (Rolling)
@@ -729,7 +730,7 @@ const DaemonSets: React.FC = () => {
         </DialogContent>
         <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
           <Button onClick={() => setConfirmOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
-          <Button variant="contained" sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' }, textTransform: 'none' }} onClick={runConfirmed}>Confirm</Button>
+          <Button variant="contained" sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: colors.success }, textTransform: 'none' }} onClick={runConfirmed}>Confirm</Button>
         </DialogActions>
       </Dialog>
 

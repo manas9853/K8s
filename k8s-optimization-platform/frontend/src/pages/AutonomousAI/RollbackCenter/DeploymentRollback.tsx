@@ -14,15 +14,16 @@ import SearchIcon from '@mui/icons-material/Search';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -82,13 +83,13 @@ const DepCard: React.FC<{
   }}>
     {/* Header row */}
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 2, cursor: 'pointer' }} onClick={onExpand}>
-      <StorageIcon sx={{ fontSize: 18, color: '#3b82f6', flexShrink: 0 }} />
+      <StorageIcon sx={{ fontSize: 18, color: colors.info, flexShrink: 0 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
           <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.87rem' }}>{dep.deployment}</Typography>
           <Chip label={dep.namespace} size="small" sx={{ bgcolor: DK.surface2, color: DK.muted, fontSize: '0.68rem', height: 18 }} />
           {dep.cluster && (
-            <Chip label={dep.cluster} size="small" variant="outlined" sx={{ color: '#3b82f6', borderColor: '#3b82f6', fontSize: '0.68rem', height: 18 }} />
+            <Chip label={dep.cluster} size="small" variant="outlined" sx={{ color: colors.info, borderColor: colors.info, fontSize: '0.68rem', height: 18 }} />
           )}
         </Box>
         <Typography sx={{ color: DK.muted, fontSize: '0.75rem', mt: 0.3, fontFamily: 'monospace' }} noWrap>
@@ -96,7 +97,7 @@ const DepCard: React.FC<{
         </Typography>
       </Box>
       <Chip label={`${dep.current_replicas} replica${dep.current_replicas !== 1 ? 's' : ''}`} size="small"
-        sx={{ bgcolor: '#1c2128', color: DK.muted, fontSize: '0.68rem', mr: 1 }} />
+        sx={{ bgcolor: colors.surfaceHover, color: DK.muted, fontSize: '0.68rem', mr: 1 }} />
       <IconButton size="small" sx={{ color: DK.muted }}>
         {expanded ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
       </IconButton>
@@ -106,18 +107,18 @@ const DepCard: React.FC<{
       <Box sx={{ borderTop: `1px solid ${DK.border}`, p: 2, bgcolor: DK.surface2, borderRadius: '0 0 8px 8px' }}>
         <Typography sx={{ color: DK.muted, fontSize: '0.78rem', mb: 1.5 }}>
           Rollback will restart all pods in this deployment to the previous revision using{' '}
-          <code style={{ color: '#3b82f6' }}>kubectl rollout undo</code>.
+          <code style={{ color: colors.info }}>kubectl rollout undo</code>.
           Current replicas: <strong style={{ color: DK.text }}>{dep.current_replicas}</strong>
         </Typography>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           {done ? (
             <Chip icon={<CheckCircleOutlineIcon />} label="Rollback Applied" size="small"
-              sx={{ bgcolor: '#0d1117', color: '#3fb950', border: '1px solid #3fb950', fontSize: '0.72rem' }} />
+              sx={{ bgcolor: colors.background, color: colors.success, border: `1px solid ${colors.success}`, fontSize: '0.72rem' }} />
           ) : (
             <Button
               variant="contained" size="small" startIcon={applying ? <CircularProgress size={12} color="inherit" /> : <ReplayIcon />}
               disabled={applying || !dep.can_rollback} onClick={onRollback}
-              sx={{ bgcolor: '#3b82f6', '&:hover': { bgcolor: '#2563eb' }, textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
+              sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info }, textTransform: 'none', fontWeight: 600, fontSize: '0.8rem' }}
             >
               {applying ? 'Rolling back…' : 'Rollback Now'}
             </Button>
@@ -206,7 +207,7 @@ const DeploymentRollback: React.FC = () => {
 
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
-          <CircularProgress sx={{ color: '#3b82f6' }} />
+          <CircularProgress sx={{ color: colors.info }} />
         </Box>
       )}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -215,9 +216,9 @@ const DeploymentRollback: React.FC = () => {
         <>
           {/* KPIs */}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 2, mb: 3 }}>
-            <KpiCard label="Available Deployments" value={data.available_deployments} accent="#3b82f6" />
+            <KpiCard label="Available Deployments" value={data.available_deployments} accent={colors.info} />
             <KpiCard label="Cluster" value={data.cluster_name || activeClusterId || '—'} />
-            <KpiCard label="Rolled Back" value={Object.values(done).filter(Boolean).length} accent="#3fb950" />
+            <KpiCard label="Rolled Back" value={Object.values(done).filter(Boolean).length} accent={colors.success} />
           </Box>
 
           {/* Search */}

@@ -32,6 +32,7 @@ import {
 } from '@mui/icons-material';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface SecretExposureItem {
   id: string;
@@ -62,10 +63,10 @@ interface SecretExposureResponse {
 }
 
 const SEV_COLOR: Record<string, string> = {
-  critical: '#ef5350',
-  high: '#ffa726',
-  medium: '#90caf9',
-  low: '#a5d6a7',
+  critical: colors.danger,
+  high: colors.warning,
+  medium: colors.info,
+  low: colors.success,
 };
 
 function formatTimestamp(value?: string) {
@@ -102,60 +103,60 @@ const ExposureRow: React.FC<{ secret: SecretExposureItem }> = ({ secret }) => {
 
   return (
     <>
-      <TableRow hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-        <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+      <TableRow hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+        <TableCell sx={{ fontWeight: 600, fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
           {secret.pod_name || 'N/A'}
         </TableCell>
-        <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+        <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
           {secret.container_name || 'N/A'}
         </TableCell>
-        <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+        <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
           {secret.namespace || 'N/A'}
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip
             label={severity.toUpperCase()}
             size="small"
-            sx={{ bgcolor: '#2a3245', color: SEV_COLOR[severity] || '#e8eaf0', fontWeight: 'bold', fontSize: 10 }}
+            sx={{ bgcolor: colors.border, color: SEV_COLOR[severity] || colors.textPrimary, fontWeight: 'bold', fontSize: 10 }}
           />
         </TableCell>
-        <TableCell sx={{ fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+        <TableCell sx={{ fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
           {secret.secret_type || 'N/A'}
         </TableCell>
-        <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+        <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
           {secret.exposure_type || 'N/A'}
         </TableCell>
-        <TableCell sx={{ fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+        <TableCell sx={{ fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
           {secret.env_var_count ?? 'N/A'}
         </TableCell>
-        <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', whiteSpace: 'nowrap' }}>
+        <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, whiteSpace: 'nowrap' }}>
           {formatTimestamp(secret.detected_at)}
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <IconButton
             size="small"
             onClick={() => setOpen((value) => !value)}
-            sx={{ color: '#90caf9' }}
+            sx={{ color: colors.info }}
             aria-label="Show exposure details"
           >
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
       </TableRow>
-      <TableRow sx={{ bgcolor: '#131d2e' }}>
-        <TableCell colSpan={9} sx={{ p: 0, borderColor: open ? '#2a3245' : 'transparent' }}>
+      <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
+        <TableCell colSpan={9} sx={{ p: 0, borderColor: open ? colors.border : 'transparent' }}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ p: 2.5 }}>
-              <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#ffa726', mb: 1.5 }}>
+              <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.warning, mb: 1.5 }}>
                 Why this workload is flagged
               </Typography>
               <Stack spacing={1}>
                 {reasons.map((reason) => (
                   <Box key={reason} display="flex" gap={1} alignItems="flex-start">
-                    <Typography variant="body2" sx={{ color: '#ef5350', fontSize: 13, lineHeight: 1.2, mt: 0.15 }}>
+                    <Typography variant="body2" sx={{ color: colors.danger, fontSize: 13, lineHeight: 1.2, mt: 0.15 }}>
                       •
                     </Typography>
-                    <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 13, lineHeight: 1.6 }}>
+                    <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 13, lineHeight: 1.6 }}>
                       {reason}
                     </Typography>
                   </Box>
@@ -163,11 +164,11 @@ const ExposureRow: React.FC<{ secret: SecretExposureItem }> = ({ secret }) => {
               </Stack>
 
               {secret.value_preview && (
-                <Box mt={2} sx={{ p: 1.5, borderRadius: 1, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block' }}>
+                <Box mt={2} sx={{ p: 1.5, borderRadius: 1, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block' }}>
                     Value Preview
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#e8eaf0', mt: 0.5, fontFamily: 'monospace' }}>
+                  <Typography variant="body2" sx={{ color: colors.textPrimary, mt: 0.5, fontFamily: 'monospace' }}>
                     {secret.value_preview}
                   </Typography>
                 </Box>
@@ -175,12 +176,12 @@ const ExposureRow: React.FC<{ secret: SecretExposureItem }> = ({ secret }) => {
 
               {secret.remediation_steps && secret.remediation_steps.length > 0 && (
                 <Box mt={2}>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 0.75 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 0.75 }}>
                     Remediation Steps
                   </Typography>
                   <Stack spacing={0.75}>
                     {secret.remediation_steps.map((step) => (
-                      <Typography key={step} variant="body2" sx={{ color: '#a5d6a7', fontSize: 13 }}>
+                      <Typography key={step} variant="body2" sx={{ color: colors.success, fontSize: 13 }}>
                         • {step}
                       </Typography>
                     ))}
@@ -243,24 +244,24 @@ const SecretExposureInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
   }
 
-  if (error) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">Failed to load secret exposure data</Alert></Box>;
+  if (error) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">Failed to load secret exposure data</Alert></Box>;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <KeyIcon sx={{ fontSize: 36, color: '#60a5fa' }} />
+        <KeyIcon sx={{ fontSize: 36, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Secret Exposure
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Real cluster scan for exposed runtime secrets · Last scan {formatTimestamp(data.last_scan)}
           </Typography>
         </Box>
@@ -268,15 +269,15 @@ const SecretExposureInner: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Exposure Score', value: data.exposure_score, color: '#90caf9' },
-          { label: 'Total Exposures', value: data.total_exposures, color: '#ef5350' },
-          { label: 'High Severity', value: data.high_exposures + data.critical_exposures, color: '#ffa726' },
-          { label: 'Containers Scanned', value: data.containers_scanned, color: '#a5d6a7' },
+          { label: 'Exposure Score', value: data.exposure_score, color: colors.info },
+          { label: 'Total Exposures', value: data.total_exposures, color: colors.danger },
+          { label: 'High Severity', value: data.high_exposures + data.critical_exposures, color: colors.warning },
+          { label: 'Containers Scanned', value: data.containers_scanned, color: colors.success },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                   {item.label}
                 </Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>
@@ -289,13 +290,13 @@ const SecretExposureInner: React.FC = () => {
       </Grid>
 
       {highOrCritical.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #2a3245', bgcolor: '#1e2433' }}>
+        <Paper sx={{ p: 2.5, mb: 3, border: `1px solid ${colors.border}`, bgcolor: colors.surface }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <ErrorIcon sx={{ color: '#ef5350' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <ErrorIcon sx={{ color: colors.danger }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Why these exposures matter
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>
               Primary exposure type: {topExposureType}
             </Typography>
           </Box>
@@ -309,8 +310,8 @@ const SecretExposureInner: React.FC = () => {
                   sx={{
                     p: 2,
                     borderRadius: 1.5,
-                    bgcolor: '#131d2e',
-                    border: '1px solid #2a3245',
+                    bgcolor: colors.surfaceAlt,
+                    border: `1px solid ${colors.border}`,
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'flex-start',
@@ -319,13 +320,13 @@ const SecretExposureInner: React.FC = () => {
                   }}
                 >
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {secret.pod_name} / {secret.container_name}
                     </Typography>
-                    <Typography variant="body2" sx={{ color: '#c8d0dc', mt: 0.5, lineHeight: 1.7 }}>
+                    <Typography variant="body2" sx={{ color: colors.textMuted, mt: 0.5, lineHeight: 1.7 }}>
                       {reasons.slice(0, 2).join(' ')}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {secret.namespace} · {secret.secret_type} · detected {formatTimestamp(secret.detected_at)}
                     </Typography>
                   </Box>
@@ -334,7 +335,7 @@ const SecretExposureInner: React.FC = () => {
                     variant="contained"
                     startIcon={<RotateIcon />}
                     onClick={() => navigate('/secret-rotation')}
-                    sx={{ fontSize: 11, bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}
+                    sx={{ fontSize: 11, bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}
                   >
                     Rotate Secrets
                   </Button>
@@ -345,28 +346,28 @@ const SecretExposureInner: React.FC = () => {
         </Paper>
       )}
 
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2} display="flex" alignItems="center" justifyContent="space-between" gap={2} flexWrap="wrap">
           <Box>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               All Exposed Secrets ({secrets.length})
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Expand a row to see the real detection reason, backend recommendation, and remediation steps generated from the live scan.
             </Typography>
           </Box>
-          <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/secret-rotation')} sx={{ color: '#60a5fa' }}>
+          <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/secret-rotation')} sx={{ color: colors.info }}>
             Rotation Schedule
           </Button>
         </Box>
 
         {secrets.length === 0 ? (
           <Box p={3}>
-            <Paper elevation={0} sx={{ maxWidth: 480, mx: 'auto', textAlign: 'center', p: 6, border: '1px solid #2a3245', borderRadius: 2, bgcolor: '#131d2e' }}>
-              <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ color: '#e8eaf0' }}>
+            <Paper elevation={0} sx={{ maxWidth: 480, mx: 'auto', textAlign: 'center', p: 6, border: `1px solid ${colors.border}`, borderRadius: 2, bgcolor: colors.surfaceAlt }}>
+              <Typography variant="h5" fontWeight="bold" gutterBottom sx={{ color: colors.textPrimary }}>
                 No secret exposure issues found
               </Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.7 }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.7 }}>
                 {data.recommendation || 'The latest cluster scan did not find any workloads with likely secret exposure patterns.'}
               </Typography>
             </Paper>
@@ -377,7 +378,7 @@ const SecretExposureInner: React.FC = () => {
               <TableHead>
                 <TableRow>
                   {['Pod', 'Container', 'Namespace', 'Severity', 'Secret Type', 'Exposure Type', 'Env Vars', 'Detected At', 'Why Exposed'].map((header) => (
-                    <TableCell key={header} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', borderColor: '#2a3245', bgcolor: '#131d2e', whiteSpace: 'nowrap' }}>
+                    <TableCell key={header} sx={{ fontWeight: 700, fontSize: 12, color: colors.textSecondary, borderColor: colors.border, bgcolor: colors.surfaceAlt, whiteSpace: 'nowrap' }}>
                       {header}
                     </TableCell>
                   ))}

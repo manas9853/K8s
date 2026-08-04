@@ -28,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface SuspiciousProcess {
   pid: number;
@@ -50,10 +51,10 @@ interface ProcessData {
 }
 
 const RISK_COLOR = (score: number) => {
-  if (score >= 80) return '#ef5350';
-  if (score >= 60) return '#ffa726';
-  if (score >= 40) return '#90caf9';
-  return '#a5d6a7';
+  if (score >= 80) return colors.danger;
+  if (score >= 60) return colors.warning;
+  if (score >= 40) return colors.info;
+  return colors.success;
 };
 
 function formatTimestamp(value?: string) {
@@ -92,70 +93,70 @@ const ProcessRow: React.FC<{ proc: SuspiciousProcess }> = ({ proc }) => {
 
   return (
     <>
-      <TableRow hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-        <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontFamily: 'monospace' }}>{proc.pid}</TableCell>
-        <TableCell sx={{ color: '#ef5350', borderColor: '#2a3245', fontWeight: 700 }}>{proc.name}</TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
-          <Typography variant="body2" sx={{ color: '#e8eaf0', fontWeight: 600 }}>{proc.pod}</Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>{proc.namespace}</Typography>
+      <TableRow hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+        <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontFamily: 'monospace' }}>{proc.pid}</TableCell>
+        <TableCell sx={{ color: colors.danger, borderColor: colors.border, fontWeight: 700 }}>{proc.name}</TableCell>
+        <TableCell sx={{ borderColor: colors.border }}>
+          <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 600 }}>{proc.pod}</Typography>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>{proc.namespace}</Typography>
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip
             label={proc.user}
             size="small"
-            sx={{ bgcolor: '#2a3245', color: proc.user === 'root' ? '#ef5350' : '#8892a4', fontWeight: 'bold', fontSize: 10 }}
+            sx={{ bgcolor: colors.border, color: proc.user === 'root' ? colors.danger : colors.textSecondary, fontWeight: 'bold', fontSize: 10 }}
           />
         </TableCell>
-        <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontFamily: 'monospace', fontSize: 11, maxWidth: 200, wordBreak: 'break-all' }}>
+        <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontFamily: 'monospace', fontSize: 11, maxWidth: 200, wordBreak: 'break-all' }}>
           {proc.command}
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
-          <Typography variant="body2" sx={{ color: proc.cpu_usage >= 15 ? '#ef5350' : '#8892a4' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
+          <Typography variant="body2" sx={{ color: proc.cpu_usage >= 15 ? colors.danger : colors.textSecondary }}>
             {proc.cpu_usage}%
           </Typography>
         </TableCell>
-        <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245' }}>{proc.memory_usage} MB</TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
-          <Chip label={String(proc.risk_score)} size="small" sx={{ bgcolor: '#2a3245', color: riskColor, fontWeight: 'bold' }} />
+        <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border }}>{proc.memory_usage} MB</TableCell>
+        <TableCell sx={{ borderColor: colors.border }}>
+          <Chip label={String(proc.risk_score)} size="small" sx={{ bgcolor: colors.border, color: riskColor, fontWeight: 'bold' }} />
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Box display="flex" flexWrap="wrap" gap={0.5}>
             {proc.suspicious_indicators.slice(0, 2).map((ind) => (
-              <Chip key={ind} label={ind} size="small" sx={{ bgcolor: '#2a3245', color: '#ffa726', fontSize: 10, height: 20 }} />
+              <Chip key={ind} label={ind} size="small" sx={{ bgcolor: colors.border, color: colors.warning, fontSize: 10, height: 20 }} />
             ))}
             {proc.suspicious_indicators.length > 2 && (
-              <Chip label={`+${proc.suspicious_indicators.length - 2}`} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10, height: 20 }} />
+              <Chip label={`+${proc.suspicious_indicators.length - 2}`} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10, height: 20 }} />
             )}
           </Box>
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
-          <IconButton size="small" onClick={() => setOpen((value) => !value)} sx={{ color: '#90caf9' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
+          <IconButton size="small" onClick={() => setOpen((value) => !value)} sx={{ color: colors.info }}>
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
       </TableRow>
-      <TableRow sx={{ bgcolor: '#131d2e' }}>
-        <TableCell colSpan={10} sx={{ p: 0, borderColor: open ? '#2a3245' : 'transparent' }}>
+      <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
+        <TableCell colSpan={10} sx={{ p: 0, borderColor: open ? colors.border : 'transparent' }}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box sx={{ p: 2.5 }}>
-              <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#ffa726', mb: 1.5 }}>
+              <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.warning, mb: 1.5 }}>
                 Why PID {proc.pid} ({proc.name}) is suspicious
               </Typography>
               <Stack spacing={1}>
                 {reasons.map((reason) => (
-                  <Typography key={reason} variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+                  <Typography key={reason} variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
                     • {reason}
                   </Typography>
                 ))}
               </Stack>
               {proc.suspicious_indicators.length > 0 && (
                 <Box mt={2}>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 0.75 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 0.75 }}>
                     All Indicators
                   </Typography>
                   <Box display="flex" flexWrap="wrap" gap={0.75}>
                     {proc.suspicious_indicators.map((ind) => (
-                      <Chip key={ind} label={ind} size="small" sx={{ bgcolor: '#2a3245', color: '#ffa726', fontSize: 10 }} />
+                      <Chip key={ind} label={ind} size="small" sx={{ bgcolor: colors.border, color: colors.warning, fontSize: 10 }} />
                     ))}
                   </Box>
                 </Box>
@@ -202,7 +203,7 @@ const SuspiciousProcessesInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -210,7 +211,7 @@ const SuspiciousProcessesInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -218,42 +219,42 @@ const SuspiciousProcessesInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load suspicious processes</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <BugIcon sx={{ fontSize: 32, color: '#ef5350' }} />
+          <BugIcon sx={{ fontSize: 32, color: colors.danger }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Suspicious Processes
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real threat-hunting output for {data.cluster_name || 'cluster'} · Last updated {formatTimestamp(data.last_updated)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Suspicious', value: data.total_suspicious, color: '#ef5350' },
-          { label: 'Critical Risk (≥80)', value: criticalCount, color: '#ef5350' },
-          { label: 'Running as Root', value: rootCount, color: '#ffa726' },
-          { label: 'High Risk (≥60)', value: highRiskProcesses.length, color: '#ffa726' },
+          { label: 'Total Suspicious', value: data.total_suspicious, color: colors.danger },
+          { label: 'Critical Risk (≥80)', value: criticalCount, color: colors.danger },
+          { label: 'Running as Root', value: rootCount, color: colors.warning },
+          { label: 'High Risk (≥60)', value: highRiskProcesses.length, color: colors.warning },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{item.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{item.label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>{item.value}</Typography>
               </CardContent>
             </Card>
@@ -262,23 +263,23 @@ const SuspiciousProcessesInner: React.FC = () => {
       </Grid>
 
       {highRiskProcesses.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             High-Risk Processes — Why They Were Flagged
           </Typography>
           <Stack spacing={1.5}>
             {highRiskProcesses.slice(0, 4).map((proc) => (
-              <Box key={`${proc.pod}-${proc.pid}`} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={`${proc.pod}-${proc.pid}`} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" justifyContent="space-between" flexWrap="wrap" gap={1} mb={0.5}>
-                  <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#ef5350' }}>
+                  <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.danger }}>
                     PID {proc.pid} — {proc.name}
                   </Typography>
-                  <Chip label={`Risk ${proc.risk_score}`} size="small" sx={{ bgcolor: '#2a3245', color: RISK_COLOR(proc.risk_score), fontWeight: 'bold', fontSize: 10 }} />
+                  <Chip label={`Risk ${proc.risk_score}`} size="small" sx={{ bgcolor: colors.border, color: RISK_COLOR(proc.risk_score), fontWeight: 'bold', fontSize: 10 }} />
                 </Box>
-                <Typography variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+                <Typography variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
                   {buildReason(proc)[0]}
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                   Pod: {proc.pod} · Namespace: {proc.namespace} · User: {proc.user} · Command: {proc.command}
                 </Typography>
               </Box>
@@ -287,22 +288,22 @@ const SuspiciousProcessesInner: React.FC = () => {
         </Paper>
       )}
 
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Detected Suspicious Processes ({processes.length})
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Derived from privileged and root-running pods. Expand a row for the full reason.
           </Typography>
         </Box>
         {processes.length === 0 ? (
           <Box p={4} textAlign="center">
-            <Paper elevation={0} sx={{ maxWidth: 600, mx: 'auto', p: 4, border: '1px solid #2a3245', borderRadius: 2, bgcolor: '#131d2e', textAlign: 'center' }}>
-              <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1 }}>
+            <Paper elevation={0} sx={{ maxWidth: 600, mx: 'auto', p: 4, border: `1px solid ${colors.border}`, borderRadius: 2, bgcolor: colors.surfaceAlt, textAlign: 'center' }}>
+              <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1 }}>
                 No suspicious processes found
               </Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.7 }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.7 }}>
                 Processes are derived from privileged and root-running pods. The current cluster scan found no pods matching those criteria.
               </Typography>
             </Paper>
@@ -313,7 +314,7 @@ const SuspiciousProcessesInner: React.FC = () => {
               <TableHead>
                 <TableRow>
                   {['PID', 'Process', 'Pod / Namespace', 'User', 'Command', 'CPU %', 'Memory', 'Risk', 'Indicators', 'Why'].map((heading) => (
-                    <TableCell key={heading} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', bgcolor: '#131d2e', borderColor: '#2a3245', whiteSpace: 'nowrap' }}>
+                    <TableCell key={heading} sx={{ fontWeight: 700, fontSize: 12, color: colors.textSecondary, bgcolor: colors.surfaceAlt, borderColor: colors.border, whiteSpace: 'nowrap' }}>
                       {heading}
                     </TableCell>
                   ))}

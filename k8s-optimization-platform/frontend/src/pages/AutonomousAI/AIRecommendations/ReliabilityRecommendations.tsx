@@ -11,28 +11,29 @@ import AddIcon from '@mui/icons-material/Add';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const FIX_COLOR: Record<string, string> = {
-  ADD_HEALTH_CHECK:    '#3fb950',
-  ADD_READINESS_PROBE: '#3b82f6',
-  ADD_REPLICA:         '#d29922',
+  ADD_HEALTH_CHECK:    colors.success,
+  ADD_READINESS_PROBE: colors.info,
+  ADD_REPLICA:         colors.warning,
 };
 
 const PRIORITY_COLOR: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ async function pollCommand(cmdId: number): Promise<{ ok: boolean; errMsg?: strin
 const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   const r = 42; const c = 2 * Math.PI * r;
   const fill = c - (c * score) / 100;
-  const color = score >= 80 ? '#3fb950' : score >= 60 ? '#d29922' : '#f85149';
+  const color = score >= 80 ? colors.success : score >= 60 ? colors.warning : colors.danger;
   return (
     <svg width={112} height={112} viewBox="0 0 112 112">
       <circle cx={56} cy={56} r={r} fill="none" stroke={DK.border} strokeWidth={8} />
@@ -107,7 +108,7 @@ const RecCard: React.FC<{
       bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderLeft: `3px solid ${fixColor}`,
       borderRadius: 2, p: 2, mb: 1.5, display: 'flex', gap: 1.5,
       opacity: done ? 0.45 : 1, transition: 'opacity 0.3s',
-      '&:hover': { borderColor: '#58a6ff66', borderLeftColor: fixColor },
+      '&:hover': { borderColor: `${colors.info}66`, borderLeftColor: fixColor },
     }}>
       <MonitorHeartIcon sx={{ fontSize: 18, color: fixColor, flexShrink: 0, mt: 0.25 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -121,7 +122,7 @@ const RecCard: React.FC<{
         <Typography sx={{ color: DK.muted, fontSize: '0.78rem', mb: 0.75 }}>{rec.description}</Typography>
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
           {rec.affected_pod && (
-            <Chip label={rec.affected_pod} size="small" sx={{ bgcolor: DK.surface2, color: '#3b82f6', fontSize: '0.68rem', height: 18, fontFamily: 'monospace' }} />
+            <Chip label={rec.affected_pod} size="small" sx={{ bgcolor: DK.surface2, color: colors.info, fontSize: '0.68rem', height: 18, fontFamily: 'monospace' }} />
           )}
           {rec.namespace && (
             <Chip label={rec.namespace} size="small" sx={{ bgcolor: DK.surface2, color: DK.muted, fontSize: '0.68rem', height: 18 }} />
@@ -133,7 +134,7 @@ const RecCard: React.FC<{
       <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start' }}>
         {done ? (
           <Chip icon={<CheckCircleOutlineIcon />} label="Applied" size="small"
-            sx={{ bgcolor: '#0d1117', color: '#3fb950', border: '1px solid #3fb950', fontSize: '0.68rem' }} />
+            sx={{ bgcolor: colors.background, color: colors.success, border: `1px solid ${colors.success}`, fontSize: '0.68rem' }} />
         ) : (
           <Button size="small" variant="outlined"
             startIcon={applying ? <CircularProgress size={12} /> : <PlayArrowIcon />}
@@ -165,9 +166,9 @@ const RiskMatrix: React.FC<{ recs: Rec[] }> = ({ recs }) => {
         Risk Matrix — Effort vs Priority
       </Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
-        {cell('High Priority · Low Effort', quad('high', 'low'), '#f85149')}
-        {cell('High Priority · High Effort', quad('high', 'medium') + quad('high', 'high'), '#d29922')}
-        {cell('Low Priority · Low Effort', quad('medium', 'low') + quad('low', 'low'), '#3b82f6')}
+        {cell('High Priority · Low Effort', quad('high', 'low'), colors.danger)}
+        {cell('High Priority · High Effort', quad('high', 'medium') + quad('high', 'high'), colors.warning)}
+        {cell('Low Priority · Low Effort', quad('medium', 'low') + quad('low', 'low'), colors.info)}
         {cell('Low Priority · High Effort', quad('medium', 'medium') + quad('low', 'medium'), DK.muted)}
       </Box>
     </Box>
@@ -240,7 +241,7 @@ const ReliabilityRecommendations: React.FC = () => {
         </Tooltip>
       </Box>
 
-      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: '#3b82f6' }} /></Box>}
+      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: colors.info }} /></Box>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {!loading && data && (
@@ -257,9 +258,9 @@ const ReliabilityRecommendations: React.FC = () => {
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, flex: 1 }}>
               {[
                 { label: 'Total Pods', v: data.summary.total_pods },
-                { label: 'No Liveness Probe', v: data.summary.no_liveness, accent: '#f85149' },
-                { label: 'No Readiness Probe', v: data.summary.no_readiness, accent: '#d29922' },
-                { label: 'High Restart Count', v: data.summary.high_restart, accent: '#f85149' },
+                { label: 'No Liveness Probe', v: data.summary.no_liveness, accent: colors.danger },
+                { label: 'No Readiness Probe', v: data.summary.no_readiness, accent: colors.warning },
+                { label: 'High Restart Count', v: data.summary.high_restart, accent: colors.danger },
               ].map(({ label, v, accent }) => (
                 <Box key={label} sx={{ bgcolor: DK.surface, border: `1px solid ${accent ? accent + '33' : DK.border}`, borderRadius: 1.5, p: 1.5 }}>
                   <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>{label}</Typography>
@@ -298,7 +299,7 @@ const ReliabilityRecommendations: React.FC = () => {
 
           {recs.length === 0 && (
             <Typography sx={{ color: DK.muted, textAlign: 'center', mt: 4 }}>
-              <HealthAndSafetyIcon sx={{ fontSize: 48, display: 'block', margin: '0 auto', mb: 1, color: '#3fb950' }} />
+              <HealthAndSafetyIcon sx={{ fontSize: 48, display: 'block', margin: '0 auto', mb: 1, color: colors.success }} />
               All reliability checks passed
             </Typography>
           )}

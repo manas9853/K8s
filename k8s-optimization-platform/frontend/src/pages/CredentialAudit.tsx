@@ -1,18 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Design tokens (same palette as ImageTrust / SecretExposure) ────────────
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8892a4',
-  accent:  '#3b82f6',
-  high:    { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  medium:  { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  low:     { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  bg:      colors.background,
+  card:    colors.surface,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  accent:  colors.info,
+  high:    { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  medium:  { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  low:     { bg: colors.successBg, text: colors.success, border: colors.successBg },
 };
 
 const riskPalette = (r: string) => {
@@ -21,7 +22,7 @@ const riskPalette = (r: string) => {
   return T.low;
 };
 
-const scoreColor = (s: number) => s >= 80 ? '#4ade80' : s >= 50 ? '#f59e0b' : '#f87171';
+const scoreColor = (s: number) => s >= 80 ? colors.success : s >= 50 ? colors.warning : colors.danger;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Credential {
@@ -99,7 +100,7 @@ export default function CredentialAudit() {
   );
   if (error || !data) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ color: '#f87171', fontSize: 15 }}>Error: {error || 'No data available'}</div>
+      <div style={{ color: colors.danger, fontSize: 15 }}>Error: {error || 'No data available'}</div>
     </div>
   );
 
@@ -131,14 +132,14 @@ export default function CredentialAudit() {
         {/* Score ring */}
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="110" height="110" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#2a3245" strokeWidth="8" />
+            <circle cx="50" cy="50" r="40" fill="none" stroke={colors.border} strokeWidth="8" />
             <circle cx="50" cy="50" r="40" fill="none"
               stroke={sc} strokeWidth="8"
               strokeDasharray={`${dash} ${circumference}`}
               strokeLinecap="round"
               transform="rotate(-90 50 50)" />
             <text x="50" y="46" textAnchor="middle" fill={sc} fontSize="18" fontWeight="700">{Math.round(score)}</text>
-            <text x="50" y="62" textAnchor="middle" fill="#8892a4" fontSize="9">Audit Score</text>
+            <text x="50" y="62" textAnchor="middle" fill={colors.textSecondary} fontSize="9">Audit Score</text>
           </svg>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
             {score >= 80 ? '🟢 Good' : score >= 50 ? '🟡 Fair' : '🔴 Poor'}
@@ -175,7 +176,7 @@ export default function CredentialAudit() {
                   <span style={{ padding: '1px 8px', borderRadius: 4, fontSize: 11, background: pal.bg, color: pal.text, border: `1px solid ${pal.border}`, textTransform: 'capitalize' }}>{r}</span>
                   <span style={{ color: T.muted, fontSize: 12 }}>{count} credentials · {pct}%</span>
                 </div>
-                <div style={{ height: 5, background: '#2a3245', borderRadius: 3 }}>
+                <div style={{ height: 5, background: colors.border, borderRadius: 3 }}>
                   <div style={{ height: '100%', width: `${pct}%`, background: pal.text, borderRadius: 3 }} />
                 </div>
               </div>
@@ -190,13 +191,13 @@ export default function CredentialAudit() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span style={{ fontSize: 15 }}>⚠️</span>
             <span style={{ fontSize: 15, fontWeight: 600, color: T.high.text }}>High-Risk Findings</span>
-            <span style={{ marginLeft: 'auto', padding: '2px 8px', borderRadius: 4, fontSize: 11, background: '#1a0a0a', color: T.high.text, border: `1px solid ${T.high.border}` }}>
+            <span style={{ marginLeft: 'auto', padding: '2px 8px', borderRadius: 4, fontSize: 11, background: colors.dangerBg, color: T.high.text, border: `1px solid ${T.high.border}` }}>
               {data.audit_findings.length} findings — immediate action required
             </span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
             {data.audit_findings.slice(0, 10).map((f, i) => (
-              <div key={i} style={{ background: '#1a0a0a', border: `1px solid ${T.high.border}40`, borderRadius: 8, padding: '10px 14px' }}>
+              <div key={i} style={{ background: colors.dangerBg, border: `1px solid ${T.high.border}40`, borderRadius: 8, padding: '10px 14px' }}>
                 <div style={{ fontWeight: 600, fontSize: 13, color: T.text, fontFamily: 'monospace' }}>{f.credential_id}</div>
                 <div style={{ fontSize: 12, color: T.muted, marginTop: 2 }}>{f.finding}</div>
                 <div style={{ fontSize: 12, color: T.high.text, marginTop: 4 }}>↳ {f.recommendation}</div>
@@ -212,8 +213,8 @@ export default function CredentialAudit() {
           <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 10 }}>Recommendations</div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 8 }}>
             {data.recommendations.map((rec, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: '#0d2d1a', border: '1px solid #1a4a2a', borderRadius: 8, padding: '8px 12px' }}>
-                <span style={{ color: '#4ade80', flexShrink: 0, marginTop: 1 }}>✓</span>
+              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 8, background: colors.successBg, border: `1px solid ${colors.successBg}`, borderRadius: 8, padding: '8px 12px' }}>
+                <span style={{ color: colors.success, flexShrink: 0, marginTop: 1 }}>✓</span>
                 <span style={{ fontSize: 12, color: T.muted, lineHeight: 1.5 }}>{rec}</span>
               </div>
             ))}
@@ -235,17 +236,17 @@ export default function CredentialAudit() {
               placeholder="Search name / namespace / type…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 12px', color: T.text, fontSize: 13, width: 240, outline: 'none' }}
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 12px', color: T.text, fontSize: 13, width: 240, outline: 'none' }}
             />
             <select value={filterRisk} onChange={e => setFilterRisk(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Risk Levels</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
               <option value="low">Low</option>
             </select>
             <select value={filterNs} onChange={e => setFilterNs(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Namespaces</option>
               {namespaces.filter(n => n !== 'all').map(n => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -275,9 +276,9 @@ export default function CredentialAudit() {
                 const daysColor = c.days_since_last_use > 180 ? T.high.text : c.days_since_last_use > 90 ? T.medium.text : T.low.text;
                 return (
                   <tr key={i}
-                    style={{ borderBottom: `1px solid ${T.border}`, background: c.risk_level === 'high' ? '#1a0e0e' : 'transparent' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#1a2035')}
-                    onMouseLeave={e => (e.currentTarget.style.background = c.risk_level === 'high' ? '#1a0e0e' : 'transparent')}>
+                    style={{ borderBottom: `1px solid ${T.border}`, background: c.risk_level === 'high' ? colors.dangerBg : 'transparent' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = colors.surfaceAlt)}
+                    onMouseLeave={e => (e.currentTarget.style.background = c.risk_level === 'high' ? colors.dangerBg : 'transparent')}>
                     {/* Name */}
                     <td style={{ padding: '9px 12px', maxWidth: 200 }}>
                       <div style={{ fontFamily: 'monospace', fontSize: 12, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={c.name}>
@@ -286,7 +287,7 @@ export default function CredentialAudit() {
                     </td>
                     {/* Namespace */}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: '#1e2433', color: '#60a5fa', border: '1px solid #2a3245' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: colors.surface, color: colors.info, border: `1px solid ${colors.border}` }}>
                         {c.namespace}
                       </span>
                     </td>
@@ -312,7 +313,7 @@ export default function CredentialAudit() {
                         {c.permissions.slice(0, 3).map(p => {
                           const danger = p === 'admin' || p === 'delete' || p === 'cluster-admin';
                           return (
-                            <span key={p} style={{ padding: '1px 6px', borderRadius: 4, fontSize: 10, background: danger ? T.medium.bg : '#1e2433', color: danger ? T.medium.text : '#60a5fa', border: `1px solid ${danger ? T.medium.border : '#2a3245'}` }}>
+                            <span key={p} style={{ padding: '1px 6px', borderRadius: 4, fontSize: 10, background: danger ? T.medium.bg : colors.surface, color: danger ? T.medium.text : colors.info, border: `1px solid ${danger ? T.medium.border : colors.border}` }}>
                               {p}
                             </span>
                           );

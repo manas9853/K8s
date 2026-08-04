@@ -1,17 +1,18 @@
 import React, { useEffect, useRef } from 'react';
 import { SignIn, useAuth } from '@clerk/clerk-react';
 import { useNavigate, Link } from 'react-router-dom';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens — Dark K8s terminal theme ── */
 const C = {
   /* Backgrounds */
-  bg:              '#050d1a',
+  bg:              colors.background,
   bgPanel:         '#071022',
-  bgCard:          '#0b1628',
-  bgSurface:       '#0f1e35',
+  bgCard:          colors.surfaceAlt,
+  bgSurface:       colors.surfaceAlt,
   /* Borders */
   borderDim:       '#1a2e4a',
-  border:          '#1e3a5f',
+  border:          colors.info,
   borderBright:    '#2a5080',
   /* Accent — cyan / teal */
   cyan:            '#00d4ff',
@@ -23,13 +24,13 @@ const C = {
   greenDim:        '#22cc00',
   greenGlow:       'rgba(57,255,20,0.12)',
   /* Primary action */
-  primary:         '#2563eb',
-  primaryHover:    '#1d4ed8',
+  primary:         colors.info,
+  primaryHover:    colors.info,
   /* Text */
-  textPrimary:     '#e2f0ff',
-  textSecondary:   '#7ca5cc',
-  textMuted:       '#3d6080',
-  textDim:         '#1e3a5f',
+  textPrimary:     colors.infoBg,
+  textSecondary:   colors.info,
+  textMuted:       colors.info,
+  textDim:         colors.info,
 };
 
 /* ── Small reusable chip ── */
@@ -687,7 +688,7 @@ const Login: React.FC = () => {
               forceRedirectUrl="/"
               appearance={{
                 variables: {
-                  colorPrimary:         '#2563eb',
+                  colorPrimary:         colors.info,
                   colorBackground:      'transparent',
                   colorText:            C.textPrimary,
                   colorTextSecondary:   C.textSecondary,
@@ -750,7 +751,7 @@ const Login: React.FC = () => {
                   },
                   /* ── Continue button ── */
                   formButtonPrimary: {
-                    background:    'linear-gradient(135deg, #1e40af, #1d4ed8)',
+                    background:    `linear-gradient(135deg, #1e40af, ${colors.info})`,
                     border:        `1px solid rgba(0,212,255,0.3)`,
                     borderRadius:  '8px',
                     fontWeight:    700,

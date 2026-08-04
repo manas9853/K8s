@@ -13,21 +13,22 @@ import MemoryIcon from '@mui/icons-material/Memory';
 import StorageIcon from '@mui/icons-material/Storage';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const RISK: Record<string, string> = {
-  low:    '#3fb950',
-  medium: '#d29922',
-  high:   '#f85149',
+  low:    colors.success,
+  medium: colors.warning,
+  high:   colors.danger,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -65,9 +66,9 @@ const KpiCard: React.FC<{ label: string; value: number; accent?: string }> = ({ 
 // ─── Type icon ────────────────────────────────────────────────────────────────
 const TypeIcon: React.FC<{ type: string }> = ({ type }) => {
   const sx = { fontSize: 16 };
-  if (type.includes('cpu'))     return <SpeedIcon sx={{ ...sx, color: '#d29922' }} />;
-  if (type.includes('mem'))     return <MemoryIcon sx={{ ...sx, color: '#3b82f6' }} />;
-  return <StorageIcon sx={{ ...sx, color: '#8b949e' }} />;
+  if (type.includes('cpu'))     return <SpeedIcon sx={{ ...sx, color: colors.warning }} />;
+  if (type.includes('mem'))     return <MemoryIcon sx={{ ...sx, color: colors.info }} />;
+  return <StorageIcon sx={{ ...sx, color: colors.textSecondary }} />;
 };
 
 // ─── Diff row ─────────────────────────────────────────────────────────────────
@@ -75,12 +76,12 @@ const DiffRow: React.FC<{ label: string; from: string; to: string }> = ({ label,
   <Box sx={{ mb: 1 }}>
     <Typography sx={{ color: DK.muted, fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.05em', mb: 0.25 }}>{label}</Typography>
     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-      <Box sx={{ bgcolor: '#f851491a', border: '1px solid #f8514944', borderRadius: 1, px: 1, py: 0.25 }}>
-        <Typography sx={{ color: '#f85149', fontSize: '0.8rem', fontFamily: 'monospace' }}>- {from}</Typography>
+      <Box sx={{ bgcolor: `${colors.danger}1a`, border: `1px solid ${colors.danger}44`, borderRadius: 1, px: 1, py: 0.25 }}>
+        <Typography sx={{ color: colors.danger, fontSize: '0.8rem', fontFamily: 'monospace' }}>- {from}</Typography>
       </Box>
       <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>→</Typography>
-      <Box sx={{ bgcolor: '#3fb9501a', border: '1px solid #3fb95044', borderRadius: 1, px: 1, py: 0.25 }}>
-        <Typography sx={{ color: '#3fb950', fontSize: '0.8rem', fontFamily: 'monospace' }}>+ {to}</Typography>
+      <Box sx={{ bgcolor: `${colors.success}1a`, border: `1px solid ${colors.success}44`, borderRadius: 1, px: 1, py: 0.25 }}>
+        <Typography sx={{ color: colors.success, fontSize: '0.8rem', fontFamily: 'monospace' }}>+ {to}</Typography>
       </Box>
     </Box>
   </Box>
@@ -184,7 +185,7 @@ const ManualMode: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#58a6ff' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
@@ -205,7 +206,7 @@ const ManualMode: React.FC = () => {
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Manual Mode</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
             Every change requires your approval —{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh">
@@ -217,10 +218,10 @@ const ManualMode: React.FC = () => {
 
       {/* KPI row */}
       <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={6} md={3}><KpiCard label="Pending Reviews" value={recs.length} accent="#d29922" /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Approved" value={payload?.stats.approved ?? 0} accent="#3fb950" /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Rejected" value={payload?.stats.rejected ?? 0} accent="#f85149" /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Total Savings Available" value={Math.round(recs.reduce((s, r) => s + r.savings, 0))} accent="#58a6ff" /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Pending Reviews" value={recs.length} accent={colors.warning} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Approved" value={payload?.stats.approved ?? 0} accent={colors.success} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Rejected" value={payload?.stats.rejected ?? 0} accent={colors.danger} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Total Savings Available" value={Math.round(recs.reduce((s, r) => s + r.savings, 0))} accent={colors.info} /></Grid>
       </Grid>
 
       {/* Progress bar */}
@@ -230,13 +231,13 @@ const ManualMode: React.FC = () => {
           <Typography sx={{ color: DK.muted, fontSize: '0.8rem' }}>{reviewed} of {total} reviewed</Typography>
         </Box>
         <Box sx={{ height: 6, bgcolor: DK.surface2, borderRadius: 3, overflow: 'hidden' }}>
-          <Box sx={{ width: `${progress}%`, height: '100%', bgcolor: progress === 100 ? '#3fb950' : '#58a6ff', borderRadius: 3, transition: 'width 0.4s ease' }} />
+          <Box sx={{ width: `${progress}%`, height: '100%', bgcolor: progress === 100 ? colors.success : colors.info, borderRadius: 3, transition: 'width 0.4s ease' }} />
         </Box>
       </Box>
 
       {recs.length === 0 ? (
         <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 5, textAlign: 'center' }}>
-          <CheckCircleOutlineIcon sx={{ fontSize: 40, color: '#3fb950', mb: 1 }} />
+          <CheckCircleOutlineIcon sx={{ fontSize: 40, color: colors.success, mb: 1 }} />
           <Typography sx={{ color: DK.muted }}>All recommendations reviewed — queue is empty</Typography>
         </Box>
       ) : (
@@ -262,7 +263,7 @@ const ManualMode: React.FC = () => {
                         px: 2, py: 1.5,
                         cursor: 'pointer',
                         bgcolor: isActive ? DK.surface2 : 'transparent',
-                        borderLeft: `3px solid ${isActive ? '#58a6ff' : 'transparent'}`,
+                        borderLeft: `3px solid ${isActive ? colors.info : 'transparent'}`,
                         borderBottom: `1px solid ${DK.border}`,
                         '&:hover': { bgcolor: DK.surface2 },
                       }}
@@ -307,7 +308,7 @@ const ManualMode: React.FC = () => {
                       {visibleSelected.cluster ? ` · ${visibleSelected.cluster}` : ''}
                     </Typography>
                   </Box>
-                  <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '1rem' }}>
+                  <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '1rem' }}>
                     ${visibleSelected.savings.toFixed(0)}<Typography component="span" sx={{ color: DK.muted, fontSize: '0.72rem' }}>/mo</Typography>
                   </Typography>
                 </Box>
@@ -325,7 +326,7 @@ const ManualMode: React.FC = () => {
                     </Box>
                     <Box>
                       <Typography sx={{ color: DK.muted, fontSize: '0.68rem', textTransform: 'uppercase', mb: 0.25 }}>AI Confidence</Typography>
-                      <Typography sx={{ color: '#3fb950', fontSize: '0.83rem', fontWeight: 600 }}>
+                      <Typography sx={{ color: colors.success, fontSize: '0.83rem', fontWeight: 600 }}>
                         {Math.round(visibleSelected.confidence * 100)}%
                       </Typography>
                     </Box>
@@ -339,7 +340,7 @@ const ManualMode: React.FC = () => {
                     startIcon={actioning === visibleSelected.id ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <CheckCircleOutlineIcon />}
                     disabled={actioning !== null}
                     onClick={() => handleApprove(visibleSelected)}
-                    sx={{ bgcolor: '#238636', '&:hover': { bgcolor: '#2ea043' }, '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted }, fontWeight: 600 }}
+                    sx={{ bgcolor: colors.success, '&:hover': { bgcolor: colors.success }, '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted }, fontWeight: 600 }}
                   >
                     Approve & Apply
                   </Button>
@@ -348,7 +349,7 @@ const ManualMode: React.FC = () => {
                     startIcon={<PauseCircleOutlineIcon />}
                     onClick={() => handleDefer(visibleSelected)}
                     disabled={actioning !== null}
-                    sx={{ borderColor: DK.border, color: DK.muted, '&:hover': { borderColor: '#58a6ff', color: '#58a6ff' } }}
+                    sx={{ borderColor: DK.border, color: DK.muted, '&:hover': { borderColor: colors.info, color: colors.info } }}
                   >
                     Defer
                   </Button>
@@ -357,7 +358,7 @@ const ManualMode: React.FC = () => {
                     startIcon={<CancelOutlinedIcon />}
                     onClick={() => handleReject(visibleSelected)}
                     disabled={actioning !== null}
-                    sx={{ borderColor: DK.border, color: DK.muted, '&:hover': { borderColor: '#f85149', color: '#f85149' } }}
+                    sx={{ borderColor: DK.border, color: DK.muted, '&:hover': { borderColor: colors.danger, color: colors.danger } }}
                   >
                     Reject
                   </Button>

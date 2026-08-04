@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import { Refresh, Savings, TrendingDown } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface SavingsByEntity { name: string; current_cost: number; optimized_cost: number; savings: number; savings_percent: number; }
 interface CostData {
@@ -81,88 +82,88 @@ const MonthlySavings: React.FC = () => {
   const topOpps = data.savings_by_application.slice(0, 10);
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
       <CostAccuracyBanner clusterName={activeClusterId} />
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>Monthly Savings Analysis</Typography>
-          <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>Detailed breakdown of potential monthly cost savings</Typography>
+          <Typography variant="h4" sx={{ color: colors.textPrimary, fontWeight: 700 }}>Monthly Savings Analysis</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5 }}>Detailed breakdown of potential monthly cost savings</Typography>
         </Box>
-        <IconButton onClick={fetchData} sx={{ color: '#4ade80' }}><Refresh /></IconButton>
+        <IconButton onClick={fetchData} sx={{ color: colors.success }}><Refresh /></IconButton>
       </Box>
 
       {/* KPI cards */}
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #4ade8033' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.success}33` }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                <Savings sx={{ color: '#4ade80' }} />
-                <Typography variant="body2" sx={{ color: '#8b95a9', textTransform: 'uppercase', fontSize: 11 }}>Total Monthly Savings</Typography>
+                <Savings sx={{ color: colors.success }} />
+                <Typography variant="body2" sx={{ color: colors.textSecondary, textTransform: 'uppercase', fontSize: 11 }}>Total Monthly Savings</Typography>
               </Box>
-              <Typography variant="h4" sx={{ color: '#4ade80', fontWeight: 700 }}>{fmt(data.monthly_savings)}</Typography>
-              <Typography variant="body2" sx={{ color: '#8b95a9' }}>{data.savings_percent.toFixed(1)}% reduction</Typography>
+              <Typography variant="h4" sx={{ color: colors.success, fontWeight: 700 }}>{fmt(data.monthly_savings)}</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>{data.savings_percent.toFixed(1)}% reduction</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="body2" sx={{ color: '#8b95a9', mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Current Monthly Cost</Typography>
-              <Typography variant="h4" sx={{ color: '#f87171', fontWeight: 700 }}>{fmt(data.current_monthly_cost)}</Typography>
-              <Typography variant="body2" sx={{ color: '#8b95a9' }}>Before optimisation</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Current Monthly Cost</Typography>
+              <Typography variant="h4" sx={{ color: colors.danger, fontWeight: 700 }}>{fmt(data.current_monthly_cost)}</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>Before optimisation</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="body2" sx={{ color: '#8b95a9', mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Optimised Monthly Cost</Typography>
-              <Typography variant="h4" sx={{ color: '#4ade80', fontWeight: 700 }}>{fmt(data.optimized_monthly_cost)}</Typography>
-              <Typography variant="body2" sx={{ color: '#8b95a9' }}>After optimisation</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Optimised Monthly Cost</Typography>
+              <Typography variant="h4" sx={{ color: colors.success, fontWeight: 700 }}>{fmt(data.optimized_monthly_cost)}</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>After optimisation</Typography>
             </CardContent>
           </Card>
         </Grid>
         <Grid item xs={12} md={3}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="body2" sx={{ color: '#8b95a9', mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Top Opportunities</Typography>
-              <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{topOpps.length}</Typography>
-              <Typography variant="body2" sx={{ color: '#8b95a9' }}>Workloads to optimise</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 1, textTransform: 'uppercase', fontSize: 11 }}>Top Opportunities</Typography>
+              <Typography variant="h4" sx={{ color: colors.textPrimary, fontWeight: 700 }}>{topOpps.length}</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>Workloads to optimise</Typography>
             </CardContent>
           </Card>
         </Grid>
       </Grid>
 
       {/* Top savings opportunities table */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Top Savings Opportunities (by Application)</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Top Savings Opportunities (by Application)</Typography>
         <TableContainer>
           <Table size="small">
             <TableHead>
               <TableRow>
                 {['Application','Current Cost','Optimised Cost','Monthly Savings','Reduction'].map(h => (
-                  <TableCell key={h} sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}
+                  <TableCell key={h} sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, textTransform: 'uppercase' }}
                     align={h === 'Application' ? 'left' : 'right'}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {topOpps.map((opp, i) => (
-                <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
-                  <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245', fontWeight: 600 }}>{opp.name}</TableCell>
-                  <TableCell align="right" sx={{ color: '#f87171', borderColor: '#2a3245' }}>{fmt(opp.current_cost)}</TableCell>
-                  <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(opp.optimized_cost)}</TableCell>
-                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                <TableRow key={i} sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                  <TableCell sx={{ color: colors.textMuted, borderColor: colors.border, fontWeight: 600 }}>{opp.name}</TableCell>
+                  <TableCell align="right" sx={{ color: colors.danger, borderColor: colors.border }}>{fmt(opp.current_cost)}</TableCell>
+                  <TableCell align="right" sx={{ color: colors.success, borderColor: colors.border }}>{fmt(opp.optimized_cost)}</TableCell>
+                  <TableCell align="right" sx={{ borderColor: colors.border }}>
                     <Chip icon={<TrendingDown sx={{ fontSize: 14 }} />} label={fmt(opp.savings)}
-                      size="small" sx={{ bgcolor: '#14532d', color: '#4ade80', fontSize: 12 }} />
+                      size="small" sx={{ bgcolor: colors.successBg, color: colors.success, fontSize: 12 }} />
                   </TableCell>
-                  <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                  <TableCell align="right" sx={{ borderColor: colors.border }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'flex-end' }}>
                       <LinearProgress variant="determinate" value={Math.min(opp.savings_percent, 100)}
-                        sx={{ width: 80, height: 6, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: '#4ade80' } }} />
-                      <Typography variant="caption" sx={{ color: '#8b95a9', minWidth: 36 }}>{opp.savings_percent.toFixed(1)}%</Typography>
+                        sx={{ width: 80, height: 6, borderRadius: 3, bgcolor: colors.border, '& .MuiLinearProgress-bar': { bgcolor: colors.success } }} />
+                      <Typography variant="caption" sx={{ color: colors.textSecondary, minWidth: 36 }}>{opp.savings_percent.toFixed(1)}%</Typography>
                     </Box>
                   </TableCell>
                 </TableRow>
@@ -179,24 +180,24 @@ const MonthlySavings: React.FC = () => {
           { title: 'By Namespace (Top 10)', items: data.savings_by_namespace.slice(0, 10) },
         ].map(({ title, items }) => (
           <Grid item xs={12} md={6} key={title}>
-            <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-              <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>{title}</Typography>
+            <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+              <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>{title}</Typography>
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12 }}>Name</TableCell>
-                    <TableCell align="right" sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12 }}>Savings</TableCell>
-                    <TableCell align="right" sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12 }}>%</TableCell>
+                    <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12 }}>Name</TableCell>
+                    <TableCell align="right" sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12 }}>Savings</TableCell>
+                    <TableCell align="right" sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12 }}>%</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {items.map((item, i) => (
-                    <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
-                      <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245' }}>{item.name}</TableCell>
-                      <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245', fontWeight: 600 }}>{fmt(item.savings)}</TableCell>
-                      <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                    <TableRow key={i} sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ color: colors.textMuted, borderColor: colors.border }}>{item.name}</TableCell>
+                      <TableCell align="right" sx={{ color: colors.success, borderColor: colors.border, fontWeight: 600 }}>{fmt(item.savings)}</TableCell>
+                      <TableCell align="right" sx={{ borderColor: colors.border }}>
                         <Chip label={`${item.savings_percent.toFixed(1)}%`} size="small"
-                          sx={{ bgcolor: '#14532d', color: '#4ade80', fontSize: 11 }} />
+                          sx={{ bgcolor: colors.successBg, color: colors.success, fontSize: 11 }} />
                       </TableCell>
                     </TableRow>
                   ))}

@@ -12,21 +12,22 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const CAT_COLOR: Record<string, string> = {
-  CPU_WASTE:     '#d29922',
-  MEMORY_WASTE:  '#3b82f6',
-  STORAGE_WASTE: '#a371f7',
+  CPU_WASTE:     colors.warning,
+  MEMORY_WASTE:  colors.info,
+  STORAGE_WASTE: colors.purple,
 };
 const CAT_ICON: Record<string, React.ElementType> = {
   CPU_WASTE:     SpeedIcon,
@@ -82,7 +83,7 @@ async function pollCommand(cmdId: number): Promise<{ ok: boolean; errMsg?: strin
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 const KpiCard: React.FC<{ label: string; value: string | number; accent?: string; icon: React.ReactNode }> = ({ label, value, accent, icon }) => (
   <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-    <Box sx={{ color: accent ?? '#58a6ff' }}>{icon}</Box>
+    <Box sx={{ color: accent ?? colors.info }}>{icon}</Box>
     <Box>
       <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{label}</Typography>
       <Typography sx={{ color: accent ?? DK.text, fontSize: '1.5rem', fontWeight: 700, lineHeight: 1.2 }}>{value}</Typography>
@@ -106,13 +107,13 @@ const FixCard: React.FC<{
 
   return (
     <Box sx={{
-      bgcolor: DK.surface, border: `1px solid ${checked ? '#58a6ff' : DK.border}`,
+      bgcolor: DK.surface, border: `1px solid ${checked ? colors.info : DK.border}`,
       borderLeft: `3px solid ${color}`, borderRadius: 2, p: 2,
       display: 'flex', gap: 1.5, opacity: fixed ? 0.45 : 1, transition: 'all 0.2s',
-      '&:hover': { borderColor: fixed ? DK.border : '#58a6ff', borderLeftColor: color },
+      '&:hover': { borderColor: fixed ? DK.border : colors.info, borderLeftColor: color },
     }}>
       <Checkbox checked={checked} onChange={onToggle} size="small" disabled={fixed}
-        sx={{ color: DK.muted, '&.Mui-checked': { color: '#58a6ff' }, p: 0, alignSelf: 'flex-start', mt: 0.25 }} />
+        sx={{ color: DK.muted, '&.Mui-checked': { color: colors.info }, p: 0, alignSelf: 'flex-start', mt: 0.25 }} />
       <Icon sx={{ fontSize: 18, color, flexShrink: 0, mt: 0.25 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap', mb: 0.4 }}>
@@ -123,25 +124,25 @@ const FixCard: React.FC<{
             sx={{ borderColor: DK.border, color: DK.muted, fontSize: '0.62rem', height: 18 }} />
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Box sx={{ bgcolor: '#f851491a', border: '1px solid #f8514944', borderRadius: 1, px: 0.75, py: 0.15 }}>
-            <Typography sx={{ color: '#f85149', fontSize: '0.75rem', fontFamily: 'monospace' }}>- {current}</Typography>
+          <Box sx={{ bgcolor: `${colors.danger}1a`, border: `1px solid ${colors.danger}44`, borderRadius: 1, px: 0.75, py: 0.15 }}>
+            <Typography sx={{ color: colors.danger, fontSize: '0.75rem', fontFamily: 'monospace' }}>- {current}</Typography>
           </Box>
           <Typography sx={{ color: DK.muted, fontSize: '0.7rem' }}>→</Typography>
-          <Box sx={{ bgcolor: '#3fb9501a', border: '1px solid #3fb95044', borderRadius: 1, px: 0.75, py: 0.15 }}>
-            <Typography sx={{ color: '#3fb950', fontSize: '0.75rem', fontFamily: 'monospace' }}>+ {recommended}</Typography>
+          <Box sx={{ bgcolor: `${colors.success}1a`, border: `1px solid ${colors.success}44`, borderRadius: 1, px: 0.75, py: 0.15 }}>
+            <Typography sx={{ color: colors.success, fontSize: '0.75rem', fontFamily: 'monospace' }}>+ {recommended}</Typography>
           </Box>
         </Box>
       </Box>
       <Box sx={{ flexShrink: 0, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.75 }}>
-        <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '0.9rem', lineHeight: 1 }}>
+        <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '0.9rem', lineHeight: 1 }}>
           ${fix.savings.toFixed(0)}<Typography component="span" sx={{ color: DK.muted, fontSize: '0.65rem' }}>/mo</Typography>
         </Typography>
         <Tooltip title={fixed ? 'Applied' : 'Apply via agent'}>
           <span>
             <IconButton size="small" onClick={onApply} disabled={applying || fixed}
-              sx={{ bgcolor: fixed ? 'transparent' : '#238636', color: fixed ? '#3fb950' : '#fff',
+              sx={{ bgcolor: fixed ? 'transparent' : colors.success, color: fixed ? colors.success : '#fff',
                 borderRadius: 1.5, width: 30, height: 30,
-                '&:hover': { bgcolor: fixed ? 'transparent' : '#2ea043' },
+                '&:hover': { bgcolor: fixed ? 'transparent' : colors.success },
                 '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted } }}>
               {fixed ? <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />
                : applying ? <CircularProgress size={12} sx={{ color: '#fff' }} />
@@ -209,7 +210,7 @@ const ResourceFixes: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#58a6ff' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
@@ -224,14 +225,14 @@ const ResourceFixes: React.FC = () => {
         <Box>
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Resource Fixes</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
-            CPU · Memory · Storage fixes for <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            CPU · Memory · Storage fixes for <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
           {selected.size > 0 && (
             <Button variant="contained" size="small" startIcon={applying ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <PlayArrowIcon />}
               disabled={applying !== null} onClick={applySelected}
-              sx={{ bgcolor: '#238636', '&:hover': { bgcolor: '#2ea043' }, fontWeight: 600 }}>
+              sx={{ bgcolor: colors.success, '&:hover': { bgcolor: colors.success }, fontWeight: 600 }}>
               Fix Selected ({selected.size}) — ${selSavings.toFixed(0)}/mo
             </Button>
           )}
@@ -241,9 +242,9 @@ const ResourceFixes: React.FC = () => {
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} md={3}><KpiCard label="Total Fixes" value={fixes.length} icon={<PlayArrowIcon />} /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Potential Savings" value={`$${(payload?.potential_savings ?? 0).toFixed(0)}/mo`} accent="#3fb950" icon={<AttachMoneyIcon />} /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="CPU Issues" value={grouped.CPU_WASTE?.length ?? 0} accent="#d29922" icon={<SpeedIcon />} /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Storage Issues" value={grouped.STORAGE_WASTE?.length ?? 0} accent="#a371f7" icon={<StorageIcon />} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Potential Savings" value={`$${(payload?.potential_savings ?? 0).toFixed(0)}/mo`} accent={colors.success} icon={<AttachMoneyIcon />} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="CPU Issues" value={grouped.CPU_WASTE?.length ?? 0} accent={colors.warning} icon={<SpeedIcon />} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Storage Issues" value={grouped.STORAGE_WASTE?.length ?? 0} accent={colors.purple} icon={<StorageIcon />} /></Grid>
       </Grid>
 
       {CATS.map(cat => {
@@ -272,7 +273,7 @@ const ResourceFixes: React.FC = () => {
 
       {fixes.length === 0 && (
         <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 4, textAlign: 'center' }}>
-          <CheckCircleOutlineIcon sx={{ fontSize: 36, color: '#3fb950', mb: 1 }} />
+          <CheckCircleOutlineIcon sx={{ fontSize: 36, color: colors.success, mb: 1 }} />
           <Typography sx={{ color: DK.muted }}>No resource fixes needed — cluster is right-sized</Typography>
         </Box>
       )}

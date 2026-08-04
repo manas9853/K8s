@@ -8,6 +8,7 @@ import {
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Service {
   id: string;
@@ -159,8 +160,8 @@ const DependencyMappingInner: React.FC = () => {
                     <TableCell>{svcMap[d.target] ?? d.target}</TableCell>
                     <TableCell><Chip label={d.type} size="small" color={depTypeColor[d.type] ?? 'default'} /></TableCell>
                     <TableCell align="right">{d.requests_per_second}</TableCell>
-                    <TableCell align="right" sx={{ color: d.latency_ms > 100 ? '#c62828' : 'inherit' }}>{d.latency_ms}</TableCell>
-                    <TableCell align="right" sx={{ color: d.error_rate > 2 ? '#c62828' : 'inherit' }}>{d.error_rate}%</TableCell>
+                    <TableCell align="right" sx={{ color: d.latency_ms > 100 ? colors.danger : 'inherit' }}>{d.latency_ms}</TableCell>
+                    <TableCell align="right" sx={{ color: d.error_rate > 2 ? colors.danger : 'inherit' }}>{d.error_rate}%</TableCell>
                     <TableCell>{d.critical && <Chip label="Critical" size="small" color="error" />}</TableCell>
                   </TableRow>
                 ))}
@@ -197,7 +198,7 @@ const DependencyMappingInner: React.FC = () => {
                       </Box>
                     </TableCell>
                     <TableCell align="right">{cp.total_latency_ms}</TableCell>
-                    <TableCell align="right" sx={{ color: cp.reliability < 98 ? '#e65100' : '#2e7d32', fontWeight: 600 }}>{cp.reliability}%</TableCell>
+                    <TableCell align="right" sx={{ color: cp.reliability < 98 ? colors.warning : colors.success, fontWeight: 600 }}>{cp.reliability}%</TableCell>
                     <TableCell align="right">{cp.requests_per_second}</TableCell>
                   </TableRow>
                 ))}

@@ -53,6 +53,7 @@ import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface SimulationScenario {
   scenario_id: string;
@@ -190,9 +191,9 @@ const SimulationInner: React.FC = () => {
   const med    = scenarios.filter(s => Object.keys(s.changes || {}).length === 2).length;
   const high   = scenarios.filter(s => Object.keys(s.changes || {}).length  > 2).length;
   const riskDistribution = [
-    { name: 'Low Risk',    value: low,  color: '#4caf50' },
-    { name: 'Medium Risk', value: med,  color: '#ff9800' },
-    { name: 'High Risk',   value: high, color: '#f44336' },
+    { name: 'Low Risk',    value: low,  color: colors.success },
+    { name: 'Medium Risk', value: med,  color: colors.warning },
+    { name: 'High Risk',   value: high, color: colors.danger },
   ];
 
   return (
@@ -290,7 +291,7 @@ const SimulationInner: React.FC = () => {
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                 <YAxis />
                 <RechartsTooltip />
-                <Bar dataKey="savings" fill="#1976d2" />
+                <Bar dataKey="savings" fill={colors.info} />
               </BarChart>
             </ResponsiveContainer>
           </Paper>

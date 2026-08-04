@@ -21,6 +21,7 @@ import {
 import { CloudOff as ExfilIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface ExfilAlert {
   id: string;
@@ -50,17 +51,17 @@ function formatTimestamp(value?: string) {
 }
 
 function severityColor(severity?: string) {
-  if (severity === 'critical') return '#ef5350';
-  if (severity === 'high') return '#ffa726';
-  if (severity === 'medium') return '#90caf9';
-  return '#a5d6a7';
+  if (severity === 'critical') return colors.danger;
+  if (severity === 'high') return colors.warning;
+  if (severity === 'medium') return colors.info;
+  return colors.success;
 }
 
 function riskColor(score: number) {
-  if (score >= 80) return '#ef5350';
-  if (score >= 60) return '#ffa726';
-  if (score >= 40) return '#90caf9';
-  return '#a5d6a7';
+  if (score >= 80) return colors.danger;
+  if (score >= 60) return colors.warning;
+  if (score >= 40) return colors.info;
+  return colors.success;
 }
 
 function buildReason(alert: ExfilAlert): string[] {
@@ -117,7 +118,7 @@ const DataExfiltrationInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -125,7 +126,7 @@ const DataExfiltrationInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -133,42 +134,42 @@ const DataExfiltrationInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load data exfiltration alerts</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <ExfilIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <ExfilIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Data Exfiltration Detection
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real exfiltration-risk alerts for {data.cluster_name || 'cluster'} · Last updated {formatTimestamp(data.last_updated)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Active Alerts', value: data.active_alerts, color: data.active_alerts > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Total Detected', value: data.total_detected, color: '#90caf9' },
-          { label: 'High Risk Alerts', value: highRiskAlerts, color: highRiskAlerts > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Affected Namespaces', value: uniqueNamespaces, color: uniqueNamespaces > 0 ? '#ffa726' : '#a5d6a7' },
+          { label: 'Active Alerts', value: data.active_alerts, color: data.active_alerts > 0 ? colors.danger : colors.success },
+          { label: 'Total Detected', value: data.total_detected, color: colors.info },
+          { label: 'High Risk Alerts', value: highRiskAlerts, color: highRiskAlerts > 0 ? colors.danger : colors.success },
+          { label: 'Affected Namespaces', value: uniqueNamespaces, color: uniqueNamespaces > 0 ? colors.warning : colors.success },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{item.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{item.label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>{item.value}</Typography>
               </CardContent>
             </Card>
@@ -177,31 +178,31 @@ const DataExfiltrationInner: React.FC = () => {
       </Grid>
 
       {alerts.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Why these exfiltration alerts matter
           </Typography>
           <Stack spacing={1.5}>
             {alerts.map((alert) => (
-              <Box key={alert.id} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={alert.id} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" justifyContent="space-between" gap={1} flexWrap="wrap" mb={1}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {alert.pod}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {alert.namespace} · {formatTimestamp(alert.detection_time)}
                     </Typography>
                   </Box>
                   <Box display="flex" gap={1}>
-                    <Chip label={alert.id} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
-                    <Chip label={alert.severity.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: severityColor(alert.severity), fontWeight: 'bold', fontSize: 10 }} />
-                    <Chip label={`Risk ${alert.risk_score}`} size="small" sx={{ bgcolor: '#2a3245', color: riskColor(alert.risk_score), fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={alert.id} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
+                    <Chip label={alert.severity.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: severityColor(alert.severity), fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={`Risk ${alert.risk_score}`} size="small" sx={{ bgcolor: colors.border, color: riskColor(alert.risk_score), fontWeight: 'bold', fontSize: 10 }} />
                   </Box>
                 </Box>
                 <Stack spacing={0.75}>
                   {buildReason(alert).map((reason) => (
-                    <Typography key={reason} variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+                    <Typography key={reason} variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
                       • {reason}
                     </Typography>
                   ))}
@@ -212,15 +213,15 @@ const DataExfiltrationInner: React.FC = () => {
         </Paper>
       )}
 
-      <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Exfiltration Alerts
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               {['ID', 'Pod / Namespace', 'Data Transferred', 'Destination', 'Protocol', 'Risk Score', 'Severity', 'Detected', 'Indicators'].map((header) => (
-                <TableCell key={header} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>
+                <TableCell key={header} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>
                   {header}
                 </TableCell>
               ))}
@@ -228,30 +229,30 @@ const DataExfiltrationInner: React.FC = () => {
           </TableHead>
           <TableBody>
             {alerts.map((alert) => (
-              <TableRow key={alert.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' }, bgcolor: '#131d2e' }}>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={alert.id} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
+              <TableRow key={alert.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, bgcolor: colors.surfaceAlt }}>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={alert.id} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245', minWidth: 180 }}>
-                  <Typography variant="body2" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{alert.pod}</Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontFamily: 'monospace' }}>{alert.namespace}</Typography>
+                <TableCell sx={{ borderColor: colors.border, minWidth: 180 }}>
+                  <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 700 }}>{alert.pod}</Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontFamily: 'monospace' }}>{alert.namespace}</Typography>
                 </TableCell>
-                <TableCell sx={{ color: '#ffa726', borderColor: '#2a3245', fontWeight: 700 }}>{alert.data_transferred}</TableCell>
-                <TableCell sx={{ color: '#ef5350', borderColor: '#2a3245', fontFamily: 'monospace', fontSize: 12, minWidth: 180 }}>{alert.destination}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={alert.protocol} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
+                <TableCell sx={{ color: colors.warning, borderColor: colors.border, fontWeight: 700 }}>{alert.data_transferred}</TableCell>
+                <TableCell sx={{ color: colors.danger, borderColor: colors.border, fontFamily: 'monospace', fontSize: 12, minWidth: 180 }}>{alert.destination}</TableCell>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={alert.protocol} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={String(alert.risk_score)} size="small" sx={{ bgcolor: '#2a3245', color: riskColor(alert.risk_score), fontWeight: 'bold', fontSize: 10 }} />
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={String(alert.risk_score)} size="small" sx={{ bgcolor: colors.border, color: riskColor(alert.risk_score), fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={alert.severity} size="small" sx={{ bgcolor: '#2a3245', color: severityColor(alert.severity), fontWeight: 'bold', fontSize: 10 }} />
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={alert.severity} size="small" sx={{ bgcolor: colors.border, color: severityColor(alert.severity), fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12, minWidth: 150 }}>{formatTimestamp(alert.detection_time)}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245', minWidth: 240 }}>
+                <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, minWidth: 150 }}>{formatTimestamp(alert.detection_time)}</TableCell>
+                <TableCell sx={{ borderColor: colors.border, minWidth: 240 }}>
                   <Box display="flex" flexWrap="wrap" gap={0.5}>
                     {alert.suspicious_indicators.map((indicator) => (
-                      <Chip key={indicator} label={indicator} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10, height: 20 }} />
+                      <Chip key={indicator} label={indicator} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10, height: 20 }} />
                     ))}
                   </Box>
                 </TableCell>

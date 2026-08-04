@@ -15,17 +15,18 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const DK = {
-  bg: '#0d1117', surface: '#161b22', surface2: '#1c2128',
-  border: '#30363d', text: '#e6edf3', muted: '#8b949e',
+  bg: colors.background, surface: colors.surface, surface2: colors.surfaceHover,
+  border: colors.border, text: colors.textPrimary, muted: colors.textSecondary,
 };
-const ACCENT = '#58a6ff';
-const GREEN  = '#3fb950';
-const AMBER  = '#d29922';
-const RED    = '#f85149';
-const PURPLE = '#a371f7';
+const ACCENT = colors.info;
+const GREEN  = colors.success;
+const AMBER  = colors.warning;
+const RED    = colors.danger;
+const PURPLE = colors.purple;
 
 // ── Provider metadata ──────────────────────────────────────────────────────────
 const PROVIDERS = [
@@ -297,7 +298,7 @@ const CloudDiscovery: React.FC = () => {
                 onClick={handleSync}
                 disabled={syncing}
                 sx={{ borderColor: GREEN, color: GREEN, fontSize: '0.73rem', textTransform: 'none',
-                      '&:hover': { bgcolor: '#3fb95011' } }}
+                      '&:hover': { bgcolor: `${colors.success}11` } }}
               >
                 {syncing ? 'Syncing…' : 'Sync Now'}
               </Button>
@@ -450,7 +451,7 @@ const CloudDiscovery: React.FC = () => {
                       variant="contained"
                       fullWidth
                       onClick={() => setStep(1)}
-                      sx={{ bgcolor: ACCENT, color: '#0d1117', fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: '#79c0ff' } }}
+                      sx={{ bgcolor: ACCENT, color: colors.background, fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: colors.info } }}
                     >
                       Continue with {provMeta.label} →
                     </Button>
@@ -576,8 +577,8 @@ const CloudDiscovery: React.FC = () => {
                         fullWidth
                         onClick={handleConnect}
                         disabled={connecting}
-                        startIcon={connecting ? <CircularProgress size={14} sx={{ color: '#0d1117' }} /> : <CloudSyncIcon />}
-                        sx={{ bgcolor: ACCENT, color: '#0d1117', fontWeight: 700, textTransform: 'none', flex: 2, '&:hover': { bgcolor: '#79c0ff' } }}
+                        startIcon={connecting ? <CircularProgress size={14} sx={{ color: colors.background }} /> : <CloudSyncIcon />}
+                        sx={{ bgcolor: ACCENT, color: colors.background, fontWeight: 700, textTransform: 'none', flex: 2, '&:hover': { bgcolor: colors.info } }}
                       >
                         {connecting ? 'Connecting & syncing…' : 'Connect & Start Syncing'}
                       </Button>

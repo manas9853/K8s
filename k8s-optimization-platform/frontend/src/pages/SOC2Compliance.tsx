@@ -8,6 +8,7 @@ import {
 } from '@mui/material';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Criterion {
   name: string;
@@ -58,13 +59,13 @@ interface SOC2Data {
   last_scan: string;
 }
 
-const scoreColor = (s: number) => s >= 90 ? '#2e7d32' : s >= 80 ? '#1565c0' : s >= 70 ? '#e65100' : '#c62828';
+const scoreColor = (s: number) => s >= 90 ? colors.success : s >= 80 ? colors.info : s >= 70 ? colors.warning : colors.danger;
 
 const SEV: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  high:     { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  medium:   { bg: '#0d1f3c', text: '#60a5fa', border: '#1e3a5f' },
-  low:      { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  critical: { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  high:     { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  medium:   { bg: colors.infoBg, text: colors.info, border: colors.info },
+  low:      { bg: colors.successBg, text: colors.success, border: colors.successBg },
 };
 
 const SOC2ComplianceInner: React.FC = () => {
@@ -156,25 +157,25 @@ const SOC2ComplianceInner: React.FC = () => {
   };
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
-  if (error) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
+  if (error) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
 
   const failedDetail = data.failed_controls_detail ?? [];
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
 
       {/* Header */}
       <Box display="flex" alignItems="center" gap={1.5} mb={1}>
-        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: '#1e2433', border: '1px solid #2a3245',
+        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}`,
           display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
           📋
         </Box>
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             SOC 2 Type II Compliance
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Real cluster scan · {data.cluster_name || 'Cluster'} · {data.total_pods_scanned || 0} pods, {data.total_containers_scanned || 0} containers scanned · Last scan: {new Date(data.last_scan).toLocaleString()}
           </Typography>
         </Box>
@@ -184,7 +185,7 @@ const SOC2ComplianceInner: React.FC = () => {
       {actionMessage && (
         <Alert
           severity={actionMessage.toLowerCase().includes('failed') ? 'error' : 'success'}
-          sx={{ mb: 3, mt: 2, bgcolor: '#131d2e', color: '#e8eaf0', border: '1px solid #2a3245' }}
+          sx={{ mb: 3, mt: 2, bgcolor: colors.surfaceAlt, color: colors.textPrimary, border: `1px solid ${colors.border}` }}
         >
           {actionMessage}
         </Alert>
@@ -195,16 +196,16 @@ const SOC2ComplianceInner: React.FC = () => {
         {[
           { label: 'Overall Score', value: `${data.overall_score}%`, color: scoreColor(data.overall_score) },
           { label: 'Grade', value: data.grade, color: scoreColor(data.overall_score) },
-          { label: 'Total Controls', value: data.total_controls, color: '#60a5fa' },
-          { label: 'Passed', value: data.passed_controls, color: '#4ade80' },
-          { label: 'Failed', value: data.failed_controls, color: '#f87171' },
-          { label: 'Audit Period', value: data.audit_period, color: '#e8eaf0' },
-          { label: 'Next Audit', value: new Date(data.next_audit).toLocaleDateString(), color: '#f59e0b' },
+          { label: 'Total Controls', value: data.total_controls, color: colors.info },
+          { label: 'Passed', value: data.passed_controls, color: colors.success },
+          { label: 'Failed', value: data.failed_controls, color: colors.danger },
+          { label: 'Audit Period', value: data.audit_period, color: colors.textPrimary },
+          { label: 'Next Audit', value: new Date(data.next_audit).toLocaleDateString(), color: colors.warning },
         ].map((k) => (
           <Grid item xs={6} sm={4} md={3} key={k.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                   {k.label}
                 </Typography>
                 <Typography variant="h5" fontWeight="bold" sx={{ color: k.color }}>
@@ -217,18 +218,18 @@ const SOC2ComplianceInner: React.FC = () => {
       </Grid>
 
       {/* Trust Service Criteria */}
-      <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+      <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1 }}>
             Trust Service Criteria
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mb: 2 }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mb: 2 }}>
             Each criterion score is derived from real cluster signals captured by the in-cluster agent.
           </Typography>
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#131d2e', color: '#8892a4', borderColor: '#2a3245' } }}>
+                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceAlt, color: colors.textSecondary, borderColor: colors.border } }}>
                   <TableCell>Criterion</TableCell>
                   <TableCell>What it measures</TableCell>
                   <TableCell align="right">Controls</TableCell>
@@ -239,16 +240,16 @@ const SOC2ComplianceInner: React.FC = () => {
               </TableHead>
               <TableBody>
                 {(data.trust_service_criteria || []).map((c) => (
-                  <TableRow key={c.name} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                    <TableCell sx={{ color: '#e8eaf0', fontWeight: 600, fontSize: 13, borderColor: '#2a3245', whiteSpace: 'nowrap' }}>{c.name}</TableCell>
-                    <TableCell sx={{ color: '#8892a4', fontSize: 12, borderColor: '#2a3245' }}>{c.description}</TableCell>
-                    <TableCell align="right" sx={{ color: '#8892a4', fontSize: 13, borderColor: '#2a3245' }}>{c.controls}</TableCell>
-                    <TableCell align="right" sx={{ color: '#4ade80', fontWeight: 600, fontSize: 13, borderColor: '#2a3245' }}>{c.passed}</TableCell>
-                    <TableCell align="right" sx={{ color: c.failed > 0 ? '#f87171' : '#8892a4', fontWeight: 600, fontSize: 13, borderColor: '#2a3245' }}>{c.failed}</TableCell>
-                    <TableCell sx={{ borderColor: '#2a3245' }}>
+                  <TableRow key={c.name} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                    <TableCell sx={{ color: colors.textPrimary, fontWeight: 600, fontSize: 13, borderColor: colors.border, whiteSpace: 'nowrap' }}>{c.name}</TableCell>
+                    <TableCell sx={{ color: colors.textSecondary, fontSize: 12, borderColor: colors.border }}>{c.description}</TableCell>
+                    <TableCell align="right" sx={{ color: colors.textSecondary, fontSize: 13, borderColor: colors.border }}>{c.controls}</TableCell>
+                    <TableCell align="right" sx={{ color: colors.success, fontWeight: 600, fontSize: 13, borderColor: colors.border }}>{c.passed}</TableCell>
+                    <TableCell align="right" sx={{ color: c.failed > 0 ? colors.danger : colors.textSecondary, fontWeight: 600, fontSize: 13, borderColor: colors.border }}>{c.failed}</TableCell>
+                    <TableCell sx={{ borderColor: colors.border }}>
                       <Box display="flex" alignItems="center" gap={1}>
                         <LinearProgress variant="determinate" value={c.score}
-                          sx={{ flex: 1, height: 6, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: scoreColor(c.score) } }} />
+                          sx={{ flex: 1, height: 6, borderRadius: 3, bgcolor: colors.border, '& .MuiLinearProgress-bar': { bgcolor: scoreColor(c.score) } }} />
                         <Typography variant="caption" fontWeight={700} sx={{ color: scoreColor(c.score), fontSize: 12 }}>{c.score}%</Typography>
                       </Box>
                     </TableCell>
@@ -262,18 +263,18 @@ const SOC2ComplianceInner: React.FC = () => {
 
       {/* Failed controls with Fix / Accept Exception */}
       {failedDetail.length > 0 && (
-        <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
           <CardContent>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1 }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1 }}>
               Failed Controls — Why They Matter
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mb: 2 }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mb: 2 }}>
               Each control failure is derived from real pod/container configurations in your cluster. Fix applies a direct spec patch. Accept Exception records a business justification for keeping the current configuration.
             </Typography>
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#131d2e', color: '#8892a4', borderColor: '#2a3245', fontSize: 12 } }}>
+                  <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceAlt, color: colors.textSecondary, borderColor: colors.border, fontSize: 12 } }}>
                     <TableCell>Control</TableCell>
                     <TableCell>Criterion</TableCell>
                     <TableCell>Severity</TableCell>
@@ -287,40 +288,40 @@ const SOC2ComplianceInner: React.FC = () => {
                   {failedDetail.map((c) => {
                     const sev = SEV[c.severity] || SEV.medium;
                     return (
-                      <TableRow key={c.control_id} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                        <TableCell sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap', color: '#60a5fa', fontSize: 12, borderColor: '#2a3245' }}>{c.control_id}</TableCell>
-                        <TableCell sx={{ color: '#8892a4', fontSize: 11, borderColor: '#2a3245', whiteSpace: 'nowrap' }}>{c.criterion}</TableCell>
-                        <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableRow key={c.control_id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                        <TableCell sx={{ fontFamily: 'monospace', whiteSpace: 'nowrap', color: colors.info, fontSize: 12, borderColor: colors.border }}>{c.control_id}</TableCell>
+                        <TableCell sx={{ color: colors.textSecondary, fontSize: 11, borderColor: colors.border, whiteSpace: 'nowrap' }}>{c.criterion}</TableCell>
+                        <TableCell sx={{ borderColor: colors.border }}>
                           <Chip label={c.severity.toUpperCase()} size="small" sx={{ bgcolor: sev.bg, color: sev.text, border: `1px solid ${sev.border}`, fontWeight: 'bold', fontSize: 10 }} />
                         </TableCell>
-                        <TableCell sx={{ borderColor: '#2a3245' }}>
+                        <TableCell sx={{ borderColor: colors.border }}>
                           <Box>
-                            <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 12 }}>{c.description}</Typography>
+                            <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 12 }}>{c.description}</Typography>
                             {c.exception && (
-                              <Typography variant="caption" sx={{ color: '#c084fc', display: 'block', mt: 0.75 }}>
+                              <Typography variant="caption" sx={{ color: colors.purple, display: 'block', mt: 0.75 }}>
                                 Exception accepted by {c.exception.owner} until {new Date(c.exception.review_date).toLocaleDateString()}
                               </Typography>
                             )}
                           </Box>
                         </TableCell>
-                        <TableCell sx={{ color: '#a5d6a7', fontSize: 12, borderColor: '#2a3245' }}>{c.remediation}</TableCell>
-                        <TableCell align="right" sx={{ color: c.affected_resources > 5 ? '#f87171' : '#8892a4', fontWeight: 'bold', fontSize: 12, borderColor: '#2a3245' }}>{c.affected_resources}</TableCell>
-                        <TableCell sx={{ borderColor: '#2a3245', minWidth: 180 }}>
+                        <TableCell sx={{ color: colors.success, fontSize: 12, borderColor: colors.border }}>{c.remediation}</TableCell>
+                        <TableCell align="right" sx={{ color: c.affected_resources > 5 ? colors.danger : colors.textSecondary, fontWeight: 'bold', fontSize: 12, borderColor: colors.border }}>{c.affected_resources}</TableCell>
+                        <TableCell sx={{ borderColor: colors.border, minWidth: 180 }}>
                           <Box display="flex" flexDirection="column" gap={1}>
                             {c.auto_fix_supported ? (
                               <Button size="small" variant="contained"
                                 disabled={submittingControlId === c.control_id}
                                 onClick={() => handleFix(c)}
-                                sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' }, fontSize: 11 }}>
+                                sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info }, fontSize: 11 }}>
                                 {submittingControlId === c.control_id ? 'Queueing…' : 'Fix'}
                               </Button>
                             ) : (
-                              <Chip label="Manual remediation" size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', width: 'fit-content' }} />
+                              <Chip label="Manual remediation" size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, width: 'fit-content' }} />
                             )}
                             <Button size="small" variant="outlined"
                               disabled={submittingControlId === c.control_id}
                               onClick={() => openExceptionDialog(c)}
-                              sx={{ borderColor: '#7c5cd8', color: '#c084fc', fontSize: 11 }}>
+                              sx={{ borderColor: colors.purple, color: colors.purple, fontSize: 11 }}>
                               {c.exception ? 'Update Exception' : 'Keep This / Accept Exception'}
                             </Button>
                           </Box>
@@ -337,38 +338,38 @@ const SOC2ComplianceInner: React.FC = () => {
 
       {/* Exception dialog */}
       <Dialog open={exceptionDialogOpen} onClose={() => setExceptionDialogOpen(false)} maxWidth="sm" fullWidth
-        sx={{ '& .MuiDialog-paper': { bgcolor: '#1e2433', color: '#e8eaf0', border: '1px solid #2a3245', borderRadius: 2 } }}>
-        <DialogTitle sx={{ borderBottom: '1px solid #2a3245' }}>
+        sx={{ '& .MuiDialog-paper': { bgcolor: colors.surface, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 2 } }}>
+        <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}` }}>
           Keep This Finding / Accept Exception
         </DialogTitle>
         <DialogContent sx={{ pt: 2, display: 'grid', gap: 2 }}>
-          <Typography variant="body2" sx={{ color: '#8892a4' }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
             Use this only when you intentionally want to keep the current SOC 2 deviation and record why no change should be made now.
           </Typography>
           <TextField label="Control" value={selectedControl ? `${selectedControl.control_id} — ${selectedControl.title}` : ''} fullWidth disabled
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Business justification" value={exceptionForm.justification}
             onChange={(e) => setExceptionForm((v) => ({ ...v, justification: e.target.value }))}
             fullWidth required multiline minRows={3}
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Owner" value={exceptionForm.owner}
             onChange={(e) => setExceptionForm((v) => ({ ...v, owner: e.target.value }))}
             fullWidth required
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Review date" type="date" value={exceptionForm.review_date}
             onChange={(e) => setExceptionForm((v) => ({ ...v, review_date: e.target.value }))}
-            fullWidth required InputLabelProps={{ shrink: true, sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            fullWidth required InputLabelProps={{ shrink: true, sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
         </DialogContent>
-        <DialogActions sx={{ borderTop: '1px solid #2a3245', px: 3, py: 2 }}>
-          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: '#8892a4' }}>Cancel</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${colors.border}`, px: 3, py: 2 }}>
+          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: colors.textSecondary }}>Cancel</Button>
           <Button variant="contained"
             disabled={!exceptionForm.justification || !exceptionForm.owner || !exceptionForm.review_date || !selectedControl || submittingControlId === selectedControl?.control_id}
             onClick={handleSaveException}
-            sx={{ bgcolor: '#7c5cd8', '&:hover': { bgcolor: '#6d4ec7' } }}>
+            sx={{ bgcolor: colors.purple, '&:hover': { bgcolor: colors.purple } }}>
             Save Exception
           </Button>
         </DialogActions>

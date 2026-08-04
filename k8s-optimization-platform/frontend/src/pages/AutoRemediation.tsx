@@ -11,6 +11,7 @@ import {
   Schedule as PendingIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface RemediationAction {
   id: string;
@@ -39,11 +40,11 @@ interface AutoRemediationData {
 }
 
 const SEV_COLOR: Record<string, string> = {
-  critical: '#ef5350', high: '#ffa726', medium: '#90caf9', low: '#a5d6a7',
+  critical: colors.danger, high: colors.warning, medium: colors.info, low: colors.success,
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  successful: '#a5d6a7', pending: '#ffa726', failed: '#ef5350',
+  successful: colors.success, pending: colors.warning, failed: colors.danger,
 };
 
 const AutoRemediation: React.FC = () => {
@@ -76,27 +77,27 @@ const AutoRemediation: React.FC = () => {
   }, [clusterParam]);
 
   if (loading) return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
       <CircularProgress />
     </Box>
   );
-  if (error) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">Failed to load auto-remediation data</Alert></Box>;
+  if (error) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">Failed to load auto-remediation data</Alert></Box>;
 
   const actions = Array.isArray(data.remediation_actions) ? data.remediation_actions : [];
   const policies = Array.isArray(data.policies) ? data.policies : [];
   const pending = actions.filter(a => a.status === 'pending');
   const successRate = data.success_rate ?? 0;
-  const successColor = successRate >= 80 ? '#a5d6a7' : successRate >= 50 ? '#ffa726' : '#ef5350';
+  const successColor = successRate >= 80 ? colors.success : successRate >= 50 ? colors.warning : colors.danger;
   const r = 54, circ = 2 * Math.PI * r, dash = (Math.min(successRate, 100) / 100) * circ;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <BuildIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+        <BuildIcon sx={{ fontSize: 32, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Auto Remediation</Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>Auto Remediation</Typography>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Security drift auto-remediation engine ·{' '}
             {data.auto_remediation_enabled ? 'Enabled' : 'Disabled'} ·{' '}
             Last scan {data.last_scan ? new Date(data.last_scan).toLocaleString() : 'N/A'}
@@ -107,12 +108,12 @@ const AutoRemediation: React.FC = () => {
       {/* SCORE RING + STATS */}
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>Success Rate</Typography>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>Success Rate</Typography>
               <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
                 <svg width={130} height={130}>
-                  <circle cx={65} cy={65} r={r} fill="none" stroke="#2a3245" strokeWidth={11} />
+                  <circle cx={65} cy={65} r={r} fill="none" stroke={colors.border} strokeWidth={11} />
                   <circle cx={65} cy={65} r={r} fill="none" stroke={successColor} strokeWidth={11}
                     strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
                     transform="rotate(-90 65 65)" />
@@ -124,7 +125,7 @@ const AutoRemediation: React.FC = () => {
               <Chip
                 label={data.auto_remediation_enabled ? 'Engine Active' : 'Engine Inactive'}
                 size="small"
-                sx={{ bgcolor: '#2a3245', color: data.auto_remediation_enabled ? '#a5d6a7' : '#8892a4', fontWeight: 'bold', mt: 1 }}
+                sx={{ bgcolor: colors.border, color: data.auto_remediation_enabled ? colors.success : colors.textSecondary, fontWeight: 'bold', mt: 1 }}
               />
             </CardContent>
           </Card>
@@ -133,17 +134,17 @@ const AutoRemediation: React.FC = () => {
         <Grid item xs={12} md={9}>
           <Grid container spacing={2} mb={2}>
             {[
-              { label: 'Total Actions',  count: data.total_actions ?? 0, color: '#90caf9', icon: <BuildIcon sx={{ fontSize: 16 }} /> },
-              { label: 'Successful',     count: data.successful ?? 0,    color: '#a5d6a7', icon: <CheckCircleIcon sx={{ fontSize: 16 }} /> },
-              { label: 'Pending',        count: data.pending ?? 0,       color: '#ffa726', icon: <PendingIcon sx={{ fontSize: 16 }} /> },
-              { label: 'Failed',         count: data.failed ?? 0,        color: '#ef5350', icon: <WarningIcon sx={{ fontSize: 16 }} /> },
+              { label: 'Total Actions',  count: data.total_actions ?? 0, color: colors.info, icon: <BuildIcon sx={{ fontSize: 16 }} /> },
+              { label: 'Successful',     count: data.successful ?? 0,    color: colors.success, icon: <CheckCircleIcon sx={{ fontSize: 16 }} /> },
+              { label: 'Pending',        count: data.pending ?? 0,       color: colors.warning, icon: <PendingIcon sx={{ fontSize: 16 }} /> },
+              { label: 'Failed',         count: data.failed ?? 0,        color: colors.danger, icon: <WarningIcon sx={{ fontSize: 16 }} /> },
             ].map(({ label, count, color, icon }) => (
               <Grid item xs={6} md={3} key={label}>
-                <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+                <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
                   <CardContent sx={{ pb: '8px !important' }}>
                     <Box display="flex" alignItems="center" gap={0.5} mb={0.25}>
                       <Box sx={{ color }}>{icon}</Box>
-                      <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{label}</Typography>
+                      <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{label}</Typography>
                     </Box>
                     <Typography variant="h4" fontWeight="bold" sx={{ color }}>{count}</Typography>
                   </CardContent>
@@ -154,14 +155,14 @@ const AutoRemediation: React.FC = () => {
 
           {/* ACTIVE POLICIES */}
           {policies.length > 0 && (
-            <Paper sx={{ p: 2, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-              <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 1 }}>
+            <Paper sx={{ p: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 1 }}>
                 Active Remediation Policies
               </Typography>
               <Box display="flex" flexWrap="wrap" gap={0.75}>
                 {policies.map((policy, i) => (
                   <Chip key={i} label={policy} size="small"
-                    sx={{ bgcolor: '#2a3245', color: '#a5d6a7', fontSize: 10 }} />
+                    sx={{ bgcolor: colors.border, color: colors.success, fontSize: 10 }} />
                 ))}
               </Box>
             </Paper>
@@ -171,32 +172,32 @@ const AutoRemediation: React.FC = () => {
 
       {/* PENDING SPOTLIGHT */}
       {pending.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <PendingIcon sx={{ color: '#ffa726' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Pending Actions</Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>
+            <PendingIcon sx={{ color: colors.warning }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>Pending Actions</Typography>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>
               {pending.length} action{pending.length !== 1 ? 's' : ''} awaiting execution
             </Typography>
           </Box>
           <Stack spacing={1}>
             {pending.slice(0, 5).map((action, i) => (
-              <Box key={i} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={i} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" justifyContent="space-between" flexWrap="wrap" gap={1} mb={0.5}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>{action.action_type}</Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>{action.action_type}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {action.resource_name} · {action.namespace}
                     </Typography>
                   </Box>
                   <Box display="flex" gap={1}>
                     <Chip label={action.drift_severity?.toUpperCase()} size="small"
-                      sx={{ bgcolor: '#2a3245', color: SEV_COLOR[action.drift_severity] ?? '#e8eaf0', fontWeight: 'bold', fontSize: 10 }} />
+                      sx={{ bgcolor: colors.border, color: SEV_COLOR[action.drift_severity] ?? colors.textPrimary, fontWeight: 'bold', fontSize: 10 }} />
                     <Chip label="PENDING" size="small"
-                      sx={{ bgcolor: '#2a3245', color: '#ffa726', fontWeight: 'bold', fontSize: 10 }} />
+                      sx={{ bgcolor: colors.border, color: colors.warning, fontWeight: 'bold', fontSize: 10 }} />
                   </Box>
                 </Box>
-                <Typography variant="body2" sx={{ color: '#8892a4', fontSize: 11 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: 11 }}>
                   Triggered {new Date(action.triggered_at).toLocaleString()}
                 </Typography>
               </Box>
@@ -206,15 +207,15 @@ const AutoRemediation: React.FC = () => {
       )}
 
       {/* ALL ACTIONS TABLE */}
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             All Remediation Actions ({actions.length})
           </Typography>
         </Box>
         {actions.length === 0 ? (
           <Box p={4} textAlign="center">
-            <Typography variant="body1" sx={{ color: '#8892a4' }}>No remediation actions found.</Typography>
+            <Typography variant="body1" sx={{ color: colors.textSecondary }}>No remediation actions found.</Typography>
           </Box>
         ) : (
           <TableContainer>
@@ -222,7 +223,7 @@ const AutoRemediation: React.FC = () => {
               <TableHead>
                 <TableRow>
                   {['Status', 'Action', 'Resource', 'Namespace', 'Severity', 'Triggered At', 'Completed At', 'Duration'].map(h => (
-                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4', bgcolor: '#131d2e', borderColor: '#2a3245', whiteSpace: 'nowrap' }}>{h}</TableCell>
+                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: colors.textSecondary, bgcolor: colors.surfaceAlt, borderColor: colors.border, whiteSpace: 'nowrap' }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
@@ -231,31 +232,31 @@ const AutoRemediation: React.FC = () => {
                   const status = (item.status ?? 'pending').toLowerCase();
                   const sev = (item.drift_severity ?? 'low').toLowerCase();
                   return (
-                    <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                    <TableRow key={i} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Chip label={status.toUpperCase()} size="small"
-                          sx={{ bgcolor: '#2a3245', color: STATUS_COLOR[status] ?? '#e8eaf0', fontWeight: 'bold', fontSize: 10 }} />
+                          sx={{ bgcolor: colors.border, color: STATUS_COLOR[status] ?? colors.textPrimary, fontWeight: 'bold', fontSize: 10 }} />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#e8eaf0', fontWeight: 600, borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textPrimary, fontWeight: 600, borderColor: colors.border }}>
                         {item.action_type}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border, maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {item.resource_name}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
                         {item.namespace}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Chip label={sev.toUpperCase()} size="small"
-                          sx={{ bgcolor: '#2a3245', color: SEV_COLOR[sev] ?? '#e8eaf0', fontWeight: 'bold', fontSize: 10 }} />
+                          sx={{ bgcolor: colors.border, color: SEV_COLOR[sev] ?? colors.textPrimary, fontWeight: 'bold', fontSize: 10 }} />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', whiteSpace: 'nowrap' }}>
+                      <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, whiteSpace: 'nowrap' }}>
                         {item.triggered_at ? new Date(item.triggered_at).toLocaleString() : '—'}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', whiteSpace: 'nowrap' }}>
+                      <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, whiteSpace: 'nowrap' }}>
                         {item.completed_at ? new Date(item.completed_at).toLocaleString() : '—'}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: item.execution_time_seconds ? '#a5d6a7' : '#8892a4', borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 11, color: item.execution_time_seconds ? colors.success : colors.textSecondary, borderColor: colors.border }}>
                         {item.execution_time_seconds != null ? `${item.execution_time_seconds}s` : '—'}
                       </TableCell>
                     </TableRow>

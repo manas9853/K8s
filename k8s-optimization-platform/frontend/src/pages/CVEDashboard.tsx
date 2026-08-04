@@ -11,30 +11,31 @@ import {
   Shield as ShieldIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens ─────────────────────────────────────────────────── */
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8892a4',
-  accent:  '#3b82d4',
-  critical: { fg: '#f87171', bg: '#2d1515' },
-  high:     { fg: '#f59e0b', bg: '#2d200a' },
-  medium:   { fg: '#60a5fa', bg: '#0d1f3c' },
-  low:      { fg: '#4ade80', bg: '#0d2d1a' },
+  bg:      colors.background,
+  card:    colors.surface,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  accent:  colors.info,
+  critical: { fg: colors.danger, bg: colors.dangerBg },
+  high:     { fg: colors.warning, bg: colors.warningBg },
+  medium:   { fg: colors.info, bg: colors.infoBg },
+  low:      { fg: colors.success, bg: colors.successBg },
   sevColor: (s: string) => {
-    if (s === 'critical') return '#f87171';
-    if (s === 'high')     return '#f59e0b';
-    if (s === 'medium')   return '#60a5fa';
-    return '#4ade80';
+    if (s === 'critical') return colors.danger;
+    if (s === 'high')     return colors.warning;
+    if (s === 'medium')   return colors.info;
+    return colors.success;
   },
   sevBg: (s: string) => {
-    if (s === 'critical') return '#2d1515';
-    if (s === 'high')     return '#2d200a';
-    if (s === 'medium')   return '#0d1f3c';
-    return '#0d2d1a';
+    if (s === 'critical') return colors.dangerBg;
+    if (s === 'high')     return colors.warningBg;
+    if (s === 'medium')   return colors.infoBg;
+    return colors.successBg;
   },
 };
 
@@ -75,7 +76,7 @@ interface CVEDashboardData {
 
 /* ── CVSS score pill ────────────────────────────────────────────────── */
 const CVSSPill: React.FC<{ score: number }> = ({ score }) => {
-  const color = score >= 9 ? '#f87171' : score >= 7 ? '#f59e0b' : score >= 4 ? '#60a5fa' : '#4ade80';
+  const color = score >= 9 ? colors.danger : score >= 7 ? colors.warning : score >= 4 ? colors.info : colors.success;
   return (
     <Box sx={{ display:'inline-flex', alignItems:'center', gap:0.4,
       px:0.8, py:0.1, borderRadius:0.5, bgcolor:`${color}18`, border:`1px solid ${color}40` }}>
@@ -174,7 +175,7 @@ const CVEDashboard: React.FC = () => {
           { label:'High',     count: data.high_cves,       sub:'Patch this week',    ...T.high,     key:'high' },
           { label:'Medium',   count: data.medium_cves,     sub:'Plan remediation',   ...T.medium,   key:'medium' },
           { label:'Low',      count: data.low_cves,        sub:'Monitor',            ...T.low,      key:'low' },
-          { label:'Patchable',count: data.patchable_cves,  sub:`${patchPct}% of total`, fg:'#a78bfa', bg:'#1a1030', key:null },
+          { label:'Patchable',count: data.patchable_cves,  sub:`${patchPct}% of total`, fg:colors.purple, bg:colors.purpleBg, key:null },
         ] as Array<{label:string;count:number;sub:string;fg:string;bg:string;key:string|null}>).map(({ label, count, sub, fg, bg, key }) => (
           <Box key={label}
             onClick={() => setSevFilter(sevFilter === key ? null : key)}

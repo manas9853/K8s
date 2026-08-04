@@ -11,22 +11,23 @@ import StorageIcon from '@mui/icons-material/Storage';
 import SecurityIcon from '@mui/icons-material/Security';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const CAT_COLOR: Record<string, string> = {
-  COST:        '#3fb950',
-  PERFORMANCE: '#d29922',
-  STORAGE:     '#3b82f6',
-  SECURITY:    '#f85149',
+  COST:        colors.success,
+  PERFORMANCE: colors.warning,
+  STORAGE:     colors.info,
+  SECURITY:    colors.danger,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ const AssistedMode: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#58a6ff' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
@@ -141,7 +142,7 @@ const AssistedMode: React.FC = () => {
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Assisted Mode</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
             Rule-based auto-approval for low-risk changes —{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh">
@@ -152,9 +153,9 @@ const AssistedMode: React.FC = () => {
       </Box>
 
       {/* Auto-approve threshold banner */}
-      <Box sx={{ bgcolor: '#1f6feb1a', border: '1px solid #1f6feb55', borderRadius: 2, px: 2.5, py: 1.5, mb: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#58a6ff', flexShrink: 0 }} />
-        <Typography sx={{ color: '#58a6ff', fontSize: '0.83rem' }}>
+      <Box sx={{ bgcolor: `${colors.info}1a`, border: `1px solid ${colors.info}55`, borderRadius: 2, px: 2.5, py: 1.5, mb: 3, display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: colors.info, flexShrink: 0 }} />
+        <Typography sx={{ color: colors.info, fontSize: '0.83rem' }}>
           Auto-approve threshold: changes saving ≥ <strong>${payload?.auto_approve_threshold ?? 50}/mo</strong> with risk = LOW are applied automatically when the rule is enabled.
         </Typography>
       </Box>
@@ -162,9 +163,9 @@ const AssistedMode: React.FC = () => {
       {/* KPI row */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} md={3}><KpiCard label="Total Rules" value={stats?.total_rules ?? 0} /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Active Rules" value={enabledCount} accent="#3fb950" /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Auto-Applied Today" value={stats?.auto_applied_today ?? 0} accent="#58a6ff" /></Grid>
-        <Grid item xs={6} md={3}><KpiCard label="Pending Approval" value={stats?.pending_approval ?? 0} accent="#d29922" /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Active Rules" value={enabledCount} accent={colors.success} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Auto-Applied Today" value={stats?.auto_applied_today ?? 0} accent={colors.info} /></Grid>
+        <Grid item xs={6} md={3}><KpiCard label="Pending Approval" value={stats?.pending_approval ?? 0} accent={colors.warning} /></Grid>
       </Grid>
 
       {/* Rule cards by category */}

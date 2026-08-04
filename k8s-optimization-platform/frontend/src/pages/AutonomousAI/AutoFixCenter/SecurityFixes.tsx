@@ -14,17 +14,18 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
-const SEV: Record<string, string> = { critical: '#f85149', high: '#d29922', medium: '#3b82f6' };
+const SEV: Record<string, string> = { critical: colors.danger, high: colors.warning, medium: colors.info };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface SecFix {
@@ -100,9 +101,9 @@ const SecFixCard: React.FC<{
         <Tooltip title={fixed ? 'Applied' : 'Apply fix'}>
           <span>
             <IconButton size="small" onClick={e => { e.stopPropagation(); onApply(); }} disabled={applying || fixed}
-              sx={{ bgcolor: fixed ? 'transparent' : '#238636', color: fixed ? '#3fb950' : '#fff',
+              sx={{ bgcolor: fixed ? 'transparent' : colors.success, color: fixed ? colors.success : '#fff',
                 borderRadius: 1.5, width: 30, height: 30, flexShrink: 0,
-                '&:hover': { bgcolor: fixed ? 'transparent' : '#2ea043' },
+                '&:hover': { bgcolor: fixed ? 'transparent' : colors.success },
                 '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted } }}>
               {fixed ? <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />
                : applying ? <CircularProgress size={12} sx={{ color: '#fff' }} />
@@ -120,8 +121,8 @@ const SecFixCard: React.FC<{
               <Typography sx={{ color: DK.muted, fontSize: '0.68rem', textTransform: 'uppercase', mb: 0.5 }}>CVE IDs</Typography>
               <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
                 {fix.cve_ids.map(c => <Chip key={c} label={c} size="small"
-                  icon={<BugReportIcon sx={{ fontSize: '13px !important', color: '#f85149 !important' }} />}
-                  sx={{ bgcolor: '#f851491a', color: '#f85149', border: '1px solid #f8514944', fontSize: '0.67rem' }} />)}
+                  icon={<BugReportIcon sx={{ fontSize: '13px !important', color: `${colors.danger} !important` }} />}
+                  sx={{ bgcolor: `${colors.danger}1a`, color: colors.danger, border: `1px solid ${colors.danger}44`, fontSize: '0.67rem' }} />)}
               </Box>
             </Box>
           )}
@@ -184,7 +185,7 @@ const SecurityFixes: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#f85149' }} />
+      <CircularProgress sx={{ color: colors.danger }} />
     </Box>
   );
 
@@ -199,7 +200,7 @@ const SecurityFixes: React.FC = () => {
         <Box>
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Security Fixes</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
-            Security vulnerability remediation for <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            Security vulnerability remediation for <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
@@ -207,7 +208,7 @@ const SecurityFixes: React.FC = () => {
             <Button variant="contained" size="small"
               startIcon={applying ? <CircularProgress size={14} sx={{ color: '#fff' }} /> : <ErrorOutlineIcon />}
               disabled={applying !== null} onClick={fixAllCritical}
-              sx={{ bgcolor: '#da3633', '&:hover': { bgcolor: '#f85149' }, fontWeight: 600, fontSize: '0.8rem' }}>
+              sx={{ bgcolor: colors.danger, '&:hover': { bgcolor: colors.danger }, fontWeight: 600, fontSize: '0.8rem' }}>
               Fix All Critical ({criticalUnfixed.length})
             </Button>
           )}
@@ -216,9 +217,9 @@ const SecurityFixes: React.FC = () => {
       </Box>
 
       <Grid container spacing={2} sx={{ mb: 3 }}>
-        <Grid item xs={6} md={3}><Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Critical</Typography><Typography sx={{ color: '#f85149', fontSize: '1.7rem', fontWeight: 700 }}>{payload?.critical ?? 0}</Typography></Box></Grid>
-        <Grid item xs={6} md={3}><Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>High</Typography><Typography sx={{ color: '#d29922', fontSize: '1.7rem', fontWeight: 700 }}>{payload?.high ?? 0}</Typography></Box></Grid>
-        <Grid item xs={6} md={3}><Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Medium</Typography><Typography sx={{ color: '#3b82f6', fontSize: '1.7rem', fontWeight: 700 }}>{payload?.medium ?? 0}</Typography></Box></Grid>
+        <Grid item xs={6} md={3}><Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Critical</Typography><Typography sx={{ color: colors.danger, fontSize: '1.7rem', fontWeight: 700 }}>{payload?.critical ?? 0}</Typography></Box></Grid>
+        <Grid item xs={6} md={3}><Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>High</Typography><Typography sx={{ color: colors.warning, fontSize: '1.7rem', fontWeight: 700 }}>{payload?.high ?? 0}</Typography></Box></Grid>
+        <Grid item xs={6} md={3}><Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Medium</Typography><Typography sx={{ color: colors.info, fontSize: '1.7rem', fontWeight: 700 }}>{payload?.medium ?? 0}</Typography></Box></Grid>
         <Grid item xs={6} md={3}><Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Total</Typography><Typography sx={{ color: DK.text, fontSize: '1.7rem', fontWeight: 700 }}>{payload?.total_fixes ?? 0}</Typography></Box></Grid>
       </Grid>
 
@@ -237,7 +238,7 @@ const SecurityFixes: React.FC = () => {
 
       {fixes.length === 0 && (
         <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 4, textAlign: 'center' }}>
-          <CheckCircleOutlineIcon sx={{ fontSize: 36, color: '#3fb950', mb: 1 }} />
+          <CheckCircleOutlineIcon sx={{ fontSize: 36, color: colors.success, mb: 1 }} />
           <Typography sx={{ color: DK.muted }}>No security issues detected — cluster is clean</Typography>
         </Box>
       )}

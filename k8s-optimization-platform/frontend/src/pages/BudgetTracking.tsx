@@ -15,16 +15,17 @@ import { useActiveCluster } from '../hooks/useActiveCluster';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg: '#0d1117', surface: '#161b22', surface2: '#1c2128',
-  border: '#30363d', text: '#e6edf3', muted: '#8b949e',
+  bg: colors.background, surface: colors.surface, surface2: colors.surfaceHover,
+  border: colors.border, text: colors.textPrimary, muted: colors.textSecondary,
 };
-const ACCENT = '#58a6ff';
-const GREEN  = '#3fb950';
-const AMBER  = '#d29922';
-const RED    = '#f85149';
+const ACCENT = colors.info;
+const GREEN  = colors.success;
+const AMBER  = colors.warning;
+const RED    = colors.danger;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 interface OverallBudget {
@@ -79,9 +80,9 @@ const fmt = (n: number) =>
 const fmtOrDash = (n?: number) => (n == null ? '—' : fmt(n));
 
 const alertSeverityStyle = (sev: string): { color: string; bg: string; border: string } => {
-  if (sev === 'critical' || sev === 'error') return { color: RED,   bg: '#f8514912', border: `1px solid ${RED}44`   };
-  if (sev === 'warning')                     return { color: AMBER, bg: '#d2992212', border: `1px solid ${AMBER}44` };
-  return                                            { color: ACCENT, bg: '#58a6ff12', border: `1px solid ${ACCENT}44` };
+  if (sev === 'critical' || sev === 'error') return { color: RED,   bg: `${colors.danger}12`, border: `1px solid ${RED}44`   };
+  if (sev === 'warning')                     return { color: AMBER, bg: `${colors.warning}12`, border: `1px solid ${AMBER}44` };
+  return                                            { color: ACCENT, bg: `${colors.info}12`, border: `1px solid ${ACCENT}44` };
 };
 
 const barColor = (status: string) =>
