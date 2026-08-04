@@ -414,6 +414,27 @@ def _calculate_costs(cpu_cores: float, memory_gb: float) -> tuple:
     return round(monthly_cost, 2), round(potential_savings, 2)
 
 
+class PricingConstants(BaseModel):
+    """Canonical cost-per-unit pricing, sourced from utils/cost_engine.py.
+
+    Exposed so the frontend never has to hardcode its own copy of these
+    numbers — every page should fetch them from here (or from an endpoint
+    that already applies them server-side) rather than duplicating them.
+    """
+    cpu_cost_per_core_hour: float
+    memory_cost_per_gb_hour: float
+    hours_per_month: float
+
+
+@router.get("/pricing", response_model=PricingConstants)
+async def get_pricing_constants():
+    """Return the single source of truth for cost-per-unit pricing."""
+    return PricingConstants(
+        cpu_cost_per_core_hour=CPU_COST_PER_CORE_HOUR,
+        memory_cost_per_gb_hour=MEMORY_COST_PER_GB_HOUR,
+        hours_per_month=HOURS_PER_MONTH,
+    )
+
 
 @router.get("/summary", response_model=ClusterSummary)
 async def get_cluster_summary(
