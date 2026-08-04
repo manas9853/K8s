@@ -1,0 +1,156 @@
+---
+# ──────────────────────────────────────────────────────────────────────────────
+# K8s Optimization Platform — Network Flow Collector (OPT-IN, v0)
+#
+# This is a SEPARATE, higher-privilege component from deployment.yaml.
+# Read agent/flow_collector.py's docstring before applying this — in
+# particular the CNI compatibility note (conntrack-based capture doesn't
+# see pod-to-pod traffic on eBPF-native CNIs like Cilium in native mode).
+#
+# Privilege delta vs the main agent:
+#   - hostNetwork: true            (needed to see the host's shared
+#                                    conntrack table, not just this pod's
+#                                    own network namespace)
+#   - CAP_NET_ADMIN                (needed to read conntrack entries)
+#   - host /proc mounted read-only (to reach /proc/net/nf_conntrack)
+#
+# Still NOT included: no privileged: true, no CAP_SYS_ADMIN, no write
+# access to anything, read-only root filesystem retained.
+#
+# Deploy with:
+#   kubectl apply -f flow-collector-daemonset.yaml
+# Requires deployment.yaml to already be applied (reuses its Secret/
+# ConfigMap for PLATFORM_URL, API_TOKEN, CLUSTER_NAME).
+# ──────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-optimization-flow-collector
+  namespace: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-flow-collector
+
+---
+# ── ClusterRole: read-only, minimum verbs the collector actually calls ────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-optimization-flow-collector
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-optimization-flow-collector
+subjects:
+  - kind: ServiceAccount
+    name: k8s-optimization-flow-collector
+    namespace: k8s-optimization-agent
+roleRef:
+  kind: ClusterRole
+  name: k8s-optimization-flow-collector
+  apiGroup: rbac.authorization.k8s.io
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: k8s-optimization-flow-collector
+  namespace: k8s-optimization-agent
+  labels:
+    app: k8s-optimization-flow-collector
+    app.kubernetes.io/name: k8s-optimization-flow-collector
+    app.kubernetes.io/version: "0.1.0-v0"
+spec:
+  selector:
+    matchLabels:
+      app: k8s-optimization-flow-collector
+  template:
+    metadata:
+      labels:
+        app: k8s-optimization-flow-collector
+    spec:
+      serviceAccountName: k8s-optimization-flow-collector
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+
+      tolerations:
+        - operator: "Exists"
+          effect: "NoSchedule"
+        - operator: "Exists"
+          effect: "NoExecute"
+
+      containers:
+        - name: flow-collector
+          image: docker.io/manas2821/k8s-optimization-flow-collector:latest
+          imagePullPolicy: Always
+          command: ["python", "-u", "flow_collector.py"]
+
+          env:
+            - name: PLATFORM_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-credentials
+                  key: platform-url
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-credentials
+                  key: api-token
+            - name: CLUSTER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: CLUSTER_NAME
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: LOG_LEVEL
+            - name: COLLECTION_INTERVAL
+              value: "30"
+            # Downward API — this is what makes it "one collector per node"
+            # instead of every replica reporting the same node by accident.
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "150m"
+
+          securityContext:
+            runAsNonRoot: false   # CAP_NET_ADMIN requires root on most kernels
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+              add: ["NET_ADMIN"]
+
+          volumeMounts:
+            - name: host-proc
+              mountPath: /host/proc
+              readOnly: true
+
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import os,time; assert time.time() - os.path.getmtime('/proc/self') < 3600"]
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            failureThreshold: 3
+
+      volumes:
+        - name: host-proc
+          hostPath:
+            path: /proc
+            type: Directory

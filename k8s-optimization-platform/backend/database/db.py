@@ -11,7 +11,7 @@ import os
 import json
 import logging
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Tuple
 
 import psycopg2
 import psycopg2.extras
@@ -148,6 +148,25 @@ class DatabaseManager:
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS idx_agent_commands_cluster_status
                 ON agent_commands(cluster_name, status)
+            """)
+
+            # ── agent_network_flows — one row per flow_collector.py batch ──────
+            # (a DaemonSet pod posts once per node per collection cycle; the
+            # "flows" column holds that node's aggregated connection tuples —
+            # never packet content, see agent/flow_collector.py)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS agent_network_flows (
+                    id           BIGSERIAL PRIMARY KEY,
+                    cluster_name TEXT NOT NULL,
+                    node_name    TEXT NOT NULL,
+                    timestamp    TEXT NOT NULL,
+                    flows        JSONB NOT NULL DEFAULT '[]',
+                    received_at  TEXT NOT NULL
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_agent_network_flows_cluster_time
+                ON agent_network_flows(cluster_name, received_at DESC)
             """)
 
             # ── cis_control_exceptions ─────────────────────────────────────────
@@ -438,6 +457,70 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error getting latest metrics: {e}")
             return None
+
+    # ── network flows (flow_collector.py DaemonSet) ─────────────────────────
+
+    def insert_network_flows(self, cluster_name: str, node_name: str,
+                              timestamp: str, flows: List[Dict[str, Any]]) -> bool:
+        try:
+            now = datetime.utcnow().isoformat()
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO agent_network_flows
+                       (cluster_name, node_name, timestamp, flows, received_at)
+                       VALUES (%s, %s, %s, %s, %s)""",
+                    (cluster_name, node_name, timestamp, json.dumps(flows), now),
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error inserting network flows: {e}")
+            return False
+
+    def get_recent_network_flows(self, cluster_name: str, minutes: int = 15) -> List[Dict[str, Any]]:
+        """Merge the last N minutes of per-node batches into one edge list,
+        summing connection_count for the same (src, dst, port, protocol)
+        tuple across nodes and collection cycles. This is what
+        DependencyMapping.tsx should consume for real (observed) traffic
+        edges, as opposed to the Service/Ingress-spec-inferred edges it
+        likely falls back to today."""
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT flows FROM agent_network_flows
+                       WHERE cluster_name = %s
+                         AND received_at > (NOW() AT TIME ZONE 'utc' - INTERVAL '1 minute' * %s)::text
+                       ORDER BY received_at DESC""",
+                    (cluster_name, minutes),
+                )
+                rows = cur.fetchall()
+
+            merged: Dict[Tuple[str, str, str, str, int, str], int] = {}
+            for row in rows:
+                raw = row["flows"] if isinstance(row, dict) else row[0]
+                batch = raw if isinstance(raw, list) else json.loads(raw or "[]")
+                for f in batch:
+                    key = (
+                        f.get("src_namespace"), f.get("src_pod"),
+                        f.get("dst_namespace"), f.get("dst_pod"),
+                        f.get("dst_port"), f.get("protocol"),
+                    )
+                    merged[key] = merged.get(key, 0) + int(f.get("connection_count", 0))
+
+            return [
+                {
+                    "src_namespace": k[0], "src_pod": k[1],
+                    "dst_namespace": k[2], "dst_pod": k[3],
+                    "dst_port": k[4], "protocol": k[5],
+                    "connection_count": v,
+                }
+                for k, v in merged.items()
+            ]
+        except Exception as e:
+            logger.error(f"Error getting network flows: {e}")
+            return []
 
     def get_pod_utilization_history(self, cluster_name: str, namespace: str,
                                      pod_name: str, days: int = 7) -> Dict[str, Any]:

@@ -90,6 +90,24 @@ class HeartbeatRequest(BaseModel):
     cluster_id: Optional[str] = None
 
 
+class NetworkFlowRecord(BaseModel):
+    src_namespace: str
+    src_pod: str
+    dst_namespace: str
+    dst_pod: str
+    dst_port: int
+    protocol: str
+    connection_count: int
+
+
+class NetworkFlowBatch(BaseModel):
+    """One flow_collector.py DaemonSet pod's report for one node, one cycle."""
+    cluster_name: str
+    node_name: str
+    timestamp: str
+    flows: List[NetworkFlowRecord] = []
+
+
 def verify_token(authorization: str = Header(None)) -> str:
     if not authorization:
         raise HTTPException(status_code=401, detail="Missing authorization header")
@@ -226,6 +244,41 @@ async def receive_heartbeat(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── /network-flows ──────────────────────────────────────────────────────────
+# Receives per-node batches from agent/flow_collector.py (a separate,
+# opt-in DaemonSet — see flow-collector-daemonset.yaml). Each pod posts
+# once per node per collection cycle; records are aggregated connection
+# tuples only (no packet content), see that file's docstring.
+
+@router.post("/network-flows")
+async def receive_network_flows(
+    batch: NetworkFlowBatch,
+    token: str = Depends(verify_token),
+):
+    try:
+        cluster = db_manager.get_cluster(batch.cluster_name)
+        if not cluster:
+            raise HTTPException(status_code=404, detail=f"Cluster {batch.cluster_name} not registered")
+
+        flows = [f.model_dump() for f in batch.flows]
+        if not db_manager.insert_network_flows(
+            batch.cluster_name, batch.node_name, batch.timestamp, flows
+        ):
+            raise HTTPException(status_code=500, detail="Failed to store network flows")
+
+        logger.debug(
+            f"Network flows received from {batch.cluster_name}/{batch.node_name} "
+            f"({len(flows)} records)"
+        )
+        return {"status": "success", "message": "Network flows received"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error receiving network flows: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ── /clusters ────────────────────────────────────────────────────────────────
 
 @router.get("/clusters")
@@ -262,6 +315,25 @@ async def get_cluster_metrics(cluster_name: str):
         raise
     except Exception as e:
         logger.error(f"Error getting cluster metrics: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/clusters/{cluster_name}/network-flows")
+async def get_cluster_network_flows(cluster_name: str, minutes: int = 15):
+    """Merged, observed pod-to-pod traffic edges from flow_collector.py
+    DaemonSet pods across all nodes, over the last `minutes` (default 15).
+    Empty list is a valid response — it means either no traffic was seen,
+    or the DaemonSet isn't deployed / isn't compatible with this cluster's
+    CNI (see flow_collector.py's docstring)."""
+    try:
+        if not db_manager.get_cluster(cluster_name):
+            raise HTTPException(status_code=404, detail=f"Cluster {cluster_name} not found")
+        return {"cluster_name": cluster_name, "window_minutes": minutes,
+                "flows": db_manager.get_recent_network_flows(cluster_name, minutes)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting network flows: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
