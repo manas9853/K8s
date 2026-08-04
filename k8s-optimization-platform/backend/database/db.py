@@ -439,6 +439,83 @@ class DatabaseManager:
             logger.error(f"Error getting latest metrics: {e}")
             return None
 
+    def get_pod_utilization_history(self, cluster_name: str, namespace: str,
+                                     pod_name: str, days: int = 7) -> Dict[str, Any]:
+        """A REAL utilization report for one pod: every stored collection-cycle
+        sample over the lookback window, built from agent-reported live
+        metrics-server readings only (has_live_metrics = true) — never the
+        old 50%-of-request guess. This is what should back rightsizing
+        decisions instead of analyze_pod_resources()'s single latest-snapshot
+        reading, which is only one instant and can be misleadingly high/low
+        depending on when it happened to be sampled.
+
+        Returns min/avg/p95/max for CPU and memory, the sample count actually
+        used, and how many collection cycles existed but had no live data
+        (so the caller can see data quality, not just the numbers)."""
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """
+                    SELECT
+                        timestamp,
+                        (item->>'cpu_usage_cores')::float   AS cpu_cores,
+                        (item->>'memory_usage_mb')::float   AS mem_mb,
+                        COALESCE((item->>'has_live_metrics')::boolean, false) AS has_live
+                    FROM agent_metrics,
+                         jsonb_array_elements(pods->'items') AS item
+                    WHERE cluster_name = %s
+                      AND item->>'namespace' = %s
+                      AND item->>'name' = %s
+                      AND received_at > (NOW() AT TIME ZONE 'utc' - INTERVAL '1 day' * %s)::text
+                    ORDER BY timestamp ASC
+                    """,
+                    (cluster_name, namespace, pod_name, days),
+                )
+                rows = cur.fetchall()
+
+            total_cycles = len(rows)
+            live = [r for r in rows if r["has_live"]]
+            no_data_cycles = total_cycles - len(live)
+
+            if not live:
+                return {
+                    "namespace": namespace, "pod_name": pod_name, "window_days": days,
+                    "sample_count": 0, "no_data_cycles": no_data_cycles,
+                    "data_quality": "insufficient_data",
+                    "cpu": None, "memory": None,
+                }
+
+            cpu_samples = sorted(r["cpu_cores"] for r in live if r["cpu_cores"] is not None)
+            mem_samples = sorted(r["mem_mb"] for r in live if r["mem_mb"] is not None)
+
+            def _stats(samples: List[float]) -> Optional[Dict[str, float]]:
+                if not samples:
+                    return None
+                n = len(samples)
+                p95_idx = min(n - 1, int(round(0.95 * (n - 1))))
+                return {
+                    "min": round(samples[0], 4),
+                    "avg": round(sum(samples) / n, 4),
+                    "p95": round(samples[p95_idx], 4),
+                    "max": round(samples[-1], 4),
+                }
+
+            return {
+                "namespace": namespace, "pod_name": pod_name, "window_days": days,
+                "sample_count": len(live), "no_data_cycles": no_data_cycles,
+                "data_quality": "full" if no_data_cycles == 0 else "partial",
+                "cpu": _stats(cpu_samples),
+                "memory": _stats(mem_samples),
+            }
+        except Exception as e:
+            logger.error(f"Error getting pod utilization history: {e}")
+            return {
+                "namespace": namespace, "pod_name": pod_name, "window_days": days,
+                "sample_count": 0, "no_data_cycles": 0,
+                "data_quality": "error", "cpu": None, "memory": None,
+            }
+
     def get_metrics_history(self, cluster_name: str, limit: int = 100) -> List[Dict[str, Any]]:
         try:
             with self._conn() as conn:

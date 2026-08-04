@@ -173,7 +173,12 @@ class ClusterAgent:
         self.cluster_name      = os.getenv("CLUSTER_NAME", "")
         self.environment       = os.getenv("ENVIRONMENT", "production")
         self.collection_interval = int(os.getenv("COLLECTION_INTERVAL", "60"))
-        self.metrics_server    = os.getenv("METRICS_SERVER_ENABLED", "false").lower() == "true"
+        # Default changed to true: real utilization data should be the default,
+        # not an opt-in most people never discover. self._metrics_available is
+        # the thing that actually matters — set by _check_metrics_server()
+        # below, which VERIFIES the API responds rather than trusting this flag.
+        self.metrics_server    = os.getenv("METRICS_SERVER_ENABLED", "true").lower() == "true"
+        self._metrics_available = False  # set by _check_metrics_server() at startup
 
         if not self.api_token:
             logger.error("API_TOKEN is required — aborting.")
@@ -453,8 +458,12 @@ class ClusterAgent:
 
         # ── live usage from metrics-server ────────────────────────────────────
         # Build a lookup: (namespace, pod_name) -> {cpu_cores, memory_mb}
+        # Gated on self._metrics_available (verified reachable by
+        # _check_metrics_server()), not self.metrics_server (the raw env
+        # flag) — an agent that THINKS metrics-server is enabled but can't
+        # actually reach it should not pretend to have live data.
         _live_usage: Dict[tuple, Dict[str, float]] = {}
-        if self.metrics_server:
+        if self._metrics_available:
             try:
                 raw = self.custom.list_cluster_custom_object(
                     group="metrics.k8s.io", version="v1beta1", plural="pods"
@@ -596,9 +605,12 @@ class ClusterAgent:
                 "memory_request_mb": round(mem_req / 1024 ** 2, 2),
                 "cpu_limit":         round(cpu_lim, 4),
                 "memory_limit_mb":   round(mem_lim / 1024 ** 2, 2),
-                # Live usage from metrics-server (0.0 when unavailable)
+                # Live usage from metrics-server. has_live_metrics distinguishes
+                # "this pod genuinely uses ~0" from "we have no data" — a zero
+                # value alone is ambiguous (an idle pod also reports near-zero).
                 "cpu_usage_cores":   live.get("cpu_cores", 0.0),
                 "memory_usage_mb":   live.get("memory_mb", 0.0),
+                "has_live_metrics":  bool(live),
                 "total_restarts":    total_restarts,
                 "containers":        containers,
                 "container_statuses": statuses,
@@ -634,6 +646,9 @@ class ClusterAgent:
             "items":           pod_list,
             "oom_events":      oom_events,
             "high_restarts":   restart_issues,
+            # Cluster-wide truth about data quality — see _check_metrics_server().
+            # Individual pods additionally carry their own has_live_metrics.
+            "metrics_available": self._metrics_available,
         }
 
     # ── domain: resource summary (derived) ───────────────────────────────────
@@ -2405,14 +2420,75 @@ class ClusterAgent:
 
     # ── main loop ─────────────────────────────────────────────────────────────
 
+    def _check_metrics_server(self) -> bool:
+        """Verify metrics-server is actually installed and responding —
+        not just 'the env var says so'. Called at startup and re-checked
+        periodically, since metrics-server can be uninstalled, crash-loop,
+        or lose API aggregation after the agent has already started.
+
+        This is what makes self._metrics_available trustworthy: everywhere
+        else in this file that decides 'do I have real usage data', it
+        checks self._metrics_available, never self.metrics_server (the
+        env var) directly.
+        """
+        if not self.metrics_server:
+            self._metrics_available = False
+            return False
+        try:
+            # A cheap, real call — not just checking the API group exists,
+            # but that it actually returns pod usage data.
+            raw = self.custom.list_cluster_custom_object(
+                group="metrics.k8s.io", version="v1beta1", plural="pods",
+                limit=1,
+            )
+            has_data = bool(raw.get("items"))
+            if not self._metrics_available and has_data:
+                logger.info("metrics-server verified reachable — real usage data available.")
+            self._metrics_available = has_data
+            if not has_data:
+                logger.warning(
+                    "metrics-server API responded but returned zero pod entries — "
+                    "either it just started (wait a minute), or something's wrong. "
+                    "Usage-based recommendations will be marked 'insufficient_data' "
+                    "until this resolves."
+                )
+            return has_data
+        except ApiException as exc:
+            self._metrics_available = False
+            if exc.status == 404:
+                logger.warning(
+                    "metrics-server is NOT installed on this cluster (metrics.k8s.io "
+                    "API not found). Rightsizing recommendations will be marked "
+                    "'insufficient_data' rather than guessed. To fix: "
+                    "kubectl apply -f "
+                    "https://github.com/kubernetes-sigs/metrics-server/releases/latest/"
+                    "download/components.yaml"
+                )
+            else:
+                logger.warning("metrics-server check failed (HTTP %s): %s", exc.status, exc.reason)
+            return False
+        except Exception as exc:
+            self._metrics_available = False
+            logger.warning("metrics-server check failed: %s", exc)
+            return False
+
     def run(self) -> None:
         logger.info(
             "Agent started — cluster=%s  provider=%s  interval=%ds",
             self.cluster_name, self._provider, self.collection_interval,
         )
+        self._check_metrics_server()
         hb_cycle = 0
+        loop_count = 0
 
         while True:
+            # Re-verify periodically (every ~10 outer loop iterations), not
+            # just at startup — metrics-server can go down while the agent
+            # keeps running.
+            loop_count += 1
+            if loop_count % 10 == 0:
+                self._check_metrics_server()
+
             try:
                 # Execute any pending commands FIRST (low-latency writes)
                 self._poll_and_execute_commands()
