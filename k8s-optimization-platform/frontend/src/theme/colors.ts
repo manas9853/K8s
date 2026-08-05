@@ -13,6 +13,13 @@
  * pages that already used GitHub dark are unaffected.
  */
 
+// Deliberately NOT `as const`: with it, every value here becomes a narrow
+// string-literal type (colors.border is typed as exactly "#30363d", not
+// string). Any function elsewhere whose parameter default is a color token
+// (e.g. `const card = (accent = DK.border) => ...`) then has its parameter
+// type inferred as that one literal, and calling it with any OTHER color
+// token fails to type-check (TS2345). Widening to plain `string` here fixes
+// that for every such call site at once, rather than patching each one.
 export const colors = {
   // Backgrounds
   background: '#0d1117',   // page background
@@ -43,6 +50,6 @@ export const colors = {
   // Decorative gradient used on a handful of promo/banner cards
   gradientStart: '#667eea',
   gradientEnd: '#764ba2',
-} as const;
+};
 
 export type ColorToken = keyof typeof colors;
