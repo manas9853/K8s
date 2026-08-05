@@ -62,12 +62,12 @@ const UptimeBar: React.FC<{ uptimePct: number }> = ({ uptimePct }) => {
     if (Math.random() < 0.05) return 'partial';
     return 'up';
   });
-  const colors = { up: colors.success, partial: colors.warning, down: colors.danger };
+  const uptimeColors = { up: colors.success, partial: colors.warning, down: colors.danger };
   return (
     <Box display="flex" gap={0.3} alignItems="center">
       {statuses.map((s, i) => (
         <Tooltip key={i} title={`Day ${i + 1}: ${s}`}>
-          <Box sx={{ width: 8, height: 18, bgcolor: colors[s as keyof typeof colors], borderRadius: 0.5, cursor: 'default' }} />
+          <Box sx={{ width: 8, height: 18, bgcolor: uptimeColors[s as keyof typeof uptimeColors], borderRadius: 0.5, cursor: 'default' }} />
         </Tooltip>
       ))}
     </Box>

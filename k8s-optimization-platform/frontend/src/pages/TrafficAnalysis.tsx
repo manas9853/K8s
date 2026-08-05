@@ -32,12 +32,12 @@ const FlowArc: React.FC<{ items: NamespaceTraffic[] }> = ({ items }) => {
   const w = 320, h = 180;
   const cx = w / 2, cy = h / 2;
   const r = 70;
-  const colors = [colors.info, colors.purple, colors.success, colors.warning, colors.danger, colors.info];
+  const nodeColors = [colors.info, colors.purple, colors.success, colors.warning, colors.danger, colors.info];
 
   const angleStep = (2 * Math.PI) / Math.max(top.length, 1);
   const nodes = top.map((item, i) => {
     const angle = i * angleStep - Math.PI / 2;
-    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), ...item, color: colors[i] };
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), ...item, color: nodeColors[i] };
   });
 
   const arcs: React.ReactNode[] = [];
