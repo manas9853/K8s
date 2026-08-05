@@ -79,12 +79,12 @@ const hStatus = (s: number) => s >= 90 ? 'Healthy' : s >= 70 ? 'Degraded' : 'Cri
 const StatusBadge: React.FC<{ score: number }> = ({ score }) => {
   const statuses = ['Healthy', 'Degraded', 'Critical'];
   const active = hStatus(score);
-  const colors: Record<string, string> = { Healthy: colors.success, Degraded: colors.warning, Critical: colors.danger };
+  const statusColors: Record<string, string> = { Healthy: colors.success, Degraded: colors.warning, Critical: colors.danger };
   return (
     <Box display="flex" gap={0.5} mt={1}>
       {statuses.map(s => (
         <Box key={s} px={1} py={0.25} borderRadius={1}
-          sx={{ fontSize: 11, fontWeight: 700, bgcolor: s === active ? colors[s] : colors.surfaceHover, color: s === active ? '#fff' : colors.textSecondary }}>
+          sx={{ fontSize: 11, fontWeight: 700, bgcolor: s === active ? statusColors[s] : colors.surfaceHover, color: s === active ? '#fff' : colors.textSecondary }}>
           {s.toUpperCase()}
         </Box>
       ))}
