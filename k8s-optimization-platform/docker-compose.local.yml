@@ -1,0 +1,180 @@
+# Local dev / podman-compose stack.
+#
+# Unlike docker-compose.yml (production — pulls prebuilt Hub images, expects
+# a hosted Supabase/Upstash, mounts a real cluster's kubeconfig), this file:
+#   - runs Postgres and Redis as local containers (no external services)
+#   - builds backend/frontend images from THIS checkout's source, so local
+#     code changes are actually reflected
+#   - needs no kubeconfig at all to come up — the dashboard works with zero
+#     data until you point an agent at it (see README section this file's
+#     sibling doc explains, or just run agent/start-agent-local.sh separately)
+#
+# Usage (podman-compose or docker-compose, both work):
+#   podman-compose -f docker-compose.local.yml up -d --build
+#   open http://localhost:8080
+#
+# First run only:
+#   cp backend/.env.local backend/.env   (already done for you if using this file as-is)
+
+services:
+  postgres:
+    image: docker.io/library/postgres:15-alpine
+    container_name: k8s-opt-postgres
+    environment:
+      POSTGRES_USER: k8sopt
+      POSTGRES_PASSWORD: k8sopt_local_dev
+      POSTGRES_DB: k8sopt
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      - k8s-opt-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U k8sopt -d k8sopt"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: k8s-opt-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - k8s-opt-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: k8s-opt-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env.local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_logs:/app/logs
+      - backend_data:/app/data
+    restart: unless-stopped
+    networks:
+      - k8s-opt-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: k8s-opt-worker
+    command: >
+      celery -A celery_app worker
+      --loglevel=info
+      --concurrency=2
+      --queues=celery
+      --hostname=worker@%h
+    env_file:
+      - ./backend/.env.local
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - backend_logs:/app/logs
+      - backend_data:/app/data
+    restart: unless-stopped
+    networks:
+      - k8s-opt-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.local
+      args:
+        REACT_APP_API_URL: /
+    container_name: k8s-opt-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - k8s-opt-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  prometheus:
+    image: docker.io/prom/prometheus:latest
+    container_name: k8s-opt-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    restart: unless-stopped
+    networks:
+      - k8s-opt-network
+
+  grafana:
+    image: docker.io/grafana/grafana:latest
+    container_name: k8s-opt-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - k8s-opt-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  backend_logs:
+    driver: local
+  backend_data:
+    driver: local
+
+networks:
+  k8s-opt-network:
+    driver: bridge
