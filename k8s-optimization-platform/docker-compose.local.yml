@@ -111,6 +111,7 @@ services:
       dockerfile: Dockerfile.local
       args:
         REACT_APP_API_URL: /
+        REACT_APP_CLERK_PUBLISHABLE_KEY: ${REACT_APP_CLERK_PUBLISHABLE_KEY:?Set REACT_APP_CLERK_PUBLISHABLE_KEY in .env at repo root}
     container_name: k8s-opt-frontend
     ports:
       - "8080:80"

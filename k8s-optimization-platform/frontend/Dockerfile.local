@@ -23,6 +23,12 @@ COPY . .
 # the backend directly instead of through the nginx proxy.
 ARG REACT_APP_API_URL=/
 ENV REACT_APP_API_URL=${REACT_APP_API_URL}
+
+# Clerk publishable key — required at build time, app throws without it.
+# Pass your own with --build-arg REACT_APP_CLERK_PUBLISHABLE_KEY=pk_test_...
+ARG REACT_APP_CLERK_PUBLISHABLE_KEY
+ENV REACT_APP_CLERK_PUBLISHABLE_KEY=${REACT_APP_CLERK_PUBLISHABLE_KEY}
+
 RUN npm run build
 
 FROM nginx:alpine
