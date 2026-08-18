@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -63,6 +62,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import PolicyIcon from '@mui/icons-material/Policy';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
@@ -138,7 +138,6 @@ interface Recommendation {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const NetworkPolicies: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
   const [selectedClusterId, setSelectedClusterId] = useState<string>(activeClusterId || 'all');
 
@@ -417,15 +416,7 @@ const NetworkPolicies: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-        <Typography sx={{ color: T.text }} variant="h5">No clusters attached yet</Typography>
-        <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
-          Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: colors.success } }}>Go to Cluster Onboarding</Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   return (

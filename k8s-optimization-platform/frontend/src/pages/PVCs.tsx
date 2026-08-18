@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
 import {
@@ -48,6 +47,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import CloudIcon from '@mui/icons-material/Cloud';
 import { API_BASE_URL } from '../config/api';
+import NoClusterState from '../components/NoClusterState';
 
 interface PVC {
   name: string;
@@ -85,7 +85,6 @@ interface Recommendation {
 }
 
 const PVCs: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading } = useCluster();
   const { clusterParam } = useActiveCluster();
   const [pvcs, setPVCs] = useState<PVC[]>([]);
@@ -536,15 +535,7 @@ const PVCs: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   if (loading) {

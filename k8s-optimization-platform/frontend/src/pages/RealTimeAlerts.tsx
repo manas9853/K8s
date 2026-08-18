@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Chip, LinearProgress,
@@ -31,6 +33,7 @@ interface K8sEvent {
 
 const RealTimeAlerts: React.FC = () => {
   const { activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [alerts, setAlerts] = useState<K8sEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +67,8 @@ const RealTimeAlerts: React.FC = () => {
     if (r.includes('back') || r.includes('evict')) return 'warning';
     return 'info';
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

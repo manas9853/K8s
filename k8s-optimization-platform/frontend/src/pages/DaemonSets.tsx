@@ -64,6 +64,7 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import DnsIcon from '@mui/icons-material/Dns';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
@@ -410,15 +411,7 @@ const DaemonSets: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-        <Typography sx={{ color: T.text }} variant="h5">No clusters attached yet</Typography>
-        <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
-          Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: colors.success } }}>Go to Cluster Onboarding</Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   return (

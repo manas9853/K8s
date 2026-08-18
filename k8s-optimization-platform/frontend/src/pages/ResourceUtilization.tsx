@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -12,7 +11,6 @@ import {
   LinearProgress,
   Chip,
   Tooltip,
-  Button,
   FormControl,
   InputLabel,
   Select,
@@ -24,9 +22,9 @@ import {
   Storage as StorageIcon,
   NetworkCheck as NetworkIcon,
   Widgets as PodsIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
+  } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import NoClusterState from '../components/NoClusterState';
 
 interface ResourceData {
   capacity_cores?: number;
@@ -60,7 +58,6 @@ interface ResourceUtilizationData {
 }
 
 const ResourceUtilization: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
 
   const [data, setData] = useState<ResourceUtilizationData[]>([]);
@@ -135,25 +132,7 @@ const ResourceUtilization: React.FC = () => {
 
   // ── No clusters registered — script not run yet ───────────────────────────
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">
-          No clusters attached yet
-        </Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Resource utilization is scoped to registered clusters. Run the
-          onboarding script or connect a cluster first, then come back here
-          to see live utilization data.
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/cluster-onboarding')}
-        >
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   if (loading && data.length === 0) {

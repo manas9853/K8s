@@ -25,7 +25,6 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
   TrendingUp as TrendingUpIcon,
-  Add as AddIcon,
   Storage as StorageIcon,
   Dns as DnsIcon,
   Memory as MemoryIcon,
@@ -35,6 +34,7 @@ import {
 } from '@mui/icons-material';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../config/api';
+import NoClusterState from '../components/NoClusterState';
 
 const CommandCenter: React.FC = () => {
   const navigate = useNavigate();
@@ -123,18 +123,7 @@ const CommandCenter: React.FC = () => {
   }
 
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          The Command Center aggregates live data from all registered clusters. Connect a cluster
-          first and the platform metrics, trends, and alerts will populate automatically.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   return (

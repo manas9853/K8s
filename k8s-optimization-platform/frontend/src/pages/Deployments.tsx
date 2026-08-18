@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -65,6 +64,7 @@ import HistoryIcon from '@mui/icons-material/History';
 import UpdateIcon from '@mui/icons-material/Update';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 interface Container {
   name: string;
@@ -116,7 +116,6 @@ interface Recommendation {
 }
 
 const Deployments: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
   const [selectedClusterId, setSelectedClusterId] = useState<string>(activeClusterId || 'all');
   const [selectedNamespace, setSelectedNamespace] = useState<string>('all');
@@ -463,15 +462,7 @@ const Deployments: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Connect a cluster first using the Cluster Onboarding page, then come back here to see live deployment data.
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   const unhealthyDeployments = deployments.filter(dep => dep.replicas_ready === 0 && dep.replicas_desired > 0).length;

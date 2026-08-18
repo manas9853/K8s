@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -29,6 +31,7 @@ interface NodeRow {
 
 const NodeOptimization: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [nodes, setNodes] = useState<NodeRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +69,8 @@ const NodeOptimization: React.FC = () => {
     if (pct > 60) return 'warning';
     return 'success';
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

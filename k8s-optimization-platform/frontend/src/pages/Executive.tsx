@@ -24,9 +24,9 @@ import {
   Warning,
   CheckCircle,
   Info,
-  Add as AddIcon,
-} from '@mui/icons-material';
+  } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import NoClusterState from '../components/NoClusterState';
 
 interface ExecutiveKPIs {
   total_monthly_spend: number;
@@ -148,18 +148,7 @@ const Executive: React.FC = () => {
   }
 
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Executive metrics are calculated from registered clusters. Connect a cluster via
-          the Cluster Onboarding page and KPIs, insights and cost trends will populate automatically.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   if (loading) {

@@ -15,8 +15,7 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
-  Button,
-} from '@mui/material';
+  } from '@mui/material';
 import {
   TrendingDown,
   Storage,
@@ -24,12 +23,11 @@ import {
   AccountTree,
   Dns
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
-import { Add as AddIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import NoClusterState from '../components/NoClusterState';
 
 interface ClusterSummary {
   total_clusters: number;
@@ -98,7 +96,6 @@ interface ClusterFilter {
 }
 
 const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
   // 🌐 Cluster-scoped: re-fetches whenever the active cluster changes or is deleted
   const { clusterParam, activeClusterName, activeClusterId } = useActiveCluster();
   const { clusters, loading: clustersLoading } = useCluster();
@@ -316,18 +313,7 @@ const Dashboard: React.FC = () => {
   }
 
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          The dashboard aggregates data from all registered clusters. Connect a cluster
-          first using the Cluster Onboarding page and metrics will start appearing here.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   if (loading) {

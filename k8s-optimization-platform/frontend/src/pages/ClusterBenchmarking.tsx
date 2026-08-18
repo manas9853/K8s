@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
-import { Button, CircularProgress, Alert } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
+import { CircularProgress, Alert } from '@mui/material';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 interface BenchmarkMetric {
@@ -316,7 +315,6 @@ function RefreshIcon() {
    Main Component
 ────────────────────────────────────────────────────────────────────────────── */
 const ClusterBenchmarking: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId } = useCluster();
 
   const [benchmarkData, setBenchmarkData] = useState<ClusterBenchmarkData[]>([]);
@@ -362,17 +360,7 @@ const ClusterBenchmarking: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <div style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
-        <div style={{ fontSize: 20, fontWeight: 600, color: T.muted }}>No clusters attached yet</div>
-        <div style={{ fontSize: 14, color: T.muted, maxWidth: 480, textAlign: 'center', lineHeight: 1.6 }}>
-          Benchmark data is scoped to registered clusters. Connect a cluster first using Cluster Onboarding, then come back here to see live benchmark results.
-        </div>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </div>
-    );
+    return <NoClusterState />;
   }
 
   /* ── Derived summary stats ── */

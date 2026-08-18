@@ -1,22 +1,22 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box, Card, CardContent, Typography, Grid, CircularProgress, Alert,
   LinearProgress, Chip, List, ListItem, ListItemIcon, ListItemText,
-  Paper, Button, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent,
+  Paper, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent,
   Tooltip, Divider, IconButton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon, Warning as WarningIcon, Error as ErrorIcon,
-  Lightbulb as LightbulbIcon, Add as AddIcon, Refresh as RefreshIcon,
+  Lightbulb as LightbulbIcon, Refresh as RefreshIcon,
   TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon,
   Timeline as TimelineIcon, Speed as SpeedIcon, Memory as MemoryIcon,
   Storage as StorageIcon, Widgets as PodsIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 interface ClusterHealthData {
   cluster_id: string;
@@ -112,7 +112,6 @@ const MetricBar: React.FC<{ label: string; value: number; optimal?: string }> = 
 };
 
 const ClusterHealth: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
   const [healthData, setHealthData] = useState<ClusterHealthData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -150,17 +149,7 @@ const ClusterHealth: React.FC = () => {
 
   if (clustersLoading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Connect a cluster via Cluster Onboarding — health monitoring will populate automatically.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   // Summary stats across all fetched clusters

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
 import {
@@ -34,7 +33,6 @@ import {
   Warning as WarningIcon,
   CheckCircle as CheckCircleIcon,
   Refresh as RefreshIcon,
-  Add as AddIcon,
   Assessment as AssessmentIcon,
 } from '@mui/icons-material';
 import {
@@ -54,6 +52,7 @@ import {
 } from 'recharts';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 interface ScoreFactor {
   name: string;
@@ -121,7 +120,6 @@ const gradeChipColor = (grade: string): 'success' | 'primary' | 'warning' | 'err
 };
 
 const Scoring: React.FC = () => {
-  const navigate = useNavigate();
   const { clusterParam } = useActiveCluster();
   const { clusters, loading: clustersLoading } = useCluster();
   const [clusterScores, setClusterScores] = useState<ClusterScore[]>([]);
@@ -188,18 +186,7 @@ const Scoring: React.FC = () => {
   }
 
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="text.secondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="text.secondary" textAlign="center" maxWidth={480}>
-          Scoring data is calculated from registered clusters. Connect a cluster via the
-          Cluster Onboarding page and optimization scores will appear automatically.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   if (loading) {
