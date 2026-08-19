@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Switch,
@@ -86,6 +88,7 @@ async function pollCommand(cmdId: number): Promise<{ ok: boolean; errMsg?: strin
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const BulkFixes: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]       = useState<BulkPayload | null>(null);
   const [loading, setLoading]       = useState(true);
   const [nsFilter, setNsFilter]     = useState<string>('all');
@@ -166,6 +169,8 @@ const BulkFixes: React.FC = () => {
   const selOps = ops.filter(o => selected.has(o.operation_id));
   const selSavings = selOps.reduce((s, o) => s + o.total_savings, 0);
   const selResources = selOps.reduce((s, o) => s + o.affected_resources, 0);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

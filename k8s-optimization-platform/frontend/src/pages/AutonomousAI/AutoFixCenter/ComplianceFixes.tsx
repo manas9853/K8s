@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Tabs, Tab,
@@ -92,6 +94,7 @@ async function pollCommand(cmdId: number): Promise<{ ok: boolean; errMsg?: strin
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const ComplianceFixes: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]   = useState<CompPayload | null>(null);
   const [loading, setLoading]   = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -148,6 +151,8 @@ const ComplianceFixes: React.FC = () => {
   const fwScore  = fwFixes.length > 0 ? Math.round((fwFixed / fwFixes.length) * 100) : 100;
   const fwColor  = FW_COLOR[activeFw] ?? colors.info;
   const fwUnfixed = fwFixes.filter(f => !fixedIds.has(f.fix_id));
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

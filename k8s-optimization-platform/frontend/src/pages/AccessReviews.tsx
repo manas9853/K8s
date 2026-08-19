@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -78,6 +80,7 @@ function deriveAccessStatus(
 
 const TeamAccessReviews: React.FC = () => {
   const { activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<AccessReviewRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; severity: 'success' | 'error' } | null>(null);
@@ -153,6 +156,8 @@ const TeamAccessReviews: React.FC = () => {
     if (status === 'Pending')  return <HourglassIcon   color="warning" fontSize="small" />;
     return                            <BlockIcon        color="error"   fontSize="small" />;
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

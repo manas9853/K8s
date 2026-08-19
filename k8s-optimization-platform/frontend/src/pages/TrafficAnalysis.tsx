@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, IconButton,
@@ -89,6 +91,7 @@ const SecurityRing: React.FC<{ score: number }> = ({ score }) => {
 
 const TrafficAnalysis: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [trafficData, setTrafficData] = useState<NamespaceTraffic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +131,8 @@ const TrafficAnalysis: React.FC = () => {
   const exposedNs = trafficData.filter(d => d.external_services > 0 && d.network_policies === 0).length;
 
   const secColor = (s: number) => s >= 80 ? colors.success : s >= 60 ? colors.warning : colors.danger;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>

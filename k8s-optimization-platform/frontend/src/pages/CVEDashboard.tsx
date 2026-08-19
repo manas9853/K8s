@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { Box, Typography, CircularProgress, Alert, Stack, Tooltip } from '@mui/material';
 import {
   BugReport as BugIcon,
@@ -99,6 +101,7 @@ const SevChip: React.FC<{ sev: string }> = ({ sev }) => {
 /* ── Main component ─────────────────────────────────────────────────── */
 const CVEDashboard: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data, setData] = useState<CVEDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -153,6 +156,8 @@ const CVEDashboard: React.FC = () => {
   const topFindings = [...data.cves]
     .filter(c => c.severity === 'high' || c.severity === 'critical')
     .slice(0, 4);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3, color: T.text }}>

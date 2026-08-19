@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Grid, LinearProgress,
   IconButton, Alert, Paper, Table, TableBody, TableCell,
@@ -90,6 +92,7 @@ const EndpointBar: React.FC<{ ready: number; total: number }> = ({ ready, total 
 
 const ServiceHealth: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [services, setServices] = useState<ServiceHealthItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -157,6 +160,8 @@ const ServiceHealth: React.FC = () => {
     { label: 'Endpoint Health', slo: 99.5, actual: (healthy / Math.max(services.length, 1)) * 100 },
     { label: 'ClusterIP Reachability', slo: 99.99, actual: 99.94 },
   ];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>

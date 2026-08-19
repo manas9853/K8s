@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -52,6 +54,7 @@ interface Recommendation {
 
 const MemoryRightsizing: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -139,6 +142,8 @@ const MemoryRightsizing: React.FC = () => {
   }
 
   const totals = calculateTotals();
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box>

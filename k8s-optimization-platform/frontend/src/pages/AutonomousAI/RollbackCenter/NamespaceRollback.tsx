@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, TextField,
@@ -194,6 +196,7 @@ const NsCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const NamespaceRollback: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<NsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -250,6 +253,8 @@ const NamespaceRollback: React.FC = () => {
 
   const namespaces = data?.namespaces ?? [];
   const extremeCount = namespaces.filter(n => n.risk === 'extreme').length;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

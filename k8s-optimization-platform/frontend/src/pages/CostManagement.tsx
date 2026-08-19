@@ -10,6 +10,8 @@ import StorageIcon from '@mui/icons-material/Storage';
 import CloudIcon from '@mui/icons-material/Cloud';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import { colors } from '../theme/colors';
@@ -21,6 +23,7 @@ const fmt = (n: number | null | undefined) =>
 
 const CostManagement: React.FC = () => {
   const { clusterParam, activeClusterId } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +54,8 @@ const CostManagement: React.FC = () => {
 
   const bs = data.budget_status;
   const budgetPct = bs ? Math.min(Math.round(bs.utilization_percentage), 100) : 0;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

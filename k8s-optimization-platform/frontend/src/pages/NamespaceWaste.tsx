@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -69,6 +71,7 @@ const StatCard: React.FC<{ label: string; value: string | number; sub?: string; 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const NamespaceWaste: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [rows,       setRows]      = useState<NsRow[]>([]);
   const [loading,    setLoading]   = useState(true);
   const [error,      setError]     = useState<string | null>(null);
@@ -130,6 +133,8 @@ const NamespaceWaste: React.FC = () => {
       <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

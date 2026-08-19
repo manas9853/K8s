@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Switch,
@@ -69,6 +71,7 @@ const KpiCard: React.FC<{ label: string; value: number | string; accent?: string
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const AssistedMode: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]     = useState<AssistedPayload | null>(null);
   const [loading, setLoading]     = useState(true);
   const [toggling, setToggling]   = useState<string | null>(null);
@@ -132,6 +135,8 @@ const AssistedMode: React.FC = () => {
   // Group rules by category
   const grouped: Record<string, Rule[]> = {};
   rules.forEach(r => { (grouped[r.category] ??= []).push(r); });
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

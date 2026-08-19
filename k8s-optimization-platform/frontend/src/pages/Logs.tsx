@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Card,
@@ -33,6 +35,7 @@ import { colors } from '../theme/colors';
 
 const Logs: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
 
   // ── Selectors ─────────────────────────────────────────────────────────────
   const [namespaces, setNamespaces] = useState<string[]>([]);
@@ -192,6 +195,8 @@ const Logs: React.FC = () => {
         return chunk.filter(l => /error|warn/i.test(l)).length * 2 + chunk.length;
       })
     : [];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

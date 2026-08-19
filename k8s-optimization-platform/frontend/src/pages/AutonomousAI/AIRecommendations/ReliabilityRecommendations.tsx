@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button,
@@ -178,6 +180,7 @@ const RiskMatrix: React.FC<{ recs: Rec[] }> = ({ recs }) => {
 // ─── Main component ───────────────────────────────────────────────────────────
 const ReliabilityRecommendations: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ReliabilityPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -228,6 +231,8 @@ const ReliabilityRecommendations: React.FC = () => {
 
   const recs = data?.recommendations ?? [];
   const fixTypes = [...new Set(recs.map(r => r.fix_type))];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

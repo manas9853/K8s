@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Grid, Card, CardContent, Chip, CircularProgress,
   Alert, Button, Stack, Tooltip, Table, TableBody,
@@ -41,6 +43,7 @@ const SEV_BG:    Record<string, string> = { critical: colors.dangerBg,  high: co
 
 const RuntimeSecurity: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data, setData] = useState<RuntimeSecurityData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,6 +90,8 @@ const RuntimeSecurity: React.FC = () => {
   });
 
   const criticalThreats = threats.filter(t => t.severity === 'critical');
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

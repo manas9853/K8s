@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { Box, Typography, CircularProgress, Alert, Stack, Tooltip, Collapse } from '@mui/material';
 import {
   BugReport as BugIcon,
@@ -320,6 +322,7 @@ const ImageRow: React.FC<{ img: ImageResult }> = ({ img }) => {
 /* ── Main page ──────────────────────────────────────────────────────── */
 const ImageScanning: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -372,6 +375,8 @@ const ImageScanning: React.FC = () => {
   const bandCounts = images.reduce((acc, img) => {
     acc[img.risk_level] = (acc[img.risk_level] ?? 0) + 1; return acc;
   }, {} as Record<string,number>);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor:T.bg, minHeight:'100vh', p:3, color:T.text }}>

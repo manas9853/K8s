@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Grid, LinearProgress,
   IconButton, Alert, Paper, Table, TableBody, TableCell,
@@ -112,6 +114,7 @@ const genHistory = (current: number, points = 14) =>
 
 const Metrics: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [metrics, setMetrics] = useState<NamespaceMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +161,8 @@ const Metrics: React.FC = () => {
   // Multi-series chart data from all namespaces (top 5 by CPU)
   const top5 = [...filtered].sort((a, b) => b.cpu_usage - a.cpu_usage).slice(0, 5);
   const chartColors = [colors.info, colors.purple, colors.success, colors.warning, colors.danger];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>

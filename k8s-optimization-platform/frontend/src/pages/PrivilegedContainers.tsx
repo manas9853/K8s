@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Grid, Card, CardContent, Chip, CircularProgress,
   Alert, Button, Tooltip, Table, TableBody, TableCell,
@@ -30,6 +32,7 @@ const MATRIX_CHECKS: Array<{ key: string; label: string; dangerWhenTrue: boolean
 
 const PrivilegedContainers: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -90,6 +93,8 @@ const PrivilegedContainers: React.FC = () => {
     { label: 'With Host PID/Net', count: allContainers.filter(c => c.host_network || c.host_pid || c.host_ipc).length, color: colors.warning, bg: colors.warningBg },
     { label: 'Total Containers',  count: data.total_containers ?? 0,                     color: colors.info, bg: colors.infoBg },
   ];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

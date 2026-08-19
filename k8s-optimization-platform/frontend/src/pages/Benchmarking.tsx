@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Paper,
@@ -54,6 +56,7 @@ interface ClusterBenchmark {
 
 const Benchmarking: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters: registeredClusters } = useCluster();
   const [clusters, setClusters] = useState<ClusterBenchmark[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -91,6 +94,8 @@ const Benchmarking: React.FC = () => {
     cluster_name: c.cluster_name,
     overall_score: c.overall_score,
   }));
+
+  if (registeredClusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Alert, Box, Card, CardContent, Chip, CircularProgress, Grid, Paper,
   Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography,
@@ -49,6 +51,7 @@ const STATUS_COLOR: Record<string, string> = {
 
 const AutoRemediation: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<AutoRemediationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -90,6 +93,8 @@ const AutoRemediation: React.FC = () => {
   const successRate = data.success_rate ?? 0;
   const successColor = successRate >= 80 ? colors.success : successRate >= 50 ? colors.warning : colors.danger;
   const r = 54, circ = 2 * Math.PI * r, dash = (Math.min(successRate, 100) / 100) * circ;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

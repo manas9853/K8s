@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -248,6 +250,7 @@ const IssueCard: React.FC<{
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const SecurityAdvisor: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]       = useState<SecurityPayload | null>(null);
   const [loading, setLoading]       = useState(true);
   const [applying, setApplying]     = useState<string | null>(null);
@@ -345,6 +348,8 @@ const SecurityAdvisor: React.FC = () => {
     const group = issues.filter(i => i.severity === sev);
     if (group.length > 0) grouped[sev] = group;
   }
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

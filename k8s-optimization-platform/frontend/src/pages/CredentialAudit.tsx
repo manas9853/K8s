@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
 
@@ -55,6 +57,7 @@ interface CredData {
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function CredentialAudit() {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data,    setData]    = useState<CredData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
@@ -108,6 +111,8 @@ export default function CredentialAudit() {
   const sc           = scoreColor(score);
   const circumference = 251.3;
   const dash         = (score / 100) * circumference;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', padding: '24px', fontFamily: '-apple-system,"Segoe UI",system-ui,sans-serif', color: T.text, fontSize: 14 }}>

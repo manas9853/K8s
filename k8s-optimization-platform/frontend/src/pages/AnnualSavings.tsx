@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box, Typography, Grid, Card, CardContent, Paper, Table, TableBody,
@@ -25,6 +27,7 @@ const fmtK = (n: number) => n >= 1000 ? `$${(n/1000).toFixed(1)}k` : `$${n.toFix
 
 const AnnualSavings: React.FC = () => {
   const { clusterParam, activeClusterId } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +107,8 @@ const AnnualSavings: React.FC = () => {
   const roi      = implCost > 0 ? ((data.yearly_savings - implCost) / implCost) * 100 : 0;
 
   const tooltipStyle = { backgroundColor: colors.surface, border: `1px solid ${colors.border}`, color: colors.textPrimary };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>

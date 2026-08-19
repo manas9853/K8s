@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import CostAccuracyBanner from '../../../components/CostAccuracyBanner';
 import {
   Box, Typography, Chip, CircularProgress,
@@ -153,6 +155,7 @@ const RecCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const CostRecommendations: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<CostPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -207,6 +210,8 @@ const CostRecommendations: React.FC = () => {
   const maxCost = nsCosts.length > 0 ? Math.max(...nsCosts.map(n => n.cost)) : 1;
   const selectedTotal = recs.filter(r => checked[r.id] && !done[r.id]).reduce((s, r) => s + r.savings, 0);
   const selectedCount = Object.values(checked).filter(Boolean).length;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

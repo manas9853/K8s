@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -97,6 +99,7 @@ const KpiCard: React.FC<{ label: string; value: string | number; accent?: string
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const OptimizationAdvisor: React.FC = () => {
   const { activeClusterId, activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]       = useState<AdvisorPayload | null>(null);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState<Set<string>>(new Set());
@@ -200,6 +203,8 @@ const OptimizationAdvisor: React.FC = () => {
       <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

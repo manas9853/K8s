@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button,
@@ -90,6 +92,7 @@ const DiffRow: React.FC<{ label: string; from: string; to: string }> = ({ label,
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const ManualMode: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]       = useState<ManualPayload | null>(null);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState<Rec | null>(null);
@@ -196,6 +199,8 @@ const ManualMode: React.FC = () => {
 
   // When selected item is dismissed, auto-advance to next
   const visibleSelected = selected && !dismissed.has(selected.id) ? selected : (recs[0] ?? null);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

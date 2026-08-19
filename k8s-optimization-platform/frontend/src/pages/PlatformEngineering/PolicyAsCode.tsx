@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
+import { useCluster } from '../../contexts/ClusterContext';
+import NoClusterState from '../../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -21,6 +23,7 @@ interface PolicyViolation {
 
 const PolicyAsCode: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<PolicyViolation[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +47,8 @@ const PolicyAsCode: React.FC = () => {
     if (s === 'Medium') return 'info';
     return 'default';
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

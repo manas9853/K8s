@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Grid, Card, CardContent, Chip, CircularProgress,
   Alert, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow
@@ -33,6 +35,7 @@ const SEV_COLOR: Record<string, string> = {
 
 const LeastPrivilegeReview: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<LeastPrivilegeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +85,8 @@ const LeastPrivilegeReview: React.FC = () => {
 
   const r = 54; const circ = 2 * Math.PI * r;
   const dash = (Math.min(score, 100) / 100) * circ;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

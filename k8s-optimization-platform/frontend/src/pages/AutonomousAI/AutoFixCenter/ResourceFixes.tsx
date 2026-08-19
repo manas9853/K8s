@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Checkbox,
@@ -158,6 +160,7 @@ const FixCard: React.FC<{
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const ResourceFixes: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]     = useState<ResourcePayload | null>(null);
   const [loading, setLoading]     = useState(true);
   const [selected, setSelected]   = useState<Set<string>>(new Set());
@@ -218,6 +221,8 @@ const ResourceFixes: React.FC = () => {
   const CATS    = ['CPU_WASTE', 'MEMORY_WASTE', 'STORAGE_WASTE'];
   const grouped = CATS.reduce((acc, cat) => ({ ...acc, [cat]: fixes.filter(f => f.category === cat) }), {} as Record<string, Fix[]>);
   const selSavings = fixes.filter(f => selected.has(f.fix_id)).reduce((s, f) => s + f.savings, 0);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

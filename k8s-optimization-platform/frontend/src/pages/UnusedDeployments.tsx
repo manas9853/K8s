@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -303,6 +305,7 @@ const DeploymentRow: React.FC<{ d: UnusedDeployment }> = ({ d }) => {
 // ── Main page ─────────────────────────────────────────────────────────────────
 const UnusedDeployments: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [deployments, setDeployments] = useState<UnusedDeployment[]>([]);
   const [summary, setSummary]         = useState<Summary | null>(null);
   const [loading, setLoading]         = useState(true);
@@ -354,6 +357,8 @@ const UnusedDeployments: React.FC = () => {
       </Box>
     );
   }
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3, bgcolor: T.bg, minHeight: '100vh' }}>

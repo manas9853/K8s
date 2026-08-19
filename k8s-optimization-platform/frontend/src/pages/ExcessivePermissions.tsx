@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Grid, Card, CardContent, Chip, CircularProgress,
   Alert, LinearProgress, Stack, Table, TableBody, TableCell,
@@ -36,6 +38,7 @@ const SEV_TEXT: Record<string, string> = { critical: colors.danger, high: colors
 
 const ExcessivePermissions: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ExcessivePermissionsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +86,8 @@ const ExcessivePermissions: React.FC = () => {
     { label: 'High Risk',     count: data.high_risk    ?? 0, color: colors.warning },
     { label: 'Medium Risk',   count: data.medium_risk  ?? 0, color: colors.info },
   ];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

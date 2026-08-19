@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Paper,
@@ -27,6 +29,7 @@ import { API_BASE_URL } from '../config/api';
 
 const Audit: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [logs, setLogs] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -59,6 +62,8 @@ const Audit: React.FC = () => {
     log.user.toLowerCase().includes(searchTerm.toLowerCase()) ||
     log.resource.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

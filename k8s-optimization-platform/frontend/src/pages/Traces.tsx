@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Grid, Alert, Chip, Tooltip,
   Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -75,6 +77,7 @@ const HistBar: React.FC<{ label: string; value: number; maxVal: number; color: s
 
 const Traces: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<TracesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -133,6 +136,8 @@ const Traces: React.FC = () => {
   const totalRestarts = data.services.reduce((a, s) => a + s.total_restarts, 0);
 
   const topLatency = Math.max(...services.slice(0, 8).map(s => s.p99_latency_ms), 1);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>

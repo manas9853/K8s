@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { Box, Typography, CircularProgress, Alert, Stack, Tooltip } from '@mui/material';
 import {
   AccountTree as DepIcon,
@@ -117,6 +119,7 @@ const SourceBadge: React.FC<{ source: string }> = ({ source }) => {
 
 const DependencyScanning: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<DepData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -167,6 +170,8 @@ const DependencyScanning: React.FC = () => {
 
   // top packages by severity for spotlight
   const critHighDeps = deps.filter(d => d.severity === 'critical' || d.severity === 'high').slice(0, 5);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor:T.bg, minHeight:'100vh', p:3, color:T.text }}>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, CircularProgress, Alert, Stack
 } from '@mui/material';
@@ -95,6 +97,7 @@ const SevChip: React.FC<{ count: number; level: 'critical'|'high'|'medium'|'low'
 /* ── Main component ─────────────────────────────────────────────────── */
 const SecurityScore: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data, setData] = useState<SecurityScoreData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -151,6 +154,8 @@ const SecurityScore: React.FC = () => {
   const R  = (sz - 18) / 2;
   const C  = 2 * Math.PI * R;
   const D  = (os.overall_score / 100) * C;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3, color: T.text }}>

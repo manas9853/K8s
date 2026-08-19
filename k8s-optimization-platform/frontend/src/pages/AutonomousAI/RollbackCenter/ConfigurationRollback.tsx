@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button,
@@ -154,6 +156,7 @@ const ResourceCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const ConfigurationRollback: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ConfigPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -207,6 +210,8 @@ const ConfigurationRollback: React.FC = () => {
   const configmaps = data?.configmaps ?? [];
   const secrets = data?.secrets ?? [];
   const activeList: ConfigResource[] = tab === 0 ? configmaps : secrets;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

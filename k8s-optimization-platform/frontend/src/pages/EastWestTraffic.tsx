@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Alert,
   Box,
@@ -57,6 +59,7 @@ const SEVERITY_COLOR: Record<string, string> = {
 
 const EastWestTraffic: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<EastWestData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,6 +125,8 @@ const EastWestTraffic: React.FC = () => {
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const dash = (Math.min(score, 100) / 100) * circumference;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent, Chip, CircularProgress as MuiCircularProgress,
   Alert, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -140,6 +142,7 @@ const NAV_TILES = [
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const SecurityCommandCenter: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data,       setData]      = useState<CommandCenterData | null>(null);
   const [loading,    setLoading]   = useState(true);
@@ -196,6 +199,8 @@ const SecurityCommandCenter: React.FC = () => {
   const cellSx  = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.5 };
   const headSx  = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
     textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: colors.surfaceAlt };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

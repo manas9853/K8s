@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
+import { useCluster } from '../../contexts/ClusterContext';
+import NoClusterState from '../../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -20,6 +22,7 @@ interface Standard {
 
 const PlatformStandards: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<Standard[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +39,8 @@ const PlatformStandards: React.FC = () => {
   const avgCompliance = data.length > 0 ? Math.round(data.reduce((s, r) => s + r.compliance, 0) / data.length) : 0;
   const passCount = data.filter((r) => r.status === 'Pass' || r.status === 'Compliant').length;
   const totalViolations = data.reduce((s, r) => s + r.violations, 0);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

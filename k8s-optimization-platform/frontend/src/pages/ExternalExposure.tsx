@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Grid, Chip, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Paper, LinearProgress, Alert
@@ -29,6 +31,7 @@ const riskColor = (level: string): 'error' | 'warning' | 'info' | 'default' => {
 
 const ExternalExposure: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [services, setServices] = useState<ExposedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -54,6 +57,8 @@ const ExternalExposure: React.FC = () => {
   const loadBalancers = services.filter(s => s.type === 'LoadBalancer').length;
   const nodePorts = services.filter(s => s.type === 'NodePort').length;
   const critical = services.filter(s => s.risk_level === 'Critical').length;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>

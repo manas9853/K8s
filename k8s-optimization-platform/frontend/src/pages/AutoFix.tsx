@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Grid,
@@ -98,6 +100,7 @@ interface Summary {
 
 const AutoFix: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [actions, setActions] = useState<FixAction[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -261,6 +264,8 @@ const AutoFix: React.FC = () => {
       </Box>
     );
   }
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Collapse,
@@ -141,6 +143,7 @@ const SecFixCard: React.FC<{
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const SecurityFixes: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]   = useState<SecPayload | null>(null);
   const [loading, setLoading]   = useState(true);
   const [applying, setApplying] = useState<string | null>(null);
@@ -193,6 +196,8 @@ const SecurityFixes: React.FC = () => {
   const grouped: Record<string, SecFix[]> = {};
   ['critical', 'high', 'medium'].forEach(s => { const g = fixes.filter(f => f.severity === s); if (g.length) grouped[s] = g; });
   const criticalUnfixed = fixes.filter(f => f.severity === 'critical' && !fixedIds.has(f.fix_id));
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

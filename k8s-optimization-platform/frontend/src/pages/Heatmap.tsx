@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
@@ -72,6 +74,7 @@ interface Summary {
 
 const Heatmap: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters: registeredClusters } = useCluster();
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
   const [resourceWaste, setResourceWaste] = useState<ResourceWaste[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -166,6 +169,8 @@ const Heatmap: React.FC = () => {
     acc[cell.cluster].push(cell);
     return acc;
   }, {} as Record<string, HeatmapCell[]>);
+
+  if (registeredClusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

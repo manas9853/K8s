@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -151,6 +153,7 @@ const WasteBar: React.FC<{ label: string; pct: number; cur: number; opt: number 
 // ─── Main component ───────────────────────────────────────────────────────────
 const ClusterWaste: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data,    setData]    = useState<WasteData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
@@ -250,6 +253,8 @@ const ClusterWaste: React.FC = () => {
   const ov = data?.overview;
   const cpuBreak = ov?.cost_breakdown?.find(b => b.category.includes('CPU'));
   const memBreak = ov?.cost_breakdown?.find(b => b.category.includes('Memory'));
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

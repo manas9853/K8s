@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Grid,
@@ -105,6 +107,7 @@ interface Summary {
 
 const Rollback: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [changes, setChanges] = useState<ChangeRecord[]>([]);
   const [rollbacks, setRollbacks] = useState<RollbackResult[]>([]);
   const [auditTrail, setAuditTrail] = useState<AuditEntry[]>([]);
@@ -277,6 +280,8 @@ const Rollback: React.FC = () => {
       </Box>
     );
   }
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

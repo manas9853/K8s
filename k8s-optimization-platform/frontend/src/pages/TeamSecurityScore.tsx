@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -69,6 +71,7 @@ function mapScoringRow(raw: Record<string, unknown>): TeamSecurityRow {
 
 const TeamSecurityScore: React.FC = () => {
   const { activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<TeamSecurityRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,6 +114,8 @@ const TeamSecurityScore: React.FC = () => {
     if (grade === 'C') return 'warning';
     return 'error';
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

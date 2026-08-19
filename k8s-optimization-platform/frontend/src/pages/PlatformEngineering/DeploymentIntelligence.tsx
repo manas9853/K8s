@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
+import { useCluster } from '../../contexts/ClusterContext';
+import NoClusterState from '../../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -20,6 +22,7 @@ interface DeploymentRecord {
 
 const DeploymentIntelligence: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<DeploymentRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,6 +39,8 @@ const DeploymentIntelligence: React.FC = () => {
   const healthyCount = data.filter((r) => r.ready_replicas === r.replicas).length;
   const degradedCount = data.filter((r) => r.ready_replicas < r.replicas).length;
   const nsCount = new Set(data.map((r) => r.namespace)).size;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

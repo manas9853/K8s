@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import NoClusterState from '../components/NoClusterState';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -103,6 +104,8 @@ const Ingress: React.FC = () => {
   if (clustersLoading) {
     return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
   }
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

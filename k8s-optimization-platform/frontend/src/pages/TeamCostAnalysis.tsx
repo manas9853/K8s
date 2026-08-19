@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
@@ -58,6 +60,7 @@ function mapTeamCost(raw: Record<string, unknown>): TeamCostRow {
 
 const TeamCostAnalysis: React.FC = () => {
   const { activeClusterName, activeClusterId } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<TeamCostRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,6 +95,8 @@ const TeamCostAnalysis: React.FC = () => {
     if (pct >= 30) return 'warning';
     return 'success';
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

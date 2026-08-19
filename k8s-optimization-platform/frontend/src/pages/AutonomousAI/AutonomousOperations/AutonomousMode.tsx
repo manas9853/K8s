@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Switch,
@@ -58,6 +60,7 @@ const KpiCard: React.FC<{ label: string; value: number; accent?: string }> = ({ 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const AutonomousMode: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]       = useState<AutonomousPayload | null>(null);
   const [loading, setLoading]       = useState(true);
   const [enabled, setEnabled]       = useState(false);
@@ -132,6 +135,8 @@ const AutonomousMode: React.FC = () => {
   const cs = payload?.cluster_summary;
   const glowColor = enabled ? colors.success : DK.border;
   const activities = payload?.recent_activities ?? [];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { Box, Typography, CircularProgress, Alert, Stack, Tooltip, Collapse } from '@mui/material';
 import {
   Build as PatchIcon,
@@ -257,6 +259,7 @@ const PatchCard: React.FC<{ rec: PatchRec; index: number }> = ({ rec, index }) =
 /* ── Main page ──────────────────────────────────────────────────────── */
 const PatchRecommendations: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<PatchData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -300,6 +303,8 @@ const PatchRecommendations: React.FC = () => {
     const matchSev = !sevFilter || r.severity === sevFilter;
     return matchText && matchSev;
   });
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor:T.bg, minHeight:'100vh', p:3, color:T.text }}>

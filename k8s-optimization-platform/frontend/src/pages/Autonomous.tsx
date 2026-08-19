@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Paper,
@@ -92,6 +94,7 @@ interface ModeStats {
 
 const Autonomous: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [modes, setModes] = useState<Mode[]>([]);
   const [currentMode, setCurrentMode] = useState<string>('assisted');
   const [tasks, setTasks] = useState<OptimizationTask[]>([]);
@@ -253,6 +256,8 @@ const Autonomous: React.FC = () => {
     if (filterMode !== 'all' && task.mode !== filterMode) return false;
     return true;
   });
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

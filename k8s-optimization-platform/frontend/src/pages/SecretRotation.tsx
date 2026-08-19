@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
 
@@ -57,6 +59,7 @@ interface RotationData {
 
 export default function SecretRotation() {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData]       = useState<RotationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -124,6 +127,8 @@ export default function SecretRotation() {
 
   const score = data.rotation_score ?? 0;
   const col   = scoreColor(score);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', padding: '24px', fontFamily: '-apple-system,"Segoe UI",system-ui,sans-serif', color: T.text, fontSize: 14 }}>

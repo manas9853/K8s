@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, TextField,
@@ -132,6 +134,7 @@ const DepCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const DeploymentRollback: React.FC = () => {
   const { clusterParam, activeClusterId, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<DeploymentPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -187,6 +190,8 @@ const DeploymentRollback: React.FC = () => {
     d.deployment.toLowerCase().includes(search.toLowerCase()) ||
     d.namespace.toLowerCase().includes(search.toLowerCase())
   );
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

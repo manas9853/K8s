@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
@@ -91,6 +93,7 @@ interface GuardrailAnalysis {
 
 const Guardrails: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [policies, setPolicies] = useState<GuardrailPolicy[]>([]);
   const [analyses, setAnalyses] = useState<GuardrailAnalysis[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -180,6 +183,8 @@ const Guardrails: React.FC = () => {
     name: a.deployment_name.substring(0, 15),
     savings: a.potential_savings,
   }));
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

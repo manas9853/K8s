@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box, Typography, Grid, Card, CardContent, Paper, Table, TableBody,
@@ -23,6 +25,7 @@ const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits
 
 const MonthlySavings: React.FC = () => {
   const { clusterParam, activeClusterId } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -80,6 +83,8 @@ const MonthlySavings: React.FC = () => {
 
   // Build top opportunities from savings_by_application (already sorted by savings)
   const topOpps = data.savings_by_application.slice(0, 10);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>

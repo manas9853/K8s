@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -78,6 +80,7 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
 
 const ZombieResources: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [resources, setResources] = useState<ZombieResource[]>([]);
   const [summary, setSummary]     = useState<CleanupSummary | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -148,6 +151,8 @@ const ZombieResources: React.FC = () => {
       </Box>
     );
   }
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3, bgcolor: T.bg, minHeight: '100vh' }}>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box, Typography, Grid, Card, CardContent, Paper, Chip,
@@ -26,6 +28,7 @@ const tooltipStyle = { backgroundColor: colors.surface, border: `1px solid ${col
 
 const SavingsTrends: React.FC = () => {
   const { clusterParam, activeClusterId } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +100,8 @@ const SavingsTrends: React.FC = () => {
 
   const trendColor = direction === 'increasing' ? colors.success : direction === 'decreasing' ? colors.danger : colors.textPrimary;
   const TrendIcon  = direction === 'increasing' ? TrendingUp : direction === 'decreasing' ? TrendingDown : ShowChart;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>

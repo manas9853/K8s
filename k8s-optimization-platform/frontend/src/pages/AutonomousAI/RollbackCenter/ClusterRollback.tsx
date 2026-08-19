@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, TextField,
@@ -97,6 +99,7 @@ const SnapshotRow: React.FC<{ snap: Snapshot; selected: boolean; onSelect: () =>
 // ─── Main component ───────────────────────────────────────────────────────────
 const ClusterRollback: React.FC = () => {
   const { clusterParam, activeClusterId, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ClusterPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +167,8 @@ const ClusterRollback: React.FC = () => {
       setExecuting(false);
     }
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
 
@@ -37,6 +39,7 @@ const scoreColor = (score: number) => {
 
 export default function ImageTrust() {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData]       = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -118,6 +121,8 @@ export default function ImageTrust() {
   const unknownCount   = data.unknown_trust      ?? images.filter((i: any) => i.trust_level === 'unknown').length;
 
   const scoreDeg = (score / 100) * 251;  // arc length for SVG ring (r=40, circumference≈251)
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', padding: '24px', fontFamily: '-apple-system,"Segoe UI",system-ui,sans-serif', color: T.text, fontSize: 14 }}>

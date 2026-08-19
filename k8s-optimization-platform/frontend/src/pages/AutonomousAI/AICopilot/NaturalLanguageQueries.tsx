@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -257,6 +259,7 @@ const AIBubble: React.FC<{
 
 const NaturalLanguageQueries: React.FC = () => {
   const { activeClusterId, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
 
   const [input, setInput]               = useState('');
   const [loading, setLoading]           = useState(false);
@@ -357,6 +360,8 @@ const NaturalLanguageQueries: React.FC = () => {
       // Silently ignore — the UI already shows "Thanks!" / "Noted"
     }
   }, [activeClusterId]);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', gap: 0 }}>

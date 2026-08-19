@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Card,
@@ -53,6 +55,7 @@ interface RootContainersData {
 
 const RootContainers: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<RootContainersData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -90,6 +93,8 @@ const RootContainers: React.FC = () => {
   if (!data) {
     return <Alert severity="error">Failed to load root containers data</Alert>;
   }
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>
