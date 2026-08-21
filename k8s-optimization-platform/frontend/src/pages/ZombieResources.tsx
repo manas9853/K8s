@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -19,20 +21,21 @@ import {
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:       '#0f1724',
-  card:     '#1e2433',
-  hover:    '#252e42',
-  border:   '#2a3245',
-  text:     '#e8eaf0',
-  muted:    '#8b95a9',
-  body:     '#c8cdd8',
-  green:    '#4ade80',
-  greenDim: '#14532d',
-  red:      '#f87171',
-  redDim:   '#450a0a',
+  bg:       colors.background,
+  card:     colors.surface,
+  hover:    colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
+  body:     colors.textMuted,
+  green:    colors.success,
+  greenDim: colors.successBg,
+  red:      colors.danger,
+  redDim:   colors.dangerBg,
 };
 
 interface ZombieResource {
@@ -60,9 +63,9 @@ interface CleanupSummary {
 }
 
 const RISK_COLORS: Record<string, string> = {
-  Low:    '#4ade80',
-  Medium: '#f59e0b',
-  High:   '#f87171',
+  Low:    colors.success,
+  Medium: colors.warning,
+  High:   colors.danger,
 };
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -77,6 +80,7 @@ const TYPE_ICONS: Record<string, React.ReactNode> = {
 
 const ZombieResources: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [resources, setResources] = useState<ZombieResource[]>([]);
   const [summary, setSummary]     = useState<CleanupSummary | null>(null);
   const [loading, setLoading]     = useState(true);
@@ -128,9 +132,11 @@ const ZombieResources: React.FC = () => {
   const statCards = summary ? [
     { label: 'Total Candidates',  value: summary.total_resources,   color: T.text },
     { label: 'Safe to Delete',    value: summary.safe_to_delete,    color: T.green },
-    { label: 'Requires Review',   value: summary.requires_review,   color: '#f59e0b' },
+    { label: 'Requires Review',   value: summary.requires_review,   color: colors.warning },
     { label: 'High Risk',         value: summary.high_risk,         color: T.red },
   ] : [];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) {
     return (
@@ -344,8 +350,8 @@ const ZombieResources: React.FC = () => {
                       label={`${r.days_unused}d`}
                       size="small"
                       sx={{
-                        bgcolor: r.days_unused > 180 ? T.redDim : r.days_unused > 60 ? '#451a03' : T.border,
-                        color:   r.days_unused > 180 ? T.red     : r.days_unused > 60 ? '#f59e0b'  : T.muted,
+                        bgcolor: r.days_unused > 180 ? T.redDim : r.days_unused > 60 ? colors.warningBg : T.border,
+                        color:   r.days_unused > 180 ? T.red     : r.days_unused > 60 ? colors.warning  : T.muted,
                         fontSize: '0.72rem', fontWeight: 700,
                       }}
                     />

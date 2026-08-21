@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Collapse,
@@ -12,22 +14,23 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const SEV_COLOR: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 // MITRE ATT&CK technique tags derived from rec title keywords
@@ -124,7 +127,7 @@ const RecCard: React.FC<{
         <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
           {done ? (
             <Chip icon={<CheckCircleOutlineIcon />} label="Applied" size="small"
-              sx={{ bgcolor: '#0d1117', color: '#3fb950', border: '1px solid #3fb950', fontSize: '0.68rem' }} />
+              sx={{ bgcolor: colors.background, color: colors.success, border: `1px solid ${colors.success}`, fontSize: '0.68rem' }} />
           ) : (
             <Button size="small" variant="outlined"
               startIcon={applying ? <CircularProgress size={12} /> : <PlayArrowIcon />}
@@ -143,8 +146,8 @@ const RecCard: React.FC<{
         <Box sx={{ borderTop: `1px solid ${DK.border}`, p: 2, bgcolor: DK.surface2, borderRadius: '0 0 8px 8px' }}>
           <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mb: 1.5 }}>{rec.description}</Typography>
           {/* "What an attacker could do" text */}
-          <Box sx={{ bgcolor: '#2d0b0b', border: `1px solid #f8514933`, borderRadius: 1, p: 1.5, mb: 1.5 }}>
-            <Typography sx={{ color: '#f8947a', fontSize: '0.72rem', fontWeight: 600, mb: 0.5 }}>⚠ Attack vector</Typography>
+          <Box sx={{ bgcolor: colors.dangerBg, border: `1px solid ${colors.danger}33`, borderRadius: 1, p: 1.5, mb: 1.5 }}>
+            <Typography sx={{ color: colors.danger, fontSize: '0.72rem', fontWeight: 600, mb: 0.5 }}>⚠ Attack vector</Typography>
             <Typography sx={{ color: DK.muted, fontSize: '0.75rem' }}>
               {rec.priority === 'critical'
                 ? 'An attacker with this access can escape container isolation and execute code on the host node, affecting all pods on that node.'
@@ -170,6 +173,7 @@ const RecCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const SecurityRecommendations: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<SecPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -225,6 +229,8 @@ const SecurityRecommendations: React.FC = () => {
     sev, items: recs.filter(r => r.priority === sev),
   })).filter(g => g.items.length > 0);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
@@ -237,7 +243,7 @@ const SecurityRecommendations: React.FC = () => {
         </Tooltip>
       </Box>
 
-      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: '#3b82f6' }} /></Box>}
+      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: colors.info }} /></Box>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {!loading && data && (
@@ -246,9 +252,9 @@ const SecurityRecommendations: React.FC = () => {
           <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2.5, mb: 3 }}>
             <Typography sx={{ color: DK.muted, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 0.5, mb: 2 }}>Security Summary</Typography>
             <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center' }}>
-              <SevBadge label="Critical" count={data.critical} accent="#f85149" />
-              <SevBadge label="High" count={data.high} accent="#d29922" />
-              <SevBadge label="Medium" count={data.medium} accent="#3b82f6" />
+              <SevBadge label="Critical" count={data.critical} accent={colors.danger} />
+              <SevBadge label="High" count={data.high} accent={colors.warning} />
+              <SevBadge label="Medium" count={data.medium} accent={colors.info} />
               <Box sx={{ ml: 'auto' }}>
                 <Typography sx={{ color: DK.muted, fontSize: '0.78rem' }}>{data.total_recommendations} total recommendations</Typography>
               </Box>

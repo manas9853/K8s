@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Container,
@@ -128,6 +130,7 @@ interface ChangeEvent {
 
 const Recommendations: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [filteredRecommendations, setFilteredRecommendations] = useState<Recommendation[]>([]);
   const [simulationResources, setSimulationResources] = useState<SimulationResource[]>([]);
@@ -367,6 +370,8 @@ const Recommendations: React.FC = () => {
   const uniqueNamespaces = Array.from(new Set(recommendations.map(r => r.namespace)));
   const totalSavings = filteredRecommendations.reduce((sum, r) => sum + r.estimated_monthly_savings, 0);
   const savingsOpportunities = filteredRecommendations.filter(r => r.estimated_monthly_savings > 0).length;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
   if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;

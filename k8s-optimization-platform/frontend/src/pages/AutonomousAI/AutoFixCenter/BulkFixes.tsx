@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Switch,
@@ -14,22 +16,23 @@ import StorageIcon from '@mui/icons-material/Storage';
 import BoltIcon from '@mui/icons-material/Bolt';
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const CAT_COLOR: Record<string, string> = {
-  CPU_WASTE:     '#d29922',
-  MEMORY_WASTE:  '#3b82f6',
-  STORAGE_WASTE: '#a371f7',
-  RELIABILITY:   '#f85149',
+  CPU_WASTE:     colors.warning,
+  MEMORY_WASTE:  colors.info,
+  STORAGE_WASTE: colors.purple,
+  RELIABILITY:   colors.danger,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -85,6 +88,7 @@ async function pollCommand(cmdId: number): Promise<{ ok: boolean; errMsg?: strin
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const BulkFixes: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]       = useState<BulkPayload | null>(null);
   const [loading, setLoading]       = useState(true);
   const [nsFilter, setNsFilter]     = useState<string>('all');
@@ -154,9 +158,11 @@ const BulkFixes: React.FC = () => {
     setRunning(false);
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#58a6ff' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
@@ -175,7 +181,7 @@ const BulkFixes: React.FC = () => {
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Bulk Fixes</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
             Apply fixes across multiple resources simultaneously —{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh"><IconButton onClick={fetchData} sx={{ color: DK.muted, '&:hover': { color: DK.text } }}><RefreshIcon /></IconButton></Tooltip>
@@ -185,26 +191,26 @@ const BulkFixes: React.FC = () => {
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} md={3}>
           <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <BoltIcon sx={{ color: '#58a6ff' }} />
+            <BoltIcon sx={{ color: colors.info }} />
             <Box><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Operations</Typography><Typography sx={{ color: DK.text, fontSize: '1.5rem', fontWeight: 700 }}>{ops.length}</Typography></Box>
           </Box>
         </Grid>
         <Grid item xs={6} md={3}>
           <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2, display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <AttachMoneyIcon sx={{ color: '#3fb950' }} />
-            <Box><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Potential Savings</Typography><Typography sx={{ color: '#3fb950', fontSize: '1.5rem', fontWeight: 700 }}>${(payload?.total_potential_savings ?? 0).toFixed(0)}/mo</Typography></Box>
+            <AttachMoneyIcon sx={{ color: colors.success }} />
+            <Box><Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Potential Savings</Typography><Typography sx={{ color: colors.success, fontSize: '1.5rem', fontWeight: 700 }}>${(payload?.total_potential_savings ?? 0).toFixed(0)}/mo</Typography></Box>
           </Box>
         </Grid>
         <Grid item xs={6} md={3}>
           <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}>
             <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Selected</Typography>
-            <Typography sx={{ color: '#58a6ff', fontSize: '1.5rem', fontWeight: 700 }}>{selected.size}</Typography>
+            <Typography sx={{ color: colors.info, fontSize: '1.5rem', fontWeight: 700 }}>{selected.size}</Typography>
           </Box>
         </Grid>
         <Grid item xs={6} md={3}>
           <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2 }}>
             <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Selected Savings</Typography>
-            <Typography sx={{ color: '#3fb950', fontSize: '1.5rem', fontWeight: 700 }}>${selSavings.toFixed(0)}/mo</Typography>
+            <Typography sx={{ color: colors.success, fontSize: '1.5rem', fontWeight: 700 }}>${selSavings.toFixed(0)}/mo</Typography>
           </Box>
         </Grid>
       </Grid>
@@ -249,14 +255,14 @@ const BulkFixes: React.FC = () => {
                         {prog && (
                           <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.75 }}>
                             {isRunning && <CircularProgress size={12} sx={{ color }} />}
-                            <Typography sx={{ color: isDone ? '#3fb950' : isFailed ? '#f85149' : DK.muted, fontSize: '0.75rem' }}>
+                            <Typography sx={{ color: isDone ? colors.success : isFailed ? colors.danger : DK.muted, fontSize: '0.75rem' }}>
                               {prog.msg ?? (isRunning ? 'Applying…' : '')}
                             </Typography>
                           </Box>
                         )}
                       </Box>
                       <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-                        <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '0.88rem' }}>
+                        <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '0.88rem' }}>
                           ${op.total_savings.toFixed(0)}<Typography component="span" sx={{ color: DK.muted, fontSize: '0.65rem' }}>/mo</Typography>
                         </Typography>
                         <Typography sx={{ color: DK.muted, fontSize: '0.7rem' }}>{op.affected_resources} resources</Typography>
@@ -268,7 +274,7 @@ const BulkFixes: React.FC = () => {
               })}
               {ops.length === 0 && (
                 <Box sx={{ textAlign: 'center', py: 3 }}>
-                  <CheckCircleOutlineIcon sx={{ fontSize: 32, color: '#3fb950', mb: 1 }} />
+                  <CheckCircleOutlineIcon sx={{ fontSize: 32, color: colors.success, mb: 1 }} />
                   <Typography sx={{ color: DK.muted }}>No bulk operations available — cluster is optimized</Typography>
                 </Box>
               )}
@@ -283,11 +289,11 @@ const BulkFixes: React.FC = () => {
 
             {/* Namespace filter */}
             <FormControl size="small" fullWidth>
-              <InputLabel sx={{ color: DK.muted, '&.Mui-focused': { color: '#58a6ff' } }}>Namespace filter</InputLabel>
+              <InputLabel sx={{ color: DK.muted, '&.Mui-focused': { color: colors.info } }}>Namespace filter</InputLabel>
               <Select value={nsFilter} onChange={e => setNsFilter(e.target.value)} label="Namespace filter"
                 sx={{ color: DK.text, '& .MuiOutlinedInput-notchedOutline': { borderColor: DK.border },
-                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#58a6ff' },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#58a6ff' },
+                  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.info },
+                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: colors.info },
                   '& .MuiSvgIcon-root': { color: DK.muted } }}>
                 <MenuItem value="all">All namespaces</MenuItem>
                 {namespaces.map(ns => <MenuItem key={ns} value={ns}>{ns}</MenuItem>)}
@@ -296,15 +302,15 @@ const BulkFixes: React.FC = () => {
 
             {/* Dry-run toggle */}
             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              bgcolor: dryRun ? '#1f6feb1a' : DK.surface2, border: `1px solid ${dryRun ? '#1f6feb55' : DK.border}`,
+              bgcolor: dryRun ? `${colors.info}1a` : DK.surface2, border: `1px solid ${dryRun ? `${colors.info}55` : DK.border}`,
               borderRadius: 1.5, px: 2, py: 1.25, transition: 'all 0.2s' }}>
               <Box>
                 <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.83rem' }}>Dry-run mode</Typography>
                 <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>Preview changes without applying</Typography>
               </Box>
               <Switch checked={dryRun} onChange={e => setDryRun(e.target.checked)} size="small"
-                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#58a6ff' },
-                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: '#58a6ff' } }} />
+                sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: colors.info },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { bgcolor: colors.info } }} />
             </Box>
 
             {/* Selection summary */}
@@ -314,14 +320,14 @@ const BulkFixes: React.FC = () => {
                 {selOps.map(o => (
                   <Box key={o.operation_id} sx={{ display: 'flex', justifyContent: 'space-between', py: 0.25 }}>
                     <Typography sx={{ color: DK.muted, fontSize: '0.77rem' }} noWrap>{o.name}</Typography>
-                    <Typography sx={{ color: '#3fb950', fontSize: '0.77rem', fontWeight: 600, ml: 1, flexShrink: 0 }}>
+                    <Typography sx={{ color: colors.success, fontSize: '0.77rem', fontWeight: 600, ml: 1, flexShrink: 0 }}>
                       ${o.total_savings.toFixed(0)}/mo
                     </Typography>
                   </Box>
                 ))}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1, pt: 0.75, borderTop: `1px solid ${DK.border}` }}>
                   <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.8rem' }}>Total impact</Typography>
-                  <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '0.83rem' }}>
+                  <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '0.83rem' }}>
                     {selResources} resources · ${selSavings.toFixed(0)}/mo
                   </Typography>
                 </Box>
@@ -333,7 +339,7 @@ const BulkFixes: React.FC = () => {
               startIcon={running ? <CircularProgress size={16} sx={{ color: '#fff' }} /> : dryRun ? <CheckCircleOutlineIcon /> : <PlayArrowIcon />}
               disabled={selected.size === 0 || running}
               onClick={executeSelected}
-              sx={{ bgcolor: dryRun ? '#1f6feb' : '#238636', '&:hover': { bgcolor: dryRun ? '#388bfd' : '#2ea043' },
+              sx={{ bgcolor: dryRun ? colors.info : colors.success, '&:hover': { bgcolor: dryRun ? colors.info : colors.success, opacity: 0.85 },
                 '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted }, fontWeight: 700, fontSize: '0.88rem' }}>
               {running ? `Executing (${progress.filter(p => p.status === 'running').length} running)…`
                : dryRun ? `Preview ${selected.size} Operation${selected.size !== 1 ? 's' : ''}`

@@ -5,7 +5,7 @@ Integrates with real Kubernetes cluster data for security posture assessment
 """
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
 from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from collections import defaultdict
 import logging
@@ -752,6 +752,42 @@ async def get_cve_dashboard(cluster_id: Optional[str] = None):
                     "signal":          signal,
                 })
 
+        # ── Add real per-package CVEs from trivy (node-local scan preferred,
+        # network-pull fallback for public images) — genuine vulnerability
+        # data, not a config-signal mapped to a hardcoded CVE ID. Additive:
+        # the signal-based findings above are real detected misconfigs, just
+        # a different (and still useful) finding category.
+        trivy_map = await _trivy_map_for_images(list(image_index))
+        for image, tr in trivy_map.items():
+            if tr.get("scan_status") != "scanned":
+                continue
+            idx = image_index.get(image, {"pods": [], "namespaces": {"default"}})
+            primary_ns = sorted(idx["namespaces"])[0] if idx["namespaces"] else "default"
+            for v in (tr.get("vulnerabilities") or []):
+                if not v.get("vuln_id"):
+                    continue
+                cves.append({
+                    "cve_id":          v["vuln_id"],
+                    "severity":        v.get("severity", "UNKNOWN").lower(),
+                    "cvss_score":      v.get("cvss_score") or 0.0,
+                    "title":           v.get("title") or v["vuln_id"],
+                    "description":     v.get("description", ""),
+                    "affected_images": [image],
+                    "affected_pods":   list(dict.fromkeys(idx["pods"]))[:10],
+                    "namespace":       primary_ns,
+                    "namespaces":      sorted(idx["namespaces"]),
+                    "cluster":         "xforce-devops",
+                    "published_date":  "",
+                    "patch_available": v.get("has_fix", False),
+                    "remediation": (
+                        f"Update {v.get('pkg_name','package')} to {v.get('fixed_version')}"
+                        if v.get("has_fix") else "No fix published yet"
+                    ),
+                    "signal":          "cve",
+                    "source":          "trivy",
+                    "pkg_name":        v.get("pkg_name"),
+                })
+
         # ── Deduplicate: keep worst-severity finding per (cve_id, namespace)
         seen: dict = {}
         sev_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -911,6 +947,35 @@ _PRIVATE_PREFIXES = (
 def _is_private(image: str) -> bool:
     return any(image.startswith(p) for p in _PRIVATE_PREFIXES)
 
+
+async def _trivy_map_for_images(images: List[str]) -> Dict[str, Dict[str, Any]]:
+    """
+    image -> trivy-shaped result, preferring node_scanner.py's real
+    node-local scans (works for ANY registry, public or private) over the
+    network-pull path (services/trivy_scanner.py — public registries only,
+    the only option before the node-scanner DaemonSet existed). Images the
+    node-scanner hasn't covered yet (DaemonSet not deployed, or a new image
+    it hasn't scanned this cycle) still fall back to the network pull for
+    public images, same as before.
+    """
+    from database.db import db_manager
+    trivy_map: Dict[str, Dict[str, Any]] = {}
+
+    clusters = db_manager.get_all_clusters()
+    if clusters:
+        node_scans = db_manager.get_node_image_scans(clusters[0]["cluster_name"])
+        for image in images:
+            scan = node_scans.get(image)
+            if scan and scan["scan_status"] == "scanned" and scan.get("parsed_report"):
+                trivy_map[image] = scan["parsed_report"]
+
+    remaining = [img for img in images if img not in trivy_map and not _is_private(img)]
+    if remaining:
+        for tr in await scan_images_batch(remaining):
+            trivy_map[tr["image"]] = tr
+
+    return trivy_map
+
 def _signal_vulns_for_image(image: str, signals: set) -> list:
     """Convert pod-level security signals into vuln-shaped findings."""
     vulns = []
@@ -1013,16 +1078,9 @@ async def get_image_scanning(cluster_id: Optional[str] = None):
                 if cpu_req == 0 and mem_req == 0:         rec["signals"].add("no_limits")
                 if mem_req > 0 and mem_cur/mem_req > 0.9: rec["signals"].add("mem_pressure")
 
-        # ── Step 2: Trivy scan public images concurrently ─────────────────
-        public_images  = [img for img in img_idx if not _is_private(img)]
-        private_images = [img for img in img_idx if _is_private(img)]
-        logger.info(f"image-scanning: {len(public_images)} public, {len(private_images)} private")
-
-        trivy_map: dict = {}  # image → trivy result dict
-        if public_images:
-            trivy_results = await scan_images_batch(public_images)
-            for tr in trivy_results:
-                trivy_map[tr["image"]] = tr
+        # ── Step 2: Trivy — node-local scans first, network-pull fallback ──
+        trivy_map = await _trivy_map_for_images(list(img_idx))
+        logger.info(f"image-scanning: {len(trivy_map)}/{len(img_idx)} images have real trivy data")
 
         # ── Step 3: Build unified per-image result ────────────────────────
         scan_results = []
@@ -1164,14 +1222,8 @@ async def get_dependency_scanning(cluster_id: Optional[str] = None):
                     img_pods[img]["pods"].append(pname)
                     img_pods[img]["namespaces"].add(ns)
 
-        # ── Run Trivy on public images (uses 6h in-memory cache) ─────────
-        public_images = [img for img in img_pods if not _is_private(img)]
-        trivy_map: dict = {}
-        if public_images:
-            results = await scan_images_batch(public_images)
-            for r in results:
-                if r.get("scan_status") == "scanned":
-                    trivy_map[r["image"]] = r
+        # ── Trivy — node-local scans first, network-pull fallback ────────
+        trivy_map = await _trivy_map_for_images(list(img_pods))
 
         # ── Aggregate package-level findings across images ────────────────
         # pkg_key = (pkg_name, installed_version) → aggregated finding
@@ -1348,14 +1400,8 @@ async def get_patch_recommendations(cluster_id: Optional[str] = None):
                 if cpu_req == 0 and mem_req == 0:               rec["signals"].add("no_limits")
                 if mem_req > 0 and mem_cur/mem_req > 0.9:       rec["signals"].add("mem_pressure")
 
-        # ── Trivy scan public images ──────────────────────────────────────
-        public_images = [img for img in img_idx if not _is_private(img)]
-        trivy_map: dict = {}
-        if public_images:
-            results = await scan_images_batch(public_images)
-            for r in results:
-                if r.get("scan_status") == "scanned":
-                    trivy_map[r["image"]] = r
+        # ── Trivy — node-local scans first, network-pull fallback ────────
+        trivy_map = await _trivy_map_for_images(list(img_idx))
 
         # ── Build one recommendation per image that has findings ──────────
         SEV_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -1515,12 +1561,81 @@ async def get_patch_recommendations(cluster_id: Optional[str] = None):
 # CONTAINER SECURITY ENDPOINTS
 # ============================================================================
 
+_FALCO_PRIORITY_SEVERITY = {
+    "emergency": "critical", "alert": "critical", "critical": "critical",
+    "error": "high", "warning": "medium",
+    "notice": "low", "informational": "low", "debug": "low",
+}
+
+
+def _resolve_cluster_name(cluster_id: Optional[str]) -> Optional[str]:
+    from database.db import db_manager
+    clusters = db_manager.get_all_clusters()
+    if not clusters:
+        return None
+    return cluster_id or clusters[0]["cluster_name"]
+
+
+def _map_falco_alerts(alerts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Pure mapper: Falco alert rows (as returned by db_manager.get_falco_alerts)
+    -> runtime_threats entries. Split out from _falco_runtime_threats so it's
+    testable without a database."""
+    out = []
+    for a in alerts:
+        f = a.get("fields") or {}
+        sev = _FALCO_PRIORITY_SEVERITY.get((a.get("priority") or "").lower(), "medium")
+        out.append({
+            "id":                 f"falco-{f.get('container.id', 'unknown')}-{a.get('alert_time')}",
+            "severity":           sev,
+            "threat_type":        a.get("rule", "Falco Alert"),
+            "pod_name":           f.get("k8s.pod.name", "unknown"),
+            "container_name":     f.get("container.name", "unknown"),
+            "namespace":          f.get("k8s.ns.name", "unknown"),
+            "detected_at":        a.get("alert_time"),
+            "status":             "active",
+            "details":            a.get("output", ""),
+            "recommended_action": "Investigate the flagged process/behavior — this is a live runtime detection, not a config heuristic.",
+            "source":             "falco",
+        })
+    return out
+
+
+def _hubble_flows(cluster_id: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    """Real observed network flows from Cilium Hubble (see docs/hubble-setup.md),
+    as reported by the agent's network domain. None (not []) means Hubble
+    isn't deployed for this cluster — callers must tell that apart from
+    "deployed but currently zero flows"."""
+    from database.db import db_manager
+    cluster_name = _resolve_cluster_name(cluster_id)
+    if not cluster_name:
+        return None
+    metrics = db_manager.get_latest_metrics(cluster_name) or {}
+    network = metrics.get("network") or {}
+    if isinstance(network, str):
+        import json
+        network = json.loads(network) if network else {}
+    return network.get("hubble_flows")
+
+
+def _falco_runtime_threats(cluster_id: Optional[str]) -> List[Dict[str, Any]]:
+    """Real behavioral detections from Falco (see docs/falco-setup.md), as
+    opposed to the static config-posture signals below — degrades to an
+    empty list (not fake data) when Falco isn't deployed for this cluster."""
+    from database.db import db_manager
+    cluster_name = _resolve_cluster_name(cluster_id)
+    if not cluster_name:
+        return []
+    return _map_falco_alerts(db_manager.get_falco_alerts(cluster_name))
+
+
 @router.get("/container-security/runtime")
 async def get_runtime_security(cluster_id: Optional[str] = None):
     """
-    Runtime security analysis — derives threats from real container security fields.
-    Signals: privileged, run_as_root, allow_privilege_escalation, writable FS,
-    no resource limits, memory pressure.
+    Runtime security analysis — combines real behavioral detections from
+    Falco (source: "falco", see docs/falco-setup.md) with derived threats
+    from static container security fields (source: "config_posture").
+    Config-posture signals: privileged, run_as_root, allow_privilege_escalation,
+    writable FS, no resource limits, memory pressure.
     """
     try:
         pods = await fetch_pods_data()
@@ -1601,6 +1716,7 @@ async def get_runtime_security(cluster_id: Optional[str] = None):
                         "status":             "active",
                         "details":            cat["details"],
                         "recommended_action": cat["recommended_action"],
+                        "source":             "config_posture",
                     })
 
                 if container.get("privileged") and container.get("run_as_root"):
@@ -1613,6 +1729,11 @@ async def get_runtime_security(cluster_id: Optional[str] = None):
                         "user":           "root",
                         "detected_at":    datetime.now().isoformat(),
                     })
+
+        runtime_threats.extend(_falco_runtime_threats(cluster_id))
+        for t in runtime_threats:
+            if t.get("source") == "falco":
+                threat_count[t["severity"]] += 1
 
         total_containers = sum(len(p.get("containers", [])) for p in pods)
 
@@ -2225,7 +2346,14 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
             data_keys = s.get("data_keys") or []
             is_ref    = s.get("is_referenced", False)
 
-            # Parse issuance date
+            # Agent >= this change parses the real cert (tls.crt) and ships
+            # real_expiry/real_issued/real_issuer/real_subject. Older agents
+            # (or unparseable certs) don't have these — fall back to the
+            # heuristic estimate from secret name + creation date.
+            real_expiry = s.get("real_expiry")
+            real_issued = s.get("real_issued")
+            is_real     = bool(real_expiry)
+
             issued_dt = None
             age_days  = 0
             if created:
@@ -2235,10 +2363,16 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
                 except Exception:
                     pass
 
-            validity_days     = _cert_validity(name)
-            days_until_expiry = validity_days - age_days
-            issued_iso  = issued_dt.isoformat() if issued_dt else now.isoformat()
-            expiry_iso  = (issued_dt + timedelta(days=validity_days)).isoformat() if issued_dt else (now + timedelta(days=validity_days)).isoformat()
+            if is_real:
+                expiry_dt          = datetime.fromisoformat(real_expiry.replace("Z", "+00:00"))
+                days_until_expiry  = (expiry_dt - now).days
+                issued_iso         = real_issued or (issued_dt.isoformat() if issued_dt else now.isoformat())
+                expiry_iso         = real_expiry
+            else:
+                validity_days      = _cert_validity(name)
+                days_until_expiry  = validity_days - age_days
+                issued_iso         = issued_dt.isoformat() if issued_dt else now.isoformat()
+                expiry_iso         = (issued_dt + timedelta(days=validity_days)).isoformat() if issued_dt else (now + timedelta(days=validity_days)).isoformat()
 
             if days_until_expiry < 0:
                 status   = "expired"
@@ -2266,14 +2400,15 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
                 "name":              name,
                 "namespace":         ns,
                 "type":              _cert_type(name, data_keys),
-                "issuer":            _infer_issuer(name, ns, data_keys),
-                "subject":           f"*.{ns}.svc.cluster.local",
+                "issuer":            s.get("real_issuer") or _infer_issuer(name, ns, data_keys),
+                "subject":           s.get("real_subject") or f"*.{ns}.svc.cluster.local",
                 "issued_date":       issued_iso,
                 "expiry_date":       expiry_iso,
                 "days_until_expiry": days_until_expiry,
                 "age_days":          age_days,
                 "status":            status,
                 "severity":          severity,
+                "accuracy":          "real" if is_real else "estimated",
                 "auto_renewal":      "packageserver" in name or "rabbitmq.com" in name,
                 "is_referenced":     is_ref,
                 "data_keys":         data_keys,
@@ -3010,12 +3145,86 @@ async def get_external_exposure(cluster_id: Optional[str] = None):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def _hubble_flows_to_traffic(flows: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Pure aggregator: Hubble flow rows (namespace/pod pair + verdict) ->
+    the same traffic_flows shape the config-posture heuristic below
+    produces, but from REAL observed traffic. A pair with any DROPPED
+    verdict is treated as restricted (something — a NetworkPolicy or
+    other enforcement — is actually blocking part of that traffic);
+    all-FORWARDED pairs are unrestricted (nothing observed stopping it)."""
+    pairs: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    for f in flows:
+        src, dst = f.get("source_namespace"), f.get("dest_namespace")
+        if not src or not dst or src == dst:
+            continue
+        key = (src, dst)
+        if key not in pairs:
+            pairs[key] = {"count": 0, "dropped": 0, "protocols": set()}
+        pairs[key]["count"] += f.get("count", 0)
+        if (f.get("verdict") or "").upper() == "DROPPED":
+            pairs[key]["dropped"] += f.get("count", 0)
+        if f.get("protocol"):
+            pairs[key]["protocols"].add(f.get("protocol"))
+
+    traffic_flows = []
+    restricted_flows = 0
+    unrestricted_flows = 0
+    for (src, dst), agg in pairs.items():
+        is_restricted = agg["dropped"] > 0
+        if is_restricted:
+            restricted_flows += 1
+        else:
+            unrestricted_flows += 1
+        traffic_flows.append({
+            "source_namespace": src,
+            "target_namespace": dst,
+            "is_restricted":    is_restricted,
+            "risk_level":       "low" if is_restricted else "high",
+            "connection_count": agg["count"],
+            "protocols":        sorted(agg["protocols"]) or ["TCP"],
+            "has_network_policy": is_restricted,
+            "recommendation":   "Traffic is restricted" if is_restricted else "Implement NetworkPolicy",
+        })
+
+    traffic_flows.sort(key=lambda t: t["connection_count"], reverse=True)
+    return {
+        "traffic_flows": traffic_flows,
+        "restricted_flows": restricted_flows,
+        "unrestricted_flows": unrestricted_flows,
+        "namespaces_analyzed": len({src for src, _ in pairs} | {dst for _, dst in pairs}),
+    }
+
+
 @router.get("/network-security/east-west-traffic")
 async def get_east_west_traffic(cluster_id: Optional[str] = None):
     """
-    East-west traffic — real namespace × namespace exposure based on host_network pods.
+    East-west traffic — real observed flows from Cilium Hubble when
+    deployed (source: "hubble"); falls back to config-posture inference
+    from host_network pods otherwise (source: "config_posture").
     """
     try:
+        hubble = _hubble_flows(cluster_id)
+        if hubble:
+            agg = _hubble_flows_to_traffic(hubble)
+            total_flows = len(agg["traffic_flows"]) or 1
+            return {
+                "east_west_score":     round((agg["restricted_flows"] / total_flows) * 100, 1),
+                "total_traffic_flows": len(agg["traffic_flows"]),
+                "restricted_flows":    agg["restricted_flows"],
+                "unrestricted_flows":  agg["unrestricted_flows"],
+                "traffic_flows":       agg["traffic_flows"][:100],
+                "namespaces_analyzed": agg["namespaces_analyzed"],
+                "source":              "hubble",
+                "recommendations": [
+                    "Implement default-deny NetworkPolicies",
+                    "Restrict cross-namespace communication",
+                    "Use service mesh for traffic encryption",
+                    "Monitor and log all internal traffic",
+                    "Apply zero-trust principles",
+                ],
+                "last_scan": datetime.now().isoformat(),
+            }
+
         pods = await fetch_pods_data()
 
         ISOLATED_NS = {
@@ -3078,6 +3287,7 @@ async def get_east_west_traffic(cluster_id: Optional[str] = None):
             "unrestricted_flows":  unrestricted_flows,
             "traffic_flows":       traffic_flows[:100],
             "namespaces_analyzed": len(namespaces),
+            "source":              "config_posture",
             "recommendations": [
                 "Implement default-deny NetworkPolicies",
                 "Restrict cross-namespace communication",

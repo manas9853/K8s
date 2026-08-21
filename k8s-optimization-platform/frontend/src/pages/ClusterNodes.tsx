@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -17,7 +16,6 @@ import {
   Paper,
   Chip,
   LinearProgress,
-  Button,
   FormControl,
   InputLabel,
   Select,
@@ -27,9 +25,9 @@ import {
 import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
-  Add as AddIcon,
-} from '@mui/icons-material';
+  } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import NoClusterState from '../components/NoClusterState';
 
 interface NodeCondition {
   type: string;
@@ -65,7 +63,6 @@ interface ClusterNodeGroup {
 }
 
 const ClusterNodes: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
 
   const [nodeGroups, setNodeGroups] = useState<ClusterNodeGroup[]>([]);
@@ -189,25 +186,7 @@ const ClusterNodes: React.FC = () => {
 
   // ── No clusters attached ──────────────────────────────────────────────────
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">
-          No clusters attached yet
-        </Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Node information is scoped to registered clusters. Connect a cluster
-          first using the Cluster Onboarding page, then come back here to see
-          live node data.
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => navigate('/cluster-onboarding')}
-        >
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   const totalNodes = nodeGroups.reduce((sum, g) => sum + g.nodes.length, 0);

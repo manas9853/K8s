@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Chip, IconButton,
@@ -14,6 +16,7 @@ import {
   CheckCircle as CheckIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface NamespaceTraffic {
   namespace: string;
@@ -31,12 +34,12 @@ const FlowArc: React.FC<{ items: NamespaceTraffic[] }> = ({ items }) => {
   const w = 320, h = 180;
   const cx = w / 2, cy = h / 2;
   const r = 70;
-  const colors = ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'];
+  const nodeColors = [colors.info, colors.purple, colors.success, colors.warning, colors.danger, colors.info];
 
   const angleStep = (2 * Math.PI) / Math.max(top.length, 1);
   const nodes = top.map((item, i) => {
     const angle = i * angleStep - Math.PI / 2;
-    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), ...item, color: colors[i] };
+    return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), ...item, color: nodeColors[i] };
   });
 
   const arcs: React.ReactNode[] = [];
@@ -68,14 +71,14 @@ const FlowArc: React.FC<{ items: NamespaceTraffic[] }> = ({ items }) => {
 
 // Security score ring
 const SecurityRing: React.FC<{ score: number }> = ({ score }) => {
-  const color = score >= 80 ? '#22c55e' : score >= 60 ? '#f59e0b' : '#ef4444';
+  const color = score >= 80 ? colors.success : score >= 60 ? colors.warning : colors.danger;
   const r = 14;
   const circ = 2 * Math.PI * r;
   const dash = (score / 100) * circ;
   return (
     <Box display="flex" alignItems="center" gap={0.5}>
       <svg width={34} height={34}>
-        <circle cx={17} cy={17} r={r} fill="none" stroke="#e5e7eb" strokeWidth={4} />
+        <circle cx={17} cy={17} r={r} fill="none" stroke={colors.border} strokeWidth={4} />
         <circle cx={17} cy={17} r={r} fill="none" stroke={color} strokeWidth={4}
           strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4} strokeLinecap="round" />
         <text x="50%" y="50%" textAnchor="middle" dominantBaseline="central" fontSize="8" fontWeight="bold" fill={color}>
@@ -88,6 +91,7 @@ const SecurityRing: React.FC<{ score: number }> = ({ score }) => {
 
 const TrafficAnalysis: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [trafficData, setTrafficData] = useState<NamespaceTraffic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,7 +130,9 @@ const TrafficAnalysis: React.FC = () => {
     : 0;
   const exposedNs = trafficData.filter(d => d.external_services > 0 && d.network_policies === 0).length;
 
-  const secColor = (s: number) => s >= 80 ? '#22c55e' : s >= 60 ? '#f59e0b' : '#ef4444';
+  const secColor = (s: number) => s >= 80 ? colors.success : s >= 60 ? colors.warning : colors.danger;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>
@@ -158,15 +164,15 @@ const TrafficAnalysis: React.FC = () => {
       {/* ── KPI strip ───────────────────────────────────────────────────────── */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Services', value: String(totalServices), color: '#6366f1', sub: `${trafficData.length} namespaces` },
-          { label: 'External Exposures', value: String(totalExternal), color: totalExternal > 5 ? '#ef4444' : '#f59e0b', sub: 'publicly reachable' },
-          { label: 'Ingress Rules', value: String(totalIngress), color: '#3b82f6', sub: 'HTTP/HTTPS routes' },
+          { label: 'Total Services', value: String(totalServices), color: colors.purple, sub: `${trafficData.length} namespaces` },
+          { label: 'External Exposures', value: String(totalExternal), color: totalExternal > 5 ? colors.danger : colors.warning, sub: 'publicly reachable' },
+          { label: 'Ingress Rules', value: String(totalIngress), color: colors.info, sub: 'HTTP/HTTPS routes' },
           { label: 'Avg Security Score', value: avgSecurity.toFixed(0), color: secColor(avgSecurity), sub: '/100 (higher = safer)' },
-          { label: 'Policy Coverage', value: policyCoverage.toFixed(0) + '%', color: policyCoverage >= 80 ? '#22c55e' : '#ef4444', sub: 'namespaces with policies' },
-          { label: 'Exposed w/o Policy', value: String(exposedNs), color: exposedNs > 0 ? '#ef4444' : '#22c55e', sub: 'high risk' },
+          { label: 'Policy Coverage', value: policyCoverage.toFixed(0) + '%', color: policyCoverage >= 80 ? colors.success : colors.danger, sub: 'namespaces with policies' },
+          { label: 'Exposed w/o Policy', value: String(exposedNs), color: exposedNs > 0 ? colors.danger : colors.success, sub: 'high risk' },
         ].map(({ label, value, color, sub }) => (
           <Grid item xs={12} sm={6} md={2} key={label}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}` }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, borderLeft: `4px solid ${color}` }}>
               <CardContent sx={{ py: '12px !important', px: 2 }}>
                 <Typography variant="caption" color="textSecondary" fontWeight={600}>{label}</Typography>
                 <Typography variant="h4" fontWeight={800} sx={{ color, mt: 0.5 }}>{value}</Typography>
@@ -183,7 +189,7 @@ const TrafficAnalysis: React.FC = () => {
         <Grid container spacing={3}>
           {/* Service flow map */}
           <Grid item xs={12} md={4}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} mb={1}>Namespace Flow Map</Typography>
                 <Typography variant="caption" color="textSecondary" display="block" mb={2}>
@@ -195,8 +201,8 @@ const TrafficAnalysis: React.FC = () => {
                 <Box display="flex" flexWrap="wrap" gap={0.5} mt={1}>
                   {trafficData.slice(0, 6).map((d, i) => (
                     <Chip key={d.namespace} label={d.namespace} size="small"
-                      sx={{ bgcolor: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'][i] + '22',
-                        color: ['#3b82f6', '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4'][i],
+                      sx={{ bgcolor: [colors.info, colors.purple, colors.success, colors.warning, colors.danger, colors.info][i] + '22',
+                        color: [colors.info, colors.purple, colors.success, colors.warning, colors.danger, colors.info][i],
                         border: '1px solid currentColor', fontSize: 10 }} />
                   ))}
                 </Box>
@@ -206,14 +212,14 @@ const TrafficAnalysis: React.FC = () => {
 
           {/* Policy coverage heatmap */}
           <Grid item xs={12} md={8}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>Network Security Coverage</Typography>
                 <Box display="flex" gap={1} flexWrap="wrap" mb={2}>
                   {sorted.map(d => {
                     const risk = d.external_services > 0 && d.network_policies === 0;
-                    const bg = risk ? '#fecaca' : d.security_score >= 80 ? '#bbf7d0' : '#fef08a';
-                    const fg = risk ? '#991b1b' : d.security_score >= 80 ? '#166534' : '#854d0e';
+                    const bg = risk ? colors.dangerBg : d.security_score >= 80 ? colors.successBg : colors.warningBg;
+                    const fg = risk ? colors.dangerBg : d.security_score >= 80 ? colors.success : colors.warningBg;
                     return (
                       <Tooltip key={d.namespace} title={`Security: ${d.security_score} | External: ${d.external_services} | Policies: ${d.network_policies}`}>
                         <Box sx={{
@@ -240,13 +246,13 @@ const TrafficAnalysis: React.FC = () => {
 
           {/* Detailed table */}
           <Grid item xs={12}>
-            <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+            <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={700} mb={2}>Namespace Traffic Details</Typography>
                 <TableContainer>
                   <Table size="small">
                     <TableHead>
-                      <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#f8fafc', fontSize: 12 } }}>
+                      <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceHover, fontSize: 12 } }}>
                         <TableCell>Namespace</TableCell>
                         <TableCell>Services</TableCell>
                         <TableCell>Ingress Rules</TableCell>
@@ -267,8 +273,8 @@ const TrafficAnalysis: React.FC = () => {
                             <TableCell>
                               <Box display="flex" alignItems="center" gap={1}>
                                 {exposed
-                                  ? <WarningIcon sx={{ fontSize: 14, color: '#ef4444' }} />
-                                  : <CheckIcon sx={{ fontSize: 14, color: '#22c55e' }} />}
+                                  ? <WarningIcon sx={{ fontSize: 14, color: colors.danger }} />
+                                  : <CheckIcon sx={{ fontSize: 14, color: colors.success }} />}
                                 <Typography variant="body2" fontWeight={600}>{d.namespace}</Typography>
                               </Box>
                             </TableCell>
@@ -276,15 +282,15 @@ const TrafficAnalysis: React.FC = () => {
                             <TableCell><Typography variant="body2">{d.ingress_count}</Typography></TableCell>
                             <TableCell>
                               <Box display="flex" alignItems="center" gap={0.5}>
-                                {d.external_services > 0 && <PublicIcon sx={{ fontSize: 14, color: '#ef4444' }} />}
-                                <Typography variant="body2" sx={{ color: d.external_services > 0 ? '#ef4444' : 'inherit' }}>
+                                {d.external_services > 0 && <PublicIcon sx={{ fontSize: 14, color: colors.danger }} />}
+                                <Typography variant="body2" sx={{ color: d.external_services > 0 ? colors.danger : 'inherit' }}>
                                   {d.external_services}
                                 </Typography>
                               </Box>
                             </TableCell>
                             <TableCell>
                               <Box display="flex" alignItems="center" gap={0.5}>
-                                <LockIcon sx={{ fontSize: 14, color: '#22c55e' }} />
+                                <LockIcon sx={{ fontSize: 14, color: colors.success }} />
                                 <Typography variant="body2">{d.internal_services}</Typography>
                               </Box>
                             </TableCell>
@@ -298,7 +304,7 @@ const TrafficAnalysis: React.FC = () => {
                             <TableCell>
                               <Box display="flex" alignItems="center" gap={1}>
                                 <SecurityRing score={d.security_score} />
-                                <Box sx={{ width: 60, bgcolor: '#f3f4f6', borderRadius: 1, height: 6, overflow: 'hidden' }}>
+                                <Box sx={{ width: 60, bgcolor: colors.surfaceHover, borderRadius: 1, height: 6, overflow: 'hidden' }}>
                                   <Box sx={{ width: `${d.security_score}%`, height: '100%', bgcolor: secColor(d.security_score) }} />
                                 </Box>
                                 <Typography variant="caption">{d.security_score}</Typography>

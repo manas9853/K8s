@@ -1,0 +1,121 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Node Image Scanner — optional add-on to deployment.yaml, one pod per node.
+# Scans images from the node's local containerd store (no registry
+# credentials needed, works for private registries). Deploy AFTER
+# deployment.yaml — reuses its Namespace, platform-credentials Secret, and
+# agent-config ConfigMap (for CLUSTER_NAME).
+#
+# Deploy with:
+#   kubectl apply -f deployment.yaml
+#   kubectl apply -f node-scanner-daemonset.yaml
+# ──────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: k8s-optimization-node-scanner
+  namespace: k8s-optimization-agent
+  labels:
+    app.kubernetes.io/name: k8s-optimization-node-scanner
+
+---
+# Least privilege: only what's needed to list pods scheduled to this node.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-optimization-node-scanner
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: k8s-optimization-node-scanner
+  labels:
+    app.kubernetes.io/name: k8s-optimization-node-scanner
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: k8s-optimization-node-scanner
+subjects:
+  - kind: ServiceAccount
+    name: k8s-optimization-node-scanner
+    namespace: k8s-optimization-agent
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: k8s-optimization-node-scanner
+  namespace: k8s-optimization-agent
+  labels:
+    app: k8s-optimization-node-scanner
+    app.kubernetes.io/name: k8s-optimization-node-scanner
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  selector:
+    matchLabels:
+      app: k8s-optimization-node-scanner
+  template:
+    metadata:
+      labels:
+        app: k8s-optimization-node-scanner
+    spec:
+      serviceAccountName: k8s-optimization-node-scanner
+      # Runs on every node so every node's images get scanned regardless
+      # of scheduling — matches how DaemonSets are meant to be used, and
+      # avoids missing images on tainted/dedicated node pools.
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: node-scanner
+          image: your-registry/k8s-optimization-node-scanner:latest  # build from Dockerfile.scanner
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            # Reading the containerd socket needs root on most node images —
+            # same tradeoff every node-level scanner makes (Trivy Operator's
+            # node-collector, kube-bench, etc.). No cluster mutations happen;
+            # the socket mount below is read-only.
+            runAsUser: 0
+            readOnlyRootFilesystem: false
+            allowPrivilegeEscalation: false
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: PLATFORM_URL
+              valueFrom:
+                secretKeyRef:
+                  name: platform-credentials
+                  key: platform-url
+            - name: API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: platform-credentials
+                  key: api-token
+            - name: CLUSTER_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: CLUSTER_NAME
+            - name: SCAN_INTERVAL
+              value: "21600"   # 6h — matches the backend's own scan cache TTL
+          volumeMounts:
+            - name: containerd-sock
+              mountPath: /run/containerd/containerd.sock
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
+      volumes:
+        - name: containerd-sock
+          hostPath:
+            path: /run/containerd/containerd.sock
+            type: Socket

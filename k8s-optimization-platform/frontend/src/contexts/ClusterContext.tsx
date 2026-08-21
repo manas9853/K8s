@@ -35,6 +35,7 @@ import {
   clearLastDeleted,
 } from '../store/clusterSlice';
 import type { ClusterInfo } from '../store/clusterSlice';
+import { API_BASE_URL } from '../config/api';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -96,7 +97,7 @@ export function useCluster(): ClusterContextType {
 
 // ─── Provider ────────────────────────────────────────────────────────────────
 
-const API_BASE = process.env.REACT_APP_API_URL || '';
+const API_BASE = API_BASE_URL; // strips trailing slash, matches every other page's fetch base
 
 export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
   children,
@@ -125,7 +126,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
       if (clerkUser?.id) {
         headers['X-Clerk-User-Id'] = clerkUser.id;
       }
-      const res = await fetch(`${API_BASE}/api/clusters`, { headers });
+      const res = await fetch(`${API_BASE}/clusters`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: ClusterInfo[] = await res.json();
       dispatch(setClusters(data));
@@ -142,7 +143,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
 
   // SSE: re-fetch clusters whenever the backend signals new agent data
   useEffect(() => {
-    const url = `${API_BASE}/api/agents/events`;
+    const url = `${API_BASE}/agents/events`;
     let es: EventSource;
     let reconnectTimer: ReturnType<typeof setTimeout>;
 
@@ -188,7 +189,7 @@ export const ClusterProvider: React.FC<{ children: ReactNode }> = ({
   const deleteCluster = useCallback(
     async (id: string): Promise<DeleteResult> => {
       try {
-        const res = await fetch(`${API_BASE}/api/v1/clusters/${id}`, {
+        const res = await fetch(`${API_BASE}/v1/clusters/${id}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
         });

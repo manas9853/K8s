@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
-import { Button, CircularProgress, Alert } from '@mui/material';
-import AddIcon from '@mui/icons-material/Add';
+import { CircularProgress, Alert } from '@mui/material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 interface BenchmarkMetric {
@@ -34,26 +34,26 @@ interface ClusterBenchmarkData {
 
 /* ── Design tokens — dark terminal theme (matches app-wide MUI theme) ── */
 const T = {
-  bg:           '#050d1a',   // deepest navy — page background
-  surface:      '#0b1628',   // card / panel background
-  surfaceAlt:   '#0f1e35',   // slightly lighter panel (nested cards)
-  border:       '#1e3a5f',   // panel borders
+  bg:           colors.background,   // deepest navy — page background
+  surface:      colors.surfaceAlt,   // card / panel background
+  surfaceAlt:   colors.surfaceAlt,   // slightly lighter panel (nested cards)
+  border:       colors.info,   // panel borders
   borderBright: '#2a5080',   // hover / active borders
-  text:         '#e2f0ff',   // primary text
-  muted:        '#7ca5cc',   // secondary / label text
-  dim:          '#3d6080',   // very muted / disabled
+  text:         colors.infoBg,   // primary text
+  muted:        colors.info,   // secondary / label text
+  dim:          colors.info,   // very muted / disabled
   accent:       '#00d4ff',   // cyan primary
   accentDark:   '#00a8cc',
   accentLight:  'rgba(0,212,255,0.12)',
   success:      '#39ff14',   // neon green
   successLight: 'rgba(57,255,20,0.12)',
-  warning:      '#f59e0b',
+  warning:      colors.warning,
   warningLight: 'rgba(245,158,11,0.12)',
-  danger:       '#ef4444',
+  danger:       colors.danger,
   dangerLight:  'rgba(239,68,68,0.12)',
-  orange:       '#f59e0b',
+  orange:       colors.warning,
   orangeLight:  'rgba(245,158,11,0.12)',
-  gradeC:       '#f59e0b',
+  gradeC:       colors.warning,
   gradeB:       '#00d4ff',
   gradeA:       '#39ff14',
 };
@@ -315,7 +315,6 @@ function RefreshIcon() {
    Main Component
 ────────────────────────────────────────────────────────────────────────────── */
 const ClusterBenchmarking: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId } = useCluster();
 
   const [benchmarkData, setBenchmarkData] = useState<ClusterBenchmarkData[]>([]);
@@ -361,17 +360,7 @@ const ClusterBenchmarking: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <div style={{ padding: 32, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
-        <div style={{ fontSize: 20, fontWeight: 600, color: T.muted }}>No clusters attached yet</div>
-        <div style={{ fontSize: 14, color: T.muted, maxWidth: 480, textAlign: 'center', lineHeight: 1.6 }}>
-          Benchmark data is scoped to registered clusters. Connect a cluster first using Cluster Onboarding, then come back here to see live benchmark results.
-        </div>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </div>
-    );
+    return <NoClusterState />;
   }
 
   /* ── Derived summary stats ── */
@@ -426,7 +415,7 @@ const ClusterBenchmarking: React.FC = () => {
             style={{
               display: 'flex', alignItems: 'center', gap: 6,
               padding: '7px 16px', borderRadius: 6, border: 'none',
-              background: T.accent, color: '#050d1a', fontSize: 13, fontWeight: 700,
+              background: T.accent, color: colors.background, fontSize: 13, fontWeight: 700,
               cursor: 'pointer',
             }}
             onClick={() => fetchBenchmark(selectedClusterId)}

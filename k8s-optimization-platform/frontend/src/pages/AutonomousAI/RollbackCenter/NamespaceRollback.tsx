@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, TextField,
@@ -10,22 +12,23 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import FolderIcon from '@mui/icons-material/Folder';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const RISK_COLOR: Record<string, string> = {
-  extreme: '#f85149',
-  high:    '#d29922',
-  medium:  '#3b82f6',
-  low:     '#3fb950',
+  extreme: colors.danger,
+  high:    colors.warning,
+  medium:  colors.info,
+  low:     colors.success,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -96,7 +99,7 @@ const NsCard: React.FC<{
     }}>
       {/* Card header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 2 }}>
-        <FolderIcon sx={{ fontSize: 20, color: '#3b82f6', flexShrink: 0 }} />
+        <FolderIcon sx={{ fontSize: 20, color: colors.info, flexShrink: 0 }} />
         <Box sx={{ flex: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
             <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.9rem' }}>{ns.namespace}</Typography>
@@ -112,7 +115,7 @@ const NsCard: React.FC<{
         </Box>
         {done ? (
           <Chip icon={<CheckCircleOutlineIcon />} label="Rolled Back" size="small"
-            sx={{ bgcolor: '#0d1117', color: '#3fb950', border: '1px solid #3fb950', fontSize: '0.72rem' }} />
+            sx={{ bgcolor: colors.background, color: colors.success, border: `1px solid ${colors.success}`, fontSize: '0.72rem' }} />
         ) : confirmStep === 0 ? (
           <Button variant="outlined" size="small" startIcon={<ReplayIcon />}
             disabled={!ns.can_rollback}
@@ -162,7 +165,7 @@ const NsCard: React.FC<{
               placeholder={ns.namespace}
               size="small" autoFocus
               sx={{ '& .MuiInputBase-root': { bgcolor: DK.surface, color: DK.text, fontSize: '0.85rem', fontFamily: 'monospace' },
-                    '& .MuiOutlinedInput-notchedOutline': { borderColor: nameMatch ? '#3fb950' : DK.border } }}
+                    '& .MuiOutlinedInput-notchedOutline': { borderColor: nameMatch ? colors.success : DK.border } }}
             />
             <Button variant="contained" size="small" disabled={!nameMatch}
               onClick={onConfirm}
@@ -193,6 +196,7 @@ const NsCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const NamespaceRollback: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<NsPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -250,6 +254,8 @@ const NamespaceRollback: React.FC = () => {
   const namespaces = data?.namespaces ?? [];
   const extremeCount = namespaces.filter(n => n.risk === 'extreme').length;
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
       {/* Header */}
@@ -269,7 +275,7 @@ const NamespaceRollback: React.FC = () => {
 
       {loading && (
         <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}>
-          <CircularProgress sx={{ color: '#3b82f6' }} />
+          <CircularProgress sx={{ color: colors.info }} />
         </Box>
       )}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
@@ -279,15 +285,15 @@ const NamespaceRollback: React.FC = () => {
           {/* KPIs */}
           <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 2, mb: 3 }}>
             <KpiCard label="Total Namespaces" value={data.total_namespaces} />
-            <KpiCard label="Extreme Risk" value={extremeCount} accent="#f85149" />
-            <KpiCard label="Rolled Back" value={Object.values(done).filter(Boolean).length} accent="#3fb950" />
+            <KpiCard label="Extreme Risk" value={extremeCount} accent={colors.danger} />
+            <KpiCard label="Rolled Back" value={Object.values(done).filter(Boolean).length} accent={colors.success} />
           </Box>
 
           {/* Extreme-risk warning banner */}
           {extremeCount > 0 && (
-            <Box sx={{ bgcolor: '#2d0b0b', border: '1px solid #f8514966', borderRadius: 2, p: 2, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center' }}>
-              <WarningAmberIcon sx={{ color: '#f85149', fontSize: 20 }} />
-              <Typography sx={{ color: '#f85149', fontSize: '0.85rem', fontWeight: 600 }}>
+            <Box sx={{ bgcolor: colors.dangerBg, border: `1px solid ${colors.danger}66`, borderRadius: 2, p: 2, mb: 3, display: 'flex', gap: 1.5, alignItems: 'center' }}>
+              <WarningAmberIcon sx={{ color: colors.danger, fontSize: 20 }} />
+              <Typography sx={{ color: colors.danger, fontSize: '0.85rem', fontWeight: 600 }}>
                 {extremeCount} namespace{extremeCount !== 1 ? 's' : ''} marked as Extreme Risk — rollback will affect production workloads
               </Typography>
             </Box>

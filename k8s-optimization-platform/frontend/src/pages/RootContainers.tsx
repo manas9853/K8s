@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Card,
@@ -19,6 +21,7 @@ import {
 } from '@mui/material';
 import { Security as SecurityIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface RootContainer {
   pod_name: string;
@@ -52,6 +55,7 @@ interface RootContainersData {
 
 const RootContainers: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<RootContainersData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -82,6 +86,8 @@ const RootContainers: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return <Box sx={{ width: '100%', mt: 2 }}><LinearProgress /></Box>;
   }
@@ -110,7 +116,7 @@ const RootContainers: React.FC = () => {
           <Card>
             <CardContent>
               <Typography color="textSecondary" gutterBottom>Security Score</Typography>
-              <Typography variant="h3" sx={{ color: data.security_score >= 70 ? '#4caf50' : '#f44336' }}>
+              <Typography variant="h3" sx={{ color: data.security_score >= 70 ? colors.success : colors.danger }}>
                 {data.security_score}
               </Typography>
               <Typography variant="body2" color="textSecondary">out of 100</Typography>

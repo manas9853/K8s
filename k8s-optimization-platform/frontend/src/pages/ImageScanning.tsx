@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { Box, Typography, CircularProgress, Alert, Stack, Tooltip, Collapse } from '@mui/material';
 import {
   BugReport as BugIcon,
@@ -13,46 +15,47 @@ import {
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens ─────────────────────────────────────────────────── */
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8892a4',
-  accent:  '#3b82d4',
-  critical: { fg: '#f87171', bg: '#2d1515' },
-  high:     { fg: '#f59e0b', bg: '#2d200a' },
-  medium:   { fg: '#60a5fa', bg: '#0d1f3c' },
-  low:      { fg: '#4ade80', bg: '#0d2d1a' },
-  clean:    { fg: '#4ade80', bg: '#0d2d1a' },
+  bg:      colors.background,
+  card:    colors.surface,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  accent:  colors.info,
+  critical: { fg: colors.danger, bg: colors.dangerBg },
+  high:     { fg: colors.warning, bg: colors.warningBg },
+  medium:   { fg: colors.info, bg: colors.infoBg },
+  low:      { fg: colors.success, bg: colors.successBg },
+  clean:    { fg: colors.success, bg: colors.successBg },
   riskColor: (r: string) => {
-    if (r === 'critical') return '#f87171';
-    if (r === 'high')     return '#f59e0b';
-    if (r === 'medium')   return '#60a5fa';
-    if (r === 'low')      return '#4ade80';
-    return '#4ade80'; // clean
+    if (r === 'critical') return colors.danger;
+    if (r === 'high')     return colors.warning;
+    if (r === 'medium')   return colors.info;
+    if (r === 'low')      return colors.success;
+    return colors.success; // clean
   },
   riskBg: (r: string) => {
-    if (r === 'critical') return '#2d1515';
-    if (r === 'high')     return '#2d200a';
-    if (r === 'medium')   return '#0d1f3c';
-    return '#0d2d1a';
+    if (r === 'critical') return colors.dangerBg;
+    if (r === 'high')     return colors.warningBg;
+    if (r === 'medium')   return colors.infoBg;
+    return colors.successBg;
   },
   sevColor: (s: string) => {
     const sl = s.toLowerCase();
-    if (sl === 'critical') return '#f87171';
-    if (sl === 'high')     return '#f59e0b';
-    if (sl === 'medium')   return '#60a5fa';
-    return '#4ade80';
+    if (sl === 'critical') return colors.danger;
+    if (sl === 'high')     return colors.warning;
+    if (sl === 'medium')   return colors.info;
+    return colors.success;
   },
   sevBg: (s: string) => {
     const sl = s.toLowerCase();
-    if (sl === 'critical') return '#2d1515';
-    if (sl === 'high')     return '#2d200a';
-    if (sl === 'medium')   return '#0d1f3c';
-    return '#0d2d1a';
+    if (sl === 'critical') return colors.dangerBg;
+    if (sl === 'high')     return colors.warningBg;
+    if (sl === 'medium')   return colors.infoBg;
+    return colors.successBg;
   },
 };
 
@@ -84,7 +87,7 @@ interface ImageResult {
 
 /* ── CVSS pill ──────────────────────────────────────────────────────── */
 const CVSSPill: React.FC<{ score: number }> = ({ score }) => {
-  const color = score >= 9 ? '#f87171' : score >= 7 ? '#f59e0b' : score >= 4 ? '#60a5fa' : '#4ade80';
+  const color = score >= 9 ? colors.danger : score >= 7 ? colors.warning : score >= 4 ? colors.info : colors.success;
   return (
     <Box sx={{ display:'inline-flex', alignItems:'center', gap:0.4,
       px:0.8, py:0.15, borderRadius:0.5, bgcolor:`${color}18`, border:`1px solid ${color}40` }}>
@@ -319,6 +322,7 @@ const ImageRow: React.FC<{ img: ImageResult }> = ({ img }) => {
 /* ── Main page ──────────────────────────────────────────────────────── */
 const ImageScanning: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -337,6 +341,8 @@ const ImageScanning: React.FC = () => {
   };
 
   useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) return (
     <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center"
@@ -403,8 +409,8 @@ const ImageScanning: React.FC = () => {
           { label:'High Risk',      count: data.high_images ?? 0,      fg:T.high.fg,      bg:T.high.bg },
           { label:'Medium Risk',    count: bandCounts['medium'] ?? 0,  fg:T.medium.fg,    bg:T.medium.bg },
           { label:'Clean',          count: data.clean_images ?? 0,     fg:T.low.fg,       bg:T.low.bg },
-          { label:'Total Findings', count: totalVulns,                 fg:'#a78bfa',      bg:'#1a1030' },
-          { label:'Patchable',      count: totalPatch,                 fg:'#34d399',      bg:'#0d2d1a' },
+          { label:'Total Findings', count: totalVulns,                 fg:colors.purple,      bg:colors.purpleBg },
+          { label:'Patchable',      count: totalPatch,                 fg:colors.success,      bg:colors.successBg },
         ] as Array<{label:string;count:number;fg:string;bg:string}>).map(({ label, count, fg, bg }) => (
           <Box key={label} sx={{ bgcolor:bg, border:`1px solid ${fg}30`, borderRadius:2, p:1.5 }}>
             <Typography sx={{ fontSize:10, color:fg, fontWeight:600, textTransform:'uppercase', letterSpacing:0.5 }}>{label}</Typography>
@@ -451,7 +457,7 @@ const ImageScanning: React.FC = () => {
                     </Typography>
                   </Box>
                 </Box>
-                <Box onClick={() => navigate('/patch-recommendations')}
+                <Box onClick={() => navigate('/security/vulnerability-management/patch-recommendations')}
                   sx={{ px:1.5, py:0.5, borderRadius:1, bgcolor:`${T.high.fg}18`, border:`1px solid ${T.high.fg}50`,
                     cursor:'pointer', '&:hover':{ bgcolor:`${T.high.fg}28` }, flexShrink:0 }}>
                   <Typography sx={{ color:T.high.fg, fontSize:11, fontWeight:700 }}>View Patches</Typography>

@@ -235,16 +235,56 @@ def analyze_pod_resources(pod: dict, cluster_id: str) -> PodOptimization:
     cpu_current = float(pod.get("cpu_usage_cores", 0.0))
     mem_current = float(pod.get("memory_usage_mb", 0.0))
 
-    # When metrics-server data is absent fall back to 50 % of request
-    has_live = cpu_current > 0 or mem_current > 0
+    # has_live_metrics is set by the agent's verified metrics-server preflight
+    # check (see _check_metrics_server() in agent.py) — it's the source of
+    # truth for "do we actually have real usage data for this pod", not just
+    # "is the value non-zero" (a genuinely idle pod also reports near-zero,
+    # which used to be indistinguishable from "no data at all").
+    # Fall back to the old zero-check only for agents built before this field
+    # existed, so older agents don't silently break.
+    if "has_live_metrics" in pod:
+        has_live = bool(pod.get("has_live_metrics"))
+    else:
+        has_live = cpu_current > 0 or mem_current > 0
+
     if not has_live:
-        cpu_current = total_cpu_request * 0.5 if total_cpu_request > 0 else 0.0
-        mem_current = total_mem_request * 0.5 if total_mem_request > 0 else 0.0
+        # No real data. Do NOT invent a 50%-of-request estimate — that
+        # produced a "waste %" that looked like a real number but wasn't
+        # observed from anything. Report honestly instead so recommendations
+        # can be told apart from guesses.
+        return PodOptimization(
+            pod_name=pod_name,
+            namespace=namespace,
+            cluster_id=cluster_id,
+            workload_type=owner_kind,
+            node_name=node_name,
+            cpu_metrics=ResourceMetrics(
+                current=0.0, average=0.0, peak=0.0,
+                requested=round(total_cpu_request, 3),
+                limit=round(total_cpu_limit, 3) if total_cpu_limit > 0 else round(total_cpu_request * 2, 3),
+                utilization_percent=0.0,
+            ),
+            memory_metrics=ResourceMetrics(
+                current=0.0, average=0.0, peak=0.0,
+                requested=round(total_mem_request, 1),
+                limit=round(total_mem_limit, 1) if total_mem_limit > 0 else round(total_mem_request * 2, 1),
+                utilization_percent=0.0,
+            ),
+            smart_analysis=SmartAnalysis(
+                issue="No usage data — metrics-server unavailable or not yet scraped this pod",
+                recommendation="Enable/verify metrics-server on this cluster to get real recommendations",
+                estimated_savings=0.0,
+                risk_level="unknown",
+            ),
+            status="insufficient_data",
+            last_restart=last_restart,
+            age_days=age_days,
+        )
 
     cpu_average = cpu_current
-    cpu_peak    = cpu_current * 1.2 if has_live else cpu_current * 1.3
+    cpu_peak    = cpu_current * 1.2
     mem_average = mem_current
-    mem_peak    = mem_current * 1.2 if has_live else mem_current * 1.3
+    mem_peak    = mem_current * 1.2
 
     cpu_util = (cpu_current / total_cpu_request * 100) if total_cpu_request > 0 else 0.0
     mem_util = (mem_current / total_mem_request * 100) if total_mem_request > 0 else 0.0
@@ -380,6 +420,7 @@ async def get_pod_summary(cluster_id: Optional[str] = Query(None)):
                 "over_provisioned": 0,
                 "under_provisioned": 0,
                 "optimized": 0,
+                "insufficient_data": 0,
                 "total_potential_savings": 0.0,
                 "avg_cpu_utilization": 0.0,
                 "avg_memory_utilization": 0.0,
@@ -397,17 +438,22 @@ async def get_pod_summary(cluster_id: Optional[str] = Query(None)):
         over_provisioned = sum(1 for p in optimizations if "Reduce" in p.smart_analysis.recommendation)
         under_provisioned = sum(1 for p in optimizations if "Increase" in p.smart_analysis.recommendation)
         optimized = sum(1 for p in optimizations if "No action" in p.smart_analysis.recommendation)
+        insufficient_data = sum(1 for p in optimizations if p.status == "insufficient_data")
         total_savings = sum(
             p.smart_analysis.estimated_savings for p in optimizations
             if p.smart_analysis.estimated_savings > 0
         )
+        # Exclude insufficient_data pods from utilization averages — they
+        # carry a placeholder 0.0, not a real (low) utilization reading, and
+        # including them would silently drag the average down.
+        rated = [p for p in optimizations if p.status != "insufficient_data"]
         avg_cpu = (
-            sum(p.cpu_metrics.utilization_percent for p in optimizations) / total_pods
-            if total_pods else 0
+            sum(p.cpu_metrics.utilization_percent for p in rated) / len(rated)
+            if rated else 0
         )
         avg_mem = (
-            sum(p.memory_metrics.utilization_percent for p in optimizations) / total_pods
-            if total_pods else 0
+            sum(p.memory_metrics.utilization_percent for p in rated) / len(rated)
+            if rated else 0
         )
 
         return {
@@ -415,6 +461,7 @@ async def get_pod_summary(cluster_id: Optional[str] = Query(None)):
             "over_provisioned": over_provisioned,
             "under_provisioned": under_provisioned,
             "optimized": optimized,
+            "insufficient_data": insufficient_data,
             "total_potential_savings": round(total_savings, 2),
             "avg_cpu_utilization": round(avg_cpu, 1),
             "avg_memory_utilization": round(avg_mem, 1),
@@ -422,6 +469,38 @@ async def get_pod_summary(cluster_id: Optional[str] = Query(None)):
         }
     except Exception as e:
         logger.error(f"Error generating summary: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/{namespace}/{pod_name}/utilization-report")
+async def get_pod_utilization_report(
+    namespace: str,
+    pod_name: str,
+    cluster_id: Optional[str] = Query(None),
+    days: int = Query(7, ge=1, le=30),
+):
+    """The real utilization report for one pod — min/avg/p95/max CPU and
+    memory built from actual metrics-server samples collected over `days`
+    (default 7), not the single latest snapshot analyze_pod_resources() uses.
+
+    A single live reading can land during an unusually quiet or busy moment;
+    this is what should actually back a rightsizing decision. sample_count
+    and no_data_cycles are included so a thin or gappy history is visible
+    rather than silently producing a report from too little data.
+    """
+    try:
+        _, resolved_cluster = _get_pods_from_db(cluster_id)
+        if not resolved_cluster:
+            raise HTTPException(status_code=404, detail="No cluster data available")
+
+        report = db_manager.get_pod_utilization_history(
+            resolved_cluster, namespace, pod_name, days
+        )
+        return report
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error building utilization report: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

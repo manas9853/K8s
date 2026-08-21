@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -23,28 +25,29 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const SEV: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  OOMKill:    '#f85149',
-  CrashLoop:  '#d29922',
-  Throttling: '#3b82f6',
+  OOMKill:    colors.danger,
+  CrashLoop:  colors.warning,
+  Throttling: colors.info,
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -99,7 +102,7 @@ const TypeIcon: React.FC<{ type: string }> = ({ type }) => {
 // ─── Confidence bar ────────────────────────────────────────────────────────────
 const ConfidenceBar: React.FC<{ value: number }> = ({ value }) => {
   const pct = Math.round(value * 100);
-  const color = pct >= 85 ? '#3fb950' : pct >= 65 ? '#d29922' : '#f85149';
+  const color = pct >= 85 ? colors.success : pct >= 65 ? colors.warning : colors.danger;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Box sx={{ flex: 1, height: 4, bgcolor: DK.surface2, borderRadius: 2, overflow: 'hidden' }}>
@@ -162,7 +165,7 @@ const IncidentCard: React.FC<{
           </Box>
           {/* Timeline bar — relative time */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.5 }}>
-            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: inc.status === 'active' ? '#f85149' : '#3fb950', flexShrink: 0 }} />
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: inc.status === 'active' ? colors.danger : colors.success, flexShrink: 0 }} />
             <Typography sx={{ color: DK.muted, fontSize: '0.7rem' }}>
               {new Date(inc.timestamp).toLocaleString()} · {inc.type}
             </Typography>
@@ -183,13 +186,13 @@ const IncidentCard: React.FC<{
               onClick={e => { e.stopPropagation(); onApply(inc); }}
               disabled={applying || fixed}
               sx={{
-                bgcolor: fixed ? 'transparent' : '#238636',
-                color: fixed ? '#3fb950' : '#fff',
+                bgcolor: fixed ? 'transparent' : colors.success,
+                color: fixed ? colors.success : '#fff',
                 borderRadius: 1.5,
                 width: 32,
                 height: 32,
                 flexShrink: 0,
-                '&:hover': { bgcolor: fixed ? 'transparent' : '#2ea043' },
+                '&:hover': { bgcolor: fixed ? 'transparent' : colors.success },
                 '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
               }}
             >
@@ -256,6 +259,7 @@ const IncidentCard: React.FC<{
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const IncidentInvestigator: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]     = useState<InvPayload | null>(null);
   const [loading, setLoading]     = useState(true);
   const [applying, setApplying]   = useState<string | null>(null);
@@ -329,9 +333,11 @@ const IncidentInvestigator: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#f85149' }} />
+      <CircularProgress sx={{ color: colors.danger }} />
     </Box>
   );
 
@@ -349,7 +355,7 @@ const IncidentInvestigator: React.FC = () => {
           </Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
             AI root-cause analysis for{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh">
@@ -362,16 +368,16 @@ const IncidentInvestigator: React.FC = () => {
       {/* KPI row */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} md={3}>
-          <KpiCard label="Active Incidents" value={payload?.active_incidents ?? 0} accent="#f85149" />
+          <KpiCard label="Active Incidents" value={payload?.active_incidents ?? 0} accent={colors.danger} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <KpiCard label="Critical" value={sev.critical ?? 0} accent="#f85149" />
+          <KpiCard label="Critical" value={sev.critical ?? 0} accent={colors.danger} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <KpiCard label="High" value={sev.high ?? 0} accent="#d29922" />
+          <KpiCard label="High" value={sev.high ?? 0} accent={colors.warning} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <KpiCard label="Warning Events" value={payload?.warning_events_count ?? 0} accent="#3b82f6" />
+          <KpiCard label="Warning Events" value={payload?.warning_events_count ?? 0} accent={colors.info} />
         </Grid>
       </Grid>
 
@@ -391,7 +397,7 @@ const IncidentInvestigator: React.FC = () => {
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {incidents.length === 0 && (
           <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 4, textAlign: 'center' }}>
-            <CheckCircleOutlineIcon sx={{ fontSize: 36, color: '#3fb950', mb: 1 }} />
+            <CheckCircleOutlineIcon sx={{ fontSize: 36, color: colors.success, mb: 1 }} />
             <Typography sx={{ color: DK.muted }}>No active incidents detected</Typography>
           </Box>
         )}

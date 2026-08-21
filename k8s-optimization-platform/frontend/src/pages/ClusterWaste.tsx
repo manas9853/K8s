@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -18,19 +20,20 @@ import {
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  hover:  '#252e42',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8b95a9',
-  body:   '#c8cdd8',
-  green:  '#4ade80',
-  red:    '#f87171',
-  yellow: '#f59e0b',
+  bg:     colors.background,
+  card:   colors.surface,
+  hover:  colors.surfaceHover,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  body:   colors.textMuted,
+  green:  colors.success,
+  red:    colors.danger,
+  yellow: colors.warning,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -80,7 +83,7 @@ const wasteColor = (pct: number) =>
   pct >= 60 ? T.red : pct >= 35 ? T.yellow : T.green;
 
 const wasteBarColor = (pct: number) =>
-  pct >= 60 ? '#450a0a' : pct >= 35 ? '#451a03' : '#052e16';
+  pct >= 60 ? colors.dangerBg : pct >= 35 ? colors.warningBg : colors.successBg;
 
 const efficiencyScore = (cpuW: number, memW: number) =>
   Math.max(0, Math.min(100, Math.round(100 - (cpuW * 0.6 + memW * 0.4))));
@@ -150,6 +153,7 @@ const WasteBar: React.FC<{ label: string; pct: number; cur: number; opt: number 
 // ─── Main component ───────────────────────────────────────────────────────────
 const ClusterWaste: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data,    setData]    = useState<WasteData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
@@ -234,6 +238,8 @@ const ClusterWaste: React.FC = () => {
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
     textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <CircularProgress sx={{ color: T.green }} />
@@ -242,7 +248,7 @@ const ClusterWaste: React.FC = () => {
 
   if (error) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
 
@@ -434,7 +440,7 @@ const ClusterWaste: React.FC = () => {
             <TableContainer>
               <Table size="small">
                 <TableHead>
-                  <TableRow sx={{ bgcolor: '#161f30' }}>
+                  <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
                     <TableCell sx={headSx}>Namespace</TableCell>
                     <TableCell sx={{ ...headSx, textAlign: 'right' }}>Current</TableCell>
                     <TableCell sx={{ ...headSx, textAlign: 'right' }}>Optimal</TableCell>
@@ -505,28 +511,28 @@ const ClusterWaste: React.FC = () => {
               value: data?.pvcs?.total_resources ?? 0,
               desc:  'Unattached volumes consuming storage',
               icon:  <StorageIcon sx={{ fontSize: 20 }} />,
-              href:  '/unattached-pvcs',
+              href:  '/optimization/cleanup-center/unattached-pvcs',
             },
             {
               label: 'Old ReplicaSets',
               value: data?.replicasets?.total_resources ?? 0,
               desc:  'Superseded RS with 0 replicas',
               icon:  <LayersIcon sx={{ fontSize: 20 }} />,
-              href:  '/old-replicasets',
+              href:  '/optimization/cleanup-center/old-replicasets',
             },
             {
               label: 'Idle Namespaces',
               value: data?.idleNs?.total_resources ?? 0,
               desc:  'Empty namespaces with no active workloads',
               icon:  <FolderIcon sx={{ fontSize: 20 }} />,
-              href:  '/idle-namespaces',
+              href:  '/optimization/cleanup-center/idle-namespaces',
             },
             {
               label: 'Unused Deployments',
               value: data?.unusedDeps ?? 0,
               desc:  '0 ready replicas despite desired > 0',
               icon:  <WarningIcon sx={{ fontSize: 20 }} />,
-              href:  '/unused-deployments',
+              href:  '/optimization/cleanup-center/unused-deployments',
             },
           ].map(item => (
             <Grid item xs={6} sm={3} key={item.label}>

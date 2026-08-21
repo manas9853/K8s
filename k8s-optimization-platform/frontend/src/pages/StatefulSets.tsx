@@ -63,6 +63,7 @@ import ScaleIcon from '@mui/icons-material/ZoomOutMap';
 import InfoIcon from '@mui/icons-material/Info';
 import BugReportIcon from '@mui/icons-material/BugReport';
 import { API_BASE_URL } from '../config/api';
+import NoClusterState from '../components/NoClusterState';
 
 interface StatefulSet {
   name: string;
@@ -366,15 +367,7 @@ const StatefulSets: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   return (
@@ -925,13 +918,13 @@ const StatefulSets: React.FC = () => {
                           <Typography variant="subtitle2" gutterBottom>Troubleshooting</Typography>
                           <Button
                             variant="outlined" fullWidth sx={{ mb: 1 }}
-                            onClick={() => navigate(`/logs?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
+                            onClick={() => navigate(`/operations/observability/logs?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
                           >
                             View Pod Logs
                           </Button>
                           <Button
                             variant="outlined" fullWidth sx={{ mb: 1 }}
-                            onClick={() => navigate(`/events?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
+                            onClick={() => navigate(`/operations/observability/events?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
                           >
                             View Events
                           </Button>

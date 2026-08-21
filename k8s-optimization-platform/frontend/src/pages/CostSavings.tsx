@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import { Refresh, TrendingDown, AttachMoney, MonetizationOn, AccountBalanceWallet } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface SavingsByEntity { name: string; current_cost: number; optimized_cost: number; savings: number; savings_percent: number; }
 interface CostBreakdownItem { category: string; current_cost: number; optimized_cost: number; savings: number; savings_percent: number; }
@@ -26,14 +27,14 @@ const fmt = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits
 
 const StatCard: React.FC<{ label: string; value: string; sub: string; icon: React.ReactNode; accent: string }> =
   ({ label, value, sub, icon, accent }) => (
-    <Card sx={{ bgcolor: '#1e2433', border: `1px solid ${accent}22`, height: '100%' }}>
+    <Card sx={{ bgcolor: colors.surface, border: `1px solid ${accent}22`, height: '100%' }}>
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <Box sx={{ color: accent }}>{icon}</Box>
-          <Typography variant="body2" sx={{ color: '#8b95a9', textTransform: 'uppercase', letterSpacing: 1, fontSize: 11 }}>{label}</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 1, fontSize: 11 }}>{label}</Typography>
         </Box>
-        <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700, mb: 0.5 }}>{value}</Typography>
-        <Typography variant="body2" sx={{ color: '#8b95a9' }}>{sub}</Typography>
+        <Typography variant="h4" sx={{ color: colors.textPrimary, fontWeight: 700, mb: 0.5 }}>{value}</Typography>
+        <Typography variant="body2" sx={{ color: colors.textSecondary }}>{sub}</Typography>
       </CardContent>
     </Card>
   );
@@ -41,11 +42,11 @@ const StatCard: React.FC<{ label: string; value: string; sub: string; icon: Reac
 const BarRow: React.FC<{ label: string; savings: string; pct: number }> = ({ label, savings, pct }) => (
   <Box sx={{ mb: 2 }}>
     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-      <Typography variant="body2" sx={{ color: '#c8cdd8', fontSize: 13 }}>{label}</Typography>
-      <Typography variant="body2" sx={{ color: '#4ade80', fontWeight: 600, fontSize: 13 }}>{savings}</Typography>
+      <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 13 }}>{label}</Typography>
+      <Typography variant="body2" sx={{ color: colors.success, fontWeight: 600, fontSize: 13 }}>{savings}</Typography>
     </Box>
     <LinearProgress variant="determinate" value={Math.min(pct, 100)}
-      sx={{ height: 6, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: '#4ade80', borderRadius: 3 } }} />
+      sx={{ height: 6, borderRadius: 3, bgcolor: colors.border, '& .MuiLinearProgress-bar': { bgcolor: colors.success, borderRadius: 3 } }} />
   </Box>
 );
 
@@ -129,63 +130,63 @@ const CostSavingsInner: React.FC = () => {
   if (!data)   return null;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
       <CostAccuracyBanner clusterName={activeClusterId} />
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>Cost Savings Analytics</Typography>
-          <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>
+          <Typography variant="h4" sx={{ color: colors.textPrimary, fontWeight: 700 }}>Cost Savings Analytics</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5 }}>
             Potential savings from right-sizing cluster workloads
           </Typography>
         </Box>
-        <IconButton onClick={fetchData} sx={{ color: '#4ade80' }}><Refresh /></IconButton>
+        <IconButton onClick={fetchData} sx={{ color: colors.success }}><Refresh /></IconButton>
       </Box>
 
       {/* KPI cards */}
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Current Monthly" value={fmt(data.current_monthly_cost)}
-            sub={`Annual: ${fmt(data.current_yearly_cost)}`} icon={<AttachMoney />} accent="#f87171" />
+            sub={`Annual: ${fmt(data.current_yearly_cost)}`} icon={<AttachMoney />} accent={colors.danger} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Optimised Monthly" value={fmt(data.optimized_monthly_cost)}
-            sub={`Annual: ${fmt(data.optimized_yearly_cost)}`} icon={<AccountBalanceWallet />} accent="#4ade80" />
+            sub={`Annual: ${fmt(data.optimized_yearly_cost)}`} icon={<AccountBalanceWallet />} accent={colors.success} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Monthly Savings" value={fmt(data.monthly_savings)}
-            sub={`${data.savings_percent.toFixed(1)}% reduction`} icon={<TrendingDown />} accent="#60a5fa" />
+            sub={`${data.savings_percent.toFixed(1)}% reduction`} icon={<TrendingDown />} accent={colors.info} />
         </Grid>
         <Grid item xs={12} sm={6} md={3}>
           <StatCard label="Annual Savings" value={fmt(data.yearly_savings)}
-            sub="Potential annual impact" icon={<MonetizationOn />} accent="#a78bfa" />
+            sub="Potential annual impact" icon={<MonetizationOn />} accent={colors.purple} />
         </Grid>
       </Grid>
 
       {/* Cost breakdown + 6-month trend */}
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-            <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Cost Breakdown by Resource</Typography>
+          <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+            <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Cost Breakdown by Resource</Typography>
             <TableContainer>
               <Table size="small">
                 <TableHead>
                   <TableRow>
                     {['Category','Current','Optimised','Savings'].map(h => (
                       <TableCell key={h} align={h==='Category'?'left':'right'}
-                        sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}>{h}</TableCell>
+                        sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, textTransform: 'uppercase' }}>{h}</TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {data.cost_breakdown.map((row, i) => (
-                    <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
-                      <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245' }}>{row.category}</TableCell>
-                      <TableCell align="right" sx={{ color: '#f87171', borderColor: '#2a3245' }}>{fmt(row.current_cost)}</TableCell>
-                      <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(row.optimized_cost)}</TableCell>
-                      <TableCell align="right" sx={{ borderColor: '#2a3245' }}>
+                    <TableRow key={i} sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ color: colors.textMuted, borderColor: colors.border }}>{row.category}</TableCell>
+                      <TableCell align="right" sx={{ color: colors.danger, borderColor: colors.border }}>{fmt(row.current_cost)}</TableCell>
+                      <TableCell align="right" sx={{ color: colors.success, borderColor: colors.border }}>{fmt(row.optimized_cost)}</TableCell>
+                      <TableCell align="right" sx={{ borderColor: colors.border }}>
                         <Chip label={`${fmt(row.savings)} (${row.savings_percent.toFixed(1)}%)`}
-                          size="small" sx={{ bgcolor: row.savings >= 0 ? '#14532d' : '#450a0a', color: row.savings >= 0 ? '#4ade80' : '#f87171', fontSize: 11 }} />
+                          size="small" sx={{ bgcolor: row.savings >= 0 ? colors.successBg : colors.dangerBg, color: row.savings >= 0 ? colors.success : colors.danger, fontSize: 11 }} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -196,25 +197,25 @@ const CostSavingsInner: React.FC = () => {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-            <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>6-Month Trend</Typography>
+          <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+            <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>6-Month Trend</Typography>
             <TableContainer>
               <Table size="small">
                 <TableHead>
                   <TableRow>
                     {['Month','Current','Optimised','Savings'].map(h => (
                       <TableCell key={h} align={h==='Month'?'left':'right'}
-                        sx={{ color: '#8b95a9', borderColor: '#2a3245', fontSize: 12, textTransform: 'uppercase' }}>{h}</TableCell>
+                        sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, textTransform: 'uppercase' }}>{h}</TableCell>
                     ))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {data.trend_data.map((row, i) => (
-                    <TableRow key={i} sx={{ '&:hover': { bgcolor: '#252e42' } }}>
-                      <TableCell sx={{ color: '#c8cdd8', borderColor: '#2a3245' }}>{row.month}</TableCell>
-                      <TableCell align="right" sx={{ color: '#f87171', borderColor: '#2a3245' }}>{fmt(row.current_cost)}</TableCell>
-                      <TableCell align="right" sx={{ color: '#4ade80', borderColor: '#2a3245' }}>{fmt(row.optimized_cost)}</TableCell>
-                      <TableCell align="right" sx={{ color: '#4ade80', fontWeight: 700, borderColor: '#2a3245' }}>{fmt(row.savings)}</TableCell>
+                    <TableRow key={i} sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ color: colors.textMuted, borderColor: colors.border }}>{row.month}</TableCell>
+                      <TableCell align="right" sx={{ color: colors.danger, borderColor: colors.border }}>{fmt(row.current_cost)}</TableCell>
+                      <TableCell align="right" sx={{ color: colors.success, borderColor: colors.border }}>{fmt(row.optimized_cost)}</TableCell>
+                      <TableCell align="right" sx={{ color: colors.success, fontWeight: 700, borderColor: colors.border }}>{fmt(row.savings)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -225,31 +226,31 @@ const CostSavingsInner: React.FC = () => {
       </Grid>
 
       {/* Savings breakdown bars */}
-      <Typography variant="h5" sx={{ color: '#e8eaf0', fontWeight: 600, mb: 2 }}>Savings Breakdown</Typography>
+      <Typography variant="h5" sx={{ color: colors.textPrimary, fontWeight: 600, mb: 2 }}>Savings Breakdown</Typography>
       <Grid container spacing={2}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-            <Typography variant="subtitle1" sx={{ color: '#e8eaf0', mb: 2, fontWeight: 600 }}>By Cluster</Typography>
+          <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+            <Typography variant="subtitle1" sx={{ color: colors.textPrimary, mb: 2, fontWeight: 600 }}>By Cluster</Typography>
             {data.savings_by_cluster.map((item, i) => <BarRow key={i} label={item.name} savings={fmt(item.savings)} pct={item.savings_percent} />)}
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-            <Typography variant="subtitle1" sx={{ color: '#e8eaf0', mb: 2, fontWeight: 600 }}>By Namespace (Top 5)</Typography>
+          <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+            <Typography variant="subtitle1" sx={{ color: colors.textPrimary, mb: 2, fontWeight: 600 }}>By Namespace (Top 5)</Typography>
             {data.savings_by_namespace.slice(0, 5).map((item, i) => <BarRow key={i} label={item.name} savings={fmt(item.savings)} pct={item.savings_percent} />)}
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-            <Typography variant="subtitle1" sx={{ color: '#e8eaf0', mb: 2, fontWeight: 600 }}>By Team</Typography>
+          <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+            <Typography variant="subtitle1" sx={{ color: colors.textPrimary, mb: 2, fontWeight: 600 }}>By Team</Typography>
             {data.savings_by_team.length > 0
               ? data.savings_by_team.map((item, i) => <BarRow key={i} label={item.name} savings={fmt(item.savings)} pct={item.savings_percent} />)
-              : <Typography variant="body2" sx={{ color: '#8b95a9' }}>No team labels found on pods</Typography>}
+              : <Typography variant="body2" sx={{ color: colors.textSecondary }}>No team labels found on pods</Typography>}
           </Paper>
         </Grid>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-            <Typography variant="subtitle1" sx={{ color: '#e8eaf0', mb: 2, fontWeight: 600 }}>By Application (Top 5)</Typography>
+          <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+            <Typography variant="subtitle1" sx={{ color: colors.textPrimary, mb: 2, fontWeight: 600 }}>By Application (Top 5)</Typography>
             {data.savings_by_application.slice(0, 5).map((item, i) => <BarRow key={i} label={item.name} savings={fmt(item.savings)} pct={item.savings_percent} />)}
           </Paper>
         </Grid>

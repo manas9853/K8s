@@ -2,13 +2,13 @@
  * Optimization Reports
  * Pulls real data from /api/v1/recommendations and /api/v1/cost-savings/overview.
  * Groups recommendations by namespace and shows cluster-level savings.
- * Shows NoClusterBanner when no cluster is attached.
+ * Shows NoClusterState when no cluster is attached.
  */
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import { useCluster } from '../contexts/ClusterContext';
-import NoClusterBanner from '../components/NoClusterBanner';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -104,7 +104,7 @@ const OptimizationReports: React.FC = () => {
   };
 
   if (clustersLoading) return <LinearProgress />;
-  if (clusters.length === 0) return <NoClusterBanner dataDescription="optimization recommendation data" />;
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

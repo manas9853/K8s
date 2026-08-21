@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress as MuiCircularProgress, Alert, IconButton,
@@ -17,26 +19,27 @@ import {
   ViewInAr as PodsIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  hover:  '#252e42',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8b95a9',
-  body:   '#c8cdd8',
-  green:  '#4ade80',
-  red:    '#f87171',
-  yellow: '#f59e0b',
+  bg:     colors.background,
+  card:   colors.surface,
+  hover:  colors.surfaceHover,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  body:   colors.textMuted,
+  green:  colors.success,
+  red:    colors.danger,
+  yellow: colors.warning,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 const scoreColor = (s: number) => s >= 80 ? T.green : s >= 55 ? T.yellow : T.red;
 const grade      = (s: number) => s >= 90 ? 'A' : s >= 75 ? 'B' : s >= 60 ? 'C' : s >= 45 ? 'D' : 'F';
 const gradeColors: Record<string, string> = { A: T.green, B: T.green, C: T.yellow, D: T.red, F: T.red };
-const gradeBg:     Record<string, string> = { A: '#052e16', B: '#052e16', C: '#451a03', D: '#450a0a', F: '#450a0a' };
+const gradeBg:     Record<string, string> = { A: colors.successBg, B: colors.successBg, C: colors.warningBg, D: colors.dangerBg, F: colors.dangerBg };
 
 /** A dark circular score gauge */
 const ScoreGauge: React.FC<{ value: number; size?: number }> = ({ value, size = 56 }) => {
@@ -138,6 +141,7 @@ function computeClusterScore(data: any): any {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const ClusterScore: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [scoreData, setScoreData] = useState<any | null>(null);
   const [loading,   setLoading]   = useState(true);
   const [error,     setError]     = useState<string | null>(null);
@@ -203,7 +207,9 @@ const ClusterScore: React.FC = () => {
 
   const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.5 };
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
-    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: '#161f30' };
+    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: colors.surfaceAlt };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -212,7 +218,7 @@ const ClusterScore: React.FC = () => {
   );
   if (error) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
 

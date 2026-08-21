@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { Box, Typography, CircularProgress, Alert, Stack, Tooltip } from '@mui/material';
 import {
   AccountTree as DepIcon,
@@ -8,32 +10,33 @@ import {
   OpenInNew as ExtIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens ─────────────────────────────────────────────────── */
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8892a4',
-  accent:  '#3b82d4',
-  critical: { fg: '#f87171', bg: '#2d1515' },
-  high:     { fg: '#f59e0b', bg: '#2d200a' },
-  medium:   { fg: '#60a5fa', bg: '#0d1f3c' },
-  low:      { fg: '#4ade80', bg: '#0d2d1a' },
+  bg:      colors.background,
+  card:    colors.surface,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  accent:  colors.info,
+  critical: { fg: colors.danger, bg: colors.dangerBg },
+  high:     { fg: colors.warning, bg: colors.warningBg },
+  medium:   { fg: colors.info, bg: colors.infoBg },
+  low:      { fg: colors.success, bg: colors.successBg },
   sevColor: (s: string) => {
     const sl = s.toLowerCase();
-    if (sl === 'critical') return '#f87171';
-    if (sl === 'high')     return '#f59e0b';
-    if (sl === 'medium')   return '#60a5fa';
-    return '#4ade80';
+    if (sl === 'critical') return colors.danger;
+    if (sl === 'high')     return colors.warning;
+    if (sl === 'medium')   return colors.info;
+    return colors.success;
   },
   sevBg: (s: string) => {
     const sl = s.toLowerCase();
-    if (sl === 'critical') return '#2d1515';
-    if (sl === 'high')     return '#2d200a';
-    if (sl === 'medium')   return '#0d1f3c';
-    return '#0d2d1a';
+    if (sl === 'critical') return colors.dangerBg;
+    if (sl === 'high')     return colors.warningBg;
+    if (sl === 'medium')   return colors.infoBg;
+    return colors.successBg;
   },
 };
 
@@ -90,7 +93,7 @@ interface DepData {
 /* ── CVSS pill ──────────────────────────────────────────────────────── */
 const CVSSPill: React.FC<{ score: number }> = ({ score }) => {
   if (!score) return <Typography sx={{ color:T.muted, fontSize:11 }}>—</Typography>;
-  const color = score >= 9 ? '#f87171' : score >= 7 ? '#f59e0b' : score >= 4 ? '#60a5fa' : '#4ade80';
+  const color = score >= 9 ? colors.danger : score >= 7 ? colors.warning : score >= 4 ? colors.info : colors.success;
   return (
     <Box sx={{ display:'inline-flex', alignItems:'center', gap:0.4,
       px:0.8, py:0.1, borderRadius:0.5, bgcolor:`${color}18`, border:`1px solid ${color}40` }}>
@@ -116,6 +119,7 @@ const SourceBadge: React.FC<{ source: string }> = ({ source }) => {
 
 const DependencyScanning: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<DepData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -136,6 +140,8 @@ const DependencyScanning: React.FC = () => {
     };
     fetch();
   }, [clusterParam]); // eslint-disable-line
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) return (
     <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center"
@@ -192,7 +198,7 @@ const DependencyScanning: React.FC = () => {
           { label:'High',       count: data.high_vulnerabilities,      fg:T.high.fg,      bg:T.high.bg },
           { label:'Medium',     count: data.medium_vulnerabilities,    fg:T.medium.fg,    bg:T.medium.bg },
           { label:'Low',        count: data.low_vulnerabilities,       fg:T.low.fg,       bg:T.low.bg },
-          { label:'Patchable',  count: data.patchable_vulnerabilities, fg:'#34d399',      bg:'#0d2d1a' },
+          { label:'Patchable',  count: data.patchable_vulnerabilities, fg:colors.success,      bg:colors.successBg },
         ] as Array<{label:string;count:number;fg:string;bg:string}>).map(({ label, count, fg, bg }) => (
           <Box key={label} sx={{ bgcolor:bg, border:`1px solid ${fg}30`, borderRadius:2, p:1.5 }}>
             <Typography sx={{ fontSize:10, color:fg, fontWeight:600, textTransform:'uppercase', letterSpacing:0.5 }}>{label}</Typography>

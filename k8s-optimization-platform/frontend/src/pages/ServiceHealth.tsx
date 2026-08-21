@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Grid, LinearProgress,
   IconButton, Alert, Paper, Table, TableBody, TableCell,
@@ -13,6 +15,7 @@ import {
   TrendingUp as TrendingUpIcon, Speed as SpeedIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface ServiceHealthItem {
   service_name: string;
@@ -31,20 +34,20 @@ interface ServiceHealthItem {
 // SLO Burn-rate gauge
 const SLOGauge: React.FC<{ slo: number; actual: number; label: string }> = ({ slo, actual, label }) => {
   const ok = actual >= slo;
-  const color = ok ? '#22c55e' : actual >= slo - 0.5 ? '#f59e0b' : '#ef4444';
+  const color = ok ? colors.success : actual >= slo - 0.5 ? colors.warning : colors.danger;
   const r = 30;
   const circ = 2 * Math.PI * r;
   const dash = (actual / 100) * circ;
   return (
     <Box display="flex" flexDirection="column" alignItems="center">
       <svg width={80} height={80}>
-        <circle cx={40} cy={40} r={r} fill="none" stroke="#e5e7eb" strokeWidth={7} />
+        <circle cx={40} cy={40} r={r} fill="none" stroke={colors.border} strokeWidth={7} />
         <circle cx={40} cy={40} r={r} fill="none" stroke={color} strokeWidth={7}
           strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4} strokeLinecap="round" />
         <text x="50%" y="44%" textAnchor="middle" dominantBaseline="central"
           fontSize="11" fontWeight="bold" fill={color}>{actual.toFixed(2)}%</text>
         <text x="50%" y="65%" textAnchor="middle" dominantBaseline="central"
-          fontSize="8" fill="#9ca3af">SLO</text>
+          fontSize="8" fill={colors.textSecondary}>SLO</text>
       </svg>
       <Typography variant="caption" fontWeight={600} mt={0.5}>{label}</Typography>
       <Chip label={ok ? 'Within SLO' : 'Burning'} color={ok ? 'success' : 'error'} size="small" sx={{ mt: 0.5, fontSize: 9 }} />
@@ -61,12 +64,12 @@ const UptimeBar: React.FC<{ uptimePct: number }> = ({ uptimePct }) => {
     if (Math.random() < 0.05) return 'partial';
     return 'up';
   });
-  const colors = { up: '#22c55e', partial: '#f59e0b', down: '#ef4444' };
+  const uptimeColors = { up: colors.success, partial: colors.warning, down: colors.danger };
   return (
     <Box display="flex" gap={0.3} alignItems="center">
       {statuses.map((s, i) => (
         <Tooltip key={i} title={`Day ${i + 1}: ${s}`}>
-          <Box sx={{ width: 8, height: 18, bgcolor: colors[s as keyof typeof colors], borderRadius: 0.5, cursor: 'default' }} />
+          <Box sx={{ width: 8, height: 18, bgcolor: uptimeColors[s as keyof typeof uptimeColors], borderRadius: 0.5, cursor: 'default' }} />
         </Tooltip>
       ))}
     </Box>
@@ -76,10 +79,10 @@ const UptimeBar: React.FC<{ uptimePct: number }> = ({ uptimePct }) => {
 // Mini endpoint health bar (ready/total)
 const EndpointBar: React.FC<{ ready: number; total: number }> = ({ ready, total }) => {
   const pct = total > 0 ? (ready / total) * 100 : 0;
-  const color = pct === 100 ? '#22c55e' : pct >= 50 ? '#f59e0b' : '#ef4444';
+  const color = pct === 100 ? colors.success : pct >= 50 ? colors.warning : colors.danger;
   return (
     <Box display="flex" alignItems="center" gap={1}>
-      <Box sx={{ width: 56, bgcolor: '#f3f4f6', borderRadius: 1, height: 6, overflow: 'hidden' }}>
+      <Box sx={{ width: 56, bgcolor: colors.surfaceHover, borderRadius: 1, height: 6, overflow: 'hidden' }}>
         <Box sx={{ width: `${pct}%`, height: '100%', bgcolor: color }} />
       </Box>
       <Typography variant="caption" fontWeight={600}>{ready}/{total}</Typography>
@@ -89,6 +92,7 @@ const EndpointBar: React.FC<{ ready: number; total: number }> = ({ ready, total 
 
 const ServiceHealth: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [services, setServices] = useState<ServiceHealthItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -148,7 +152,7 @@ const ServiceHealth: React.FC = () => {
   const statusMui = (s: string): 'success' | 'warning' | 'error' =>
     s === 'Healthy' ? 'success' : s === 'Degraded' ? 'warning' : 'error';
   const statusDot = (s: string) =>
-    s === 'Healthy' ? '#22c55e' : s === 'Degraded' ? '#f59e0b' : '#ef4444';
+    s === 'Healthy' ? colors.success : s === 'Degraded' ? colors.warning : colors.danger;
 
   // Synthetic SLO data per key service types
   const sloItems = [
@@ -156,6 +160,8 @@ const ServiceHealth: React.FC = () => {
     { label: 'Endpoint Health', slo: 99.5, actual: (healthy / Math.max(services.length, 1)) * 100 },
     { label: 'ClusterIP Reachability', slo: 99.99, actual: 99.94 },
   ];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>
@@ -199,14 +205,14 @@ const ServiceHealth: React.FC = () => {
           {/* ── KPI row ────────────────────────────────────────────────────────── */}
           <Grid container spacing={2} mb={3}>
             {[
-              { label: 'Healthy Services', value: String(healthy), color: '#22c55e', sub: `${services.length ? ((healthy / services.length) * 100).toFixed(0) : 0}% of total` },
-              { label: 'Degraded Services', value: String(degraded), color: '#f59e0b', sub: 'Partial availability' },
-              { label: 'Unhealthy Services', value: String(unhealthy), color: '#ef4444', sub: 'No endpoints ready' },
-              { label: 'Avg Endpoint Health', value: avgHealth.toFixed(1) + '%', color: avgHealth > 90 ? '#22c55e' : '#f59e0b', sub: 'across all services' },
-              { label: 'Total Services', value: String(services.length), color: '#6366f1', sub: `${namespaces.length} namespaces` },
+              { label: 'Healthy Services', value: String(healthy), color: colors.success, sub: `${services.length ? ((healthy / services.length) * 100).toFixed(0) : 0}% of total` },
+              { label: 'Degraded Services', value: String(degraded), color: colors.warning, sub: 'Partial availability' },
+              { label: 'Unhealthy Services', value: String(unhealthy), color: colors.danger, sub: 'No endpoints ready' },
+              { label: 'Avg Endpoint Health', value: avgHealth.toFixed(1) + '%', color: avgHealth > 90 ? colors.success : colors.warning, sub: 'across all services' },
+              { label: 'Total Services', value: String(services.length), color: colors.purple, sub: `${namespaces.length} namespaces` },
             ].map(({ label, value, color, sub }) => (
               <Grid item xs={12} sm={6} md={2.4} key={label}>
-                <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}` }}>
+                <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, borderLeft: `4px solid ${color}` }}>
                   <CardContent sx={{ py: '12px !important', px: 2 }}>
                     <Typography variant="caption" color="textSecondary" fontWeight={600}>{label}</Typography>
                     <Typography variant="h4" fontWeight={800} sx={{ color, mt: 0.5 }}>{value}</Typography>
@@ -220,7 +226,7 @@ const ServiceHealth: React.FC = () => {
           {/* ── SLO Monitor row ─────────────────────────────────────────────────── */}
           <Grid container spacing={3} mb={3}>
             <Grid item xs={12} md={4}>
-              <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+              <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
                 <CardContent>
                   <Typography variant="subtitle1" fontWeight={700} mb={2}>SLO Monitors</Typography>
                   <Box display="flex" gap={3} justifyContent="space-around">
@@ -234,12 +240,12 @@ const ServiceHealth: React.FC = () => {
 
             {/* Uptime history */}
             <Grid item xs={12} md={8}>
-              <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+              <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
                 <CardContent>
                   <Box display="flex" justifyContent="space-between" mb={2}>
                     <Typography variant="subtitle1" fontWeight={700}>30-Day Uptime History</Typography>
                     <Box display="flex" gap={1.5} alignItems="center">
-                      {[{ color: '#22c55e', label: 'Up' }, { color: '#f59e0b', label: 'Partial' }, { color: '#ef4444', label: 'Down' }].map(({ color, label }) => (
+                      {[{ color: colors.success, label: 'Up' }, { color: colors.warning, label: 'Partial' }, { color: colors.danger, label: 'Down' }].map(({ color, label }) => (
                         <Box key={label} display="flex" alignItems="center" gap={0.5}>
                           <Box sx={{ width: 10, height: 10, bgcolor: color, borderRadius: 0.5 }} />
                           <Typography variant="caption" color="textSecondary">{label}</Typography>
@@ -266,13 +272,13 @@ const ServiceHealth: React.FC = () => {
           </Grid>
 
           {/* ── Service table ──────────────────────────────────────────────────── */}
-          <Card elevation={0} sx={{ border: '1px solid #e5e7eb' }}>
+          <Card elevation={0} sx={{ border: `1px solid ${colors.border}` }}>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={700} mb={2}>Service Inventory</Typography>
               <TableContainer>
                 <Table size="small">
                   <TableHead>
-                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#f8fafc', fontSize: 12 } }}>
+                    <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceHover, fontSize: 12 } }}>
                       <TableCell>Service</TableCell>
                       <TableCell>Namespace</TableCell>
                       <TableCell>Type</TableCell>
@@ -300,7 +306,7 @@ const ServiceHealth: React.FC = () => {
                         <TableCell><EndpointBar ready={svc.endpoints_ready} total={svc.endpoints_total} /></TableCell>
                         <TableCell>
                           <Box display="flex" alignItems="center" gap={0.5}>
-                            <Box sx={{ width: 40, bgcolor: '#f3f4f6', borderRadius: 1, height: 5, overflow: 'hidden' }}>
+                            <Box sx={{ width: 40, bgcolor: colors.surfaceHover, borderRadius: 1, height: 5, overflow: 'hidden' }}>
                               <Box sx={{ width: `${svc.health_percentage}%`, height: '100%', bgcolor: statusDot(svc.status) }} />
                             </Box>
                             <Typography variant="caption">{svc.health_percentage.toFixed(0)}%</Typography>

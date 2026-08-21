@@ -8,6 +8,7 @@ import {
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Prediction {
   id: string;
@@ -31,7 +32,7 @@ interface PredictiveFailuresData {
   last_updated: string;
 }
 
-const probColor = (p: number) => p >= 80 ? '#c62828' : p >= 70 ? '#e65100' : '#1565c0';
+const probColor = (p: number) => p >= 80 ? colors.danger : p >= 70 ? colors.warning : colors.info;
 const confColor: Record<string, 'error' | 'warning' | 'info'> = { high: 'error', medium: 'warning', low: 'info' };
 
 const PredictiveFailuresInner: React.FC = () => {

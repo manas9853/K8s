@@ -10,16 +10,20 @@ import StorageIcon from '@mui/icons-material/Storage';
 import CloudIcon from '@mui/icons-material/Cloud';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import { colors } from '../theme/colors';
 
-const COLORS = ['#3b82d4', '#7c5cd8', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#8b5cf6'];
+const COLORS = [colors.info, colors.purple, colors.success, colors.warning, colors.danger, colors.info, colors.purple];
 
 const fmt = (n: number | null | undefined) =>
   n == null ? '—' : `$${Number(n).toLocaleString()}`;
 
 const CostManagement: React.FC = () => {
   const { clusterParam, activeClusterId } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +47,8 @@ const CostManagement: React.FC = () => {
       setLoading(false);
     }
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
   if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
@@ -75,10 +81,10 @@ const CostManagement: React.FC = () => {
       {/* KPI Cards */}
       <Grid container spacing={3} mb={3}>
         {[
-          { label: 'Monthly Cost',   value: fmt(data.total_monthly_cost),  icon: <AttachMoneyIcon />, color: '#3b82d4' },
-          { label: 'Annual Cost',    value: fmt(data.total_annual_cost),   icon: <TrendingUpIcon />,  color: '#7c5cd8' },
-          { label: 'MoM Change',     value: `${data.month_over_month_change}%`, icon: <TrendingUpIcon />, color: '#f59e0b' },
-          { label: 'Clusters',       value: String(data.cluster_count ?? '—'), icon: <CloudIcon />, color: '#10b981' },
+          { label: 'Monthly Cost',   value: fmt(data.total_monthly_cost),  icon: <AttachMoneyIcon />, color: colors.info },
+          { label: 'Annual Cost',    value: fmt(data.total_annual_cost),   icon: <TrendingUpIcon />,  color: colors.purple },
+          { label: 'MoM Change',     value: `${data.month_over_month_change}%`, icon: <TrendingUpIcon />, color: colors.warning },
+          { label: 'Clusters',       value: String(data.cluster_count ?? '—'), icon: <CloudIcon />, color: colors.success },
         ].map(card => (
           <Grid item xs={12} sm={6} md={3} key={card.label}>
             <Card>
@@ -124,7 +130,7 @@ const CostManagement: React.FC = () => {
                 <XAxis dataKey="environment" />
                 <YAxis tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                 <Tooltip formatter={(v: number) => fmt(v)} />
-                <Bar dataKey="cost" fill="#3b82d4" name="Cost" />
+                <Bar dataKey="cost" fill={colors.info} name="Cost" />
               </BarChart>
             </ResponsiveContainer>
           </Paper>

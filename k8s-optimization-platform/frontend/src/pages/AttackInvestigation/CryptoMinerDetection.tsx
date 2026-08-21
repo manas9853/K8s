@@ -21,6 +21,7 @@ import {
 import { Memory as MinerIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface MinerEntry {
   id: string;
@@ -50,10 +51,10 @@ function formatTimestamp(value?: string) {
 }
 
 function riskColor(score: number) {
-  if (score >= 80) return '#ef5350';
-  if (score >= 60) return '#ffa726';
-  if (score >= 40) return '#90caf9';
-  return '#a5d6a7';
+  if (score >= 80) return colors.danger;
+  if (score >= 60) return colors.warning;
+  if (score >= 40) return colors.info;
+  return colors.success;
 }
 
 function buildReason(miner: MinerEntry): string[] {
@@ -130,7 +131,7 @@ const CryptoMinerDetectionInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -138,7 +139,7 @@ const CryptoMinerDetectionInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -146,28 +147,28 @@ const CryptoMinerDetectionInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load crypto miner detections</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <MinerIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <MinerIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Crypto Miner Detection
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real miner-risk signals for {data.cluster_name || 'cluster'} · Last updated {formatTimestamp(data.last_updated)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
@@ -175,15 +176,15 @@ const CryptoMinerDetectionInner: React.FC = () => {
       {/* Summary cards */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Active Miner Alerts', value: data.active_miners, color: data.active_miners > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Total High-Risk Pods', value: data.total_detected, color: '#90caf9' },
-          { label: 'Affected Namespaces', value: uniqueNamespaces, color: uniqueNamespaces > 0 ? '#ffa726' : '#a5d6a7' },
-          { label: 'Affected Nodes', value: uniqueNodes, color: uniqueNodes > 0 ? '#ffa726' : '#a5d6a7' },
+          { label: 'Active Miner Alerts', value: data.active_miners, color: data.active_miners > 0 ? colors.danger : colors.success },
+          { label: 'Total High-Risk Pods', value: data.total_detected, color: colors.info },
+          { label: 'Affected Namespaces', value: uniqueNamespaces, color: uniqueNamespaces > 0 ? colors.warning : colors.success },
+          { label: 'Affected Nodes', value: uniqueNodes, color: uniqueNodes > 0 ? colors.warning : colors.success },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{item.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{item.label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>{item.value}</Typography>
               </CardContent>
             </Card>
@@ -193,8 +194,8 @@ const CryptoMinerDetectionInner: React.FC = () => {
 
       {/* Backend note banner */}
       {data.note && (
-        <Box sx={{ p: 2, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', borderRadius: 1, borderLeft: '4px solid #ffa726' }}>
-          <Typography variant="body2" sx={{ color: '#c8d0dc' }}>
+        <Box sx={{ p: 2, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 1, borderLeft: `4px solid ${colors.warning}` }}>
+          <Typography variant="body2" sx={{ color: colors.textMuted }}>
             ⚠ {data.note}
           </Typography>
         </Box>
@@ -202,31 +203,31 @@ const CryptoMinerDetectionInner: React.FC = () => {
 
       {/* Why these matter */}
       {miners.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Why these pods are miner-risk candidates
           </Typography>
           <Stack spacing={1.5}>
             {miners.map((miner) => (
-              <Box key={miner.id} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={miner.id} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" justifyContent="space-between" gap={1} flexWrap="wrap" mb={1}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {miner.pod}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {miner.namespace} · {miner.node_ip} · {formatTimestamp(miner.detection_time)}
                     </Typography>
                   </Box>
                   <Box display="flex" gap={1} flexWrap="wrap">
-                    <Chip label={miner.id} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
-                    <Chip label={miner.miner_type} size="small" sx={{ bgcolor: '#2a3245', color: '#ffa726', fontSize: 10 }} />
-                    <Chip label={`Risk ${miner.risk_score}`} size="small" sx={{ bgcolor: '#2a3245', color: riskColor(miner.risk_score), fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={miner.id} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
+                    <Chip label={miner.miner_type} size="small" sx={{ bgcolor: colors.border, color: colors.warning, fontSize: 10 }} />
+                    <Chip label={`Risk ${miner.risk_score}`} size="small" sx={{ bgcolor: colors.border, color: riskColor(miner.risk_score), fontWeight: 'bold', fontSize: 10 }} />
                   </Box>
                 </Box>
                 <Stack spacing={0.75}>
                   {buildReason(miner).map((reason) => (
-                    <Typography key={reason} variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+                    <Typography key={reason} variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
                       • {reason}
                     </Typography>
                   ))}
@@ -238,15 +239,15 @@ const CryptoMinerDetectionInner: React.FC = () => {
       )}
 
       {/* Full table */}
-      <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Detected Miner Candidates
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               {['ID', 'Pod / Namespace', 'Node IP', 'Type', 'CPU Usage', 'Risk Score', 'Detected', 'Indicators'].map((header) => (
-                <TableCell key={header} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>
+                <TableCell key={header} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>
                   {header}
                 </TableCell>
               ))}
@@ -254,33 +255,33 @@ const CryptoMinerDetectionInner: React.FC = () => {
           </TableHead>
           <TableBody>
             {miners.map((miner) => (
-              <TableRow key={miner.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' }, bgcolor: '#131d2e' }}>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={miner.id} size="small" sx={{ bgcolor: '#2a3245', color: '#ef5350', fontWeight: 'bold', fontSize: 10 }} />
+              <TableRow key={miner.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, bgcolor: colors.surfaceAlt }}>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={miner.id} size="small" sx={{ bgcolor: colors.border, color: colors.danger, fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245', minWidth: 180 }}>
-                  <Typography variant="body2" sx={{ color: '#e8eaf0', fontWeight: 700 }}>{miner.pod}</Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontFamily: 'monospace' }}>{miner.namespace}</Typography>
+                <TableCell sx={{ borderColor: colors.border, minWidth: 180 }}>
+                  <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 700 }}>{miner.pod}</Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontFamily: 'monospace' }}>{miner.namespace}</Typography>
                 </TableCell>
-                <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontFamily: 'monospace', fontSize: 12 }}>{miner.node_ip}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={miner.miner_type} size="small" sx={{ bgcolor: '#2a3245', color: '#ffa726', fontSize: 10 }} />
+                <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontFamily: 'monospace', fontSize: 12 }}>{miner.node_ip}</TableCell>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={miner.miner_type} size="small" sx={{ bgcolor: colors.border, color: colors.warning, fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
+                <TableCell sx={{ borderColor: colors.border }}>
                   <Chip
                     label={miner.cpu_usage !== null ? `${miner.cpu_usage}%` : 'N/A'}
                     size="small"
-                    sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }}
+                    sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }}
                   />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={String(miner.risk_score)} size="small" sx={{ bgcolor: '#2a3245', color: riskColor(miner.risk_score), fontWeight: 'bold', fontSize: 10 }} />
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={String(miner.risk_score)} size="small" sx={{ bgcolor: colors.border, color: riskColor(miner.risk_score), fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12, minWidth: 150 }}>{formatTimestamp(miner.detection_time)}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245', minWidth: 260 }}>
+                <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, minWidth: 150 }}>{formatTimestamp(miner.detection_time)}</TableCell>
+                <TableCell sx={{ borderColor: colors.border, minWidth: 260 }}>
                   <Box display="flex" flexWrap="wrap" gap={0.5}>
                     {miner.suspicious_indicators.map((indicator) => (
-                      <Chip key={indicator} label={indicator} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10, height: 20 }} />
+                      <Chip key={indicator} label={indicator} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10, height: 20 }} />
                     ))}
                   </Box>
                 </TableCell>

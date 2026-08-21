@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -25,7 +24,6 @@ import {
   List,
   ListItem,
   ListItemText,
-  Button,
   FormControl,
   InputLabel,
   Select,
@@ -41,6 +39,7 @@ import {
   Favorite as FavoriteIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import NoClusterState from '../components/NoClusterState';
 
 interface PodHealthItem {
   pod_name: string;
@@ -60,7 +59,6 @@ interface PodHealthItem {
 }
 
 const PodHealth: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
   const [selectedClusterId, setSelectedClusterId] = useState<string>(activeClusterId || 'all');
   const [pods, setPods] = useState<PodHealthItem[]>([]);
@@ -148,15 +146,7 @@ const PodHealth: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')}>Go to Cluster Onboarding</Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   return (

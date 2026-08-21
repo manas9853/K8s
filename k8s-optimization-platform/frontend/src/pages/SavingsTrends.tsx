@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box, Typography, Grid, Card, CardContent, Paper, Chip,
@@ -11,6 +13,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface TrendItem { month: string; current_cost: number; optimized_cost: number; savings: number; }
 interface CostData {
@@ -21,10 +24,11 @@ interface CostData {
 
 const fmt  = (n: number) => `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtK = (n: number) => n >= 1000 ? `$${(n/1000).toFixed(1)}k` : `$${n.toFixed(0)}`;
-const tooltipStyle = { backgroundColor: '#1e2433', border: '1px solid #2a3245', color: '#e8eaf0' };
+const tooltipStyle = { backgroundColor: colors.surface, border: `1px solid ${colors.border}`, color: colors.textPrimary };
 
 const SavingsTrends: React.FC = () => {
   const { clusterParam, activeClusterId } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<CostData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,6 +75,8 @@ const SavingsTrends: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
   if (error)   return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
   if (!data)   return null;
@@ -94,52 +100,52 @@ const SavingsTrends: React.FC = () => {
   const direction: 'increasing' | 'decreasing' | 'stable' =
     velocity > 5 ? 'increasing' : velocity < -5 ? 'decreasing' : 'stable';
 
-  const trendColor = direction === 'increasing' ? '#4ade80' : direction === 'decreasing' ? '#f87171' : '#e8eaf0';
+  const trendColor = direction === 'increasing' ? colors.success : direction === 'decreasing' ? colors.danger : colors.textPrimary;
   const TrendIcon  = direction === 'increasing' ? TrendingUp : direction === 'decreasing' ? TrendingDown : ShowChart;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
       <CostAccuracyBanner clusterName={activeClusterId} />
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={3}>
         <Box>
-          <Typography variant="h4" sx={{ color: '#e8eaf0', fontWeight: 700 }}>Savings Trends Analysis</Typography>
-          <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>Historical savings trends and future projections</Typography>
+          <Typography variant="h4" sx={{ color: colors.textPrimary, fontWeight: 700 }}>Savings Trends Analysis</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5 }}>Historical savings trends and future projections</Typography>
         </Box>
         <Box display="flex" gap={1} alignItems="center">
           <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel sx={{ color: '#8b95a9' }}>Time Range</InputLabel>
+            <InputLabel sx={{ color: colors.textSecondary }}>Time Range</InputLabel>
             <Select value={timeRange} label="Time Range"
               onChange={e => setTimeRange(e.target.value as '3m' | '6m' | '12m')}
-              sx={{ color: '#e8eaf0', bgcolor: '#1e2433', '& .MuiOutlinedInput-notchedOutline': { borderColor: '#2a3245' } }}>
+              sx={{ color: colors.textPrimary, bgcolor: colors.surface, '& .MuiOutlinedInput-notchedOutline': { borderColor: colors.border } }}>
               <MenuItem value="3m">Last 3 Months</MenuItem>
               <MenuItem value="6m">Last 6 Months</MenuItem>
               <MenuItem value="12m">Last 12 Months</MenuItem>
             </Select>
           </FormControl>
-          <IconButton onClick={fetchData} sx={{ color: '#4ade80' }}><Refresh /></IconButton>
+          <IconButton onClick={fetchData} sx={{ color: colors.success }}><Refresh /></IconButton>
         </Box>
       </Box>
 
       {/* KPI cards */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Savings (Period)', value: fmt(totalSavings),          sub: 'Cumulative savings',              color: '#4ade80' },
-          { label: 'Avg Monthly Savings',    value: fmt(avgMonthly),             sub: 'Per month average',               color: '#e8eaf0' },
+          { label: 'Total Savings (Period)', value: fmt(totalSavings),          sub: 'Cumulative savings',              color: colors.success },
+          { label: 'Avg Monthly Savings',    value: fmt(avgMonthly),             sub: 'Per month average',               color: colors.textPrimary },
           { label: 'Optimisation Velocity',  value: `${Math.abs(velocity).toFixed(1)}%`, sub: direction.toUpperCase(), color: trendColor },
-          { label: 'Projected Annual',       value: fmt(data.monthly_savings * 12), sub: 'Based on current run-rate',    color: '#4ade80' },
+          { label: 'Projected Annual',       value: fmt(data.monthly_savings * 12), sub: 'Based on current run-rate',    color: colors.success },
         ].map(({ label, value, sub, color }) => (
           <Grid item xs={12} md={3} key={label}>
-            <Card sx={{ bgcolor: '#1e2433', border: `1px solid ${color}22` }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${color}22` }}>
               <CardContent>
-                <Typography variant="body2" sx={{ color: '#8b95a9', textTransform: 'uppercase', fontSize: 11, mb: 1 }}>{label}</Typography>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, textTransform: 'uppercase', fontSize: 11, mb: 1 }}>{label}</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   {label === 'Optimisation Velocity' && <TrendIcon sx={{ color }} />}
                   <Typography variant="h4" sx={{ color, fontWeight: 700 }}>{value}</Typography>
                 </Box>
                 {label === 'Optimisation Velocity'
                   ? <Chip label={direction.toUpperCase()} size="small" sx={{ mt: 1, bgcolor: color + '22', color, border: `1px solid ${color}44` }} />
-                  : <Typography variant="body2" sx={{ color: '#8b95a9', mt: 0.5 }}>{sub}</Typography>}
+                  : <Typography variant="body2" sx={{ color: colors.textSecondary, mt: 0.5 }}>{sub}</Typography>}
               </CardContent>
             </Card>
           </Grid>
@@ -147,85 +153,85 @@ const SavingsTrends: React.FC = () => {
       </Grid>
 
       {/* Cumulative savings area */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Cumulative Savings Over Time</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Cumulative Savings Over Time</Typography>
         <Box sx={{ height: 280 }}>
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={trend}>
               <defs>
                 <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#4ade80" stopOpacity={0.25} />
-                  <stop offset="95%" stopColor="#4ade80" stopOpacity={0} />
+                  <stop offset="5%"  stopColor={colors.success} stopOpacity={0.25} />
+                  <stop offset="95%" stopColor={colors.success} stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
-              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
-              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+              <XAxis dataKey="month" stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
+              <YAxis tickFormatter={fmtK} stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
               <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
-              <Legend wrapperStyle={{ color: '#8b95a9' }} />
-              <Area type="monotone" dataKey="cumulative_savings" stroke="#4ade80" strokeWidth={2}
-                fill="url(#grad)" name="Cumulative Savings" dot={{ r: 3, fill: '#4ade80' }} />
+              <Legend wrapperStyle={{ color: colors.textSecondary }} />
+              <Area type="monotone" dataKey="cumulative_savings" stroke={colors.success} strokeWidth={2}
+                fill="url(#grad)" name="Cumulative Savings" dot={{ r: 3, fill: colors.success }} />
             </AreaChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
       {/* Monthly savings bar */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Monthly Savings</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Monthly Savings</Typography>
         <Box sx={{ height: 260 }}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={trend} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
-              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
-              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+              <XAxis dataKey="month" stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
+              <YAxis tickFormatter={fmtK} stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
               <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
-              <Legend wrapperStyle={{ color: '#8b95a9' }} />
-              <Bar dataKey="savings" fill="#4ade80" name="Monthly Savings" radius={[4,4,0,0]} />
+              <Legend wrapperStyle={{ color: colors.textSecondary }} />
+              <Bar dataKey="savings" fill={colors.success} name="Monthly Savings" radius={[4,4,0,0]} />
             </BarChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
       {/* Current vs Optimised line */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Cost Comparison: Current vs Optimised</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Cost Comparison: Current vs Optimised</Typography>
         <Box sx={{ height: 260 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
-              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
-              <YAxis tickFormatter={fmtK} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+              <XAxis dataKey="month" stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
+              <YAxis tickFormatter={fmtK} stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
               <Tooltip formatter={(v: number) => fmt(v)} contentStyle={tooltipStyle} />
-              <Legend wrapperStyle={{ color: '#8b95a9' }} />
-              <Line type="monotone" dataKey="current_cost"   stroke="#f87171" strokeWidth={2} name="Current Cost"   dot={{ r: 4, fill: '#f87171' }} />
-              <Line type="monotone" dataKey="optimized_cost" stroke="#4ade80" strokeWidth={2} name="Optimised Cost" dot={{ r: 4, fill: '#4ade80' }} />
+              <Legend wrapperStyle={{ color: colors.textSecondary }} />
+              <Line type="monotone" dataKey="current_cost"   stroke={colors.danger} strokeWidth={2} name="Current Cost"   dot={{ r: 4, fill: colors.danger }} />
+              <Line type="monotone" dataKey="optimized_cost" stroke={colors.success} strokeWidth={2} name="Optimised Cost" dot={{ r: 4, fill: colors.success }} />
             </LineChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
       {/* Optimisation rate line */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 1 }}>Optimisation Rate Trend</Typography>
-        <Typography variant="body2" sx={{ color: '#8b95a9', mb: 2 }}>Percentage of cost savings achievable each month</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 1 }}>Optimisation Rate Trend</Typography>
+        <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 2 }}>Percentage of cost savings achievable each month</Typography>
         <Box sx={{ height: 240 }}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={trend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#2a3245" />
-              <XAxis dataKey="month" stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
-              <YAxis tickFormatter={v => `${v.toFixed(0)}%`} stroke="#8b95a9" tick={{ fill: '#8b95a9' }} />
+              <CartesianGrid strokeDasharray="3 3" stroke={colors.border} />
+              <XAxis dataKey="month" stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
+              <YAxis tickFormatter={v => `${v.toFixed(0)}%`} stroke={colors.textSecondary} tick={{ fill: colors.textSecondary }} />
               <Tooltip formatter={(v: number) => `${v.toFixed(2)}%`} contentStyle={tooltipStyle} />
-              <Legend wrapperStyle={{ color: '#8b95a9' }} />
-              <Line type="monotone" dataKey="optimization_rate" stroke="#4ade80" strokeWidth={2} name="Optimisation Rate" dot={{ r: 4, fill: '#4ade80' }} />
+              <Legend wrapperStyle={{ color: colors.textSecondary }} />
+              <Line type="monotone" dataKey="optimization_rate" stroke={colors.success} strokeWidth={2} name="Optimisation Rate" dot={{ r: 4, fill: colors.success }} />
             </LineChart>
           </ResponsiveContainer>
         </Box>
       </Paper>
 
       {/* Key insights */}
-      <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" sx={{ color: '#e8eaf0', mb: 2 }}>Key Insights</Typography>
+      <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" sx={{ color: colors.textPrimary, mb: 2 }}>Key Insights</Typography>
         <Grid container spacing={2}>
           <Grid item xs={12} md={6}>
             {[
@@ -233,8 +239,8 @@ const SavingsTrends: React.FC = () => {
               ['Trend direction', direction.toUpperCase()],
               ['Optimisation velocity', `${velocity > 0 ? '+' : ''}${velocity.toFixed(1)}%`],
             ].map(([k, v]) => (
-              <Typography key={k} variant="body2" sx={{ color: '#8b95a9', mb: 0.5 }}>
-                • {k}: <strong style={{ color: '#c8cdd8' }}>{v}</strong>
+              <Typography key={k} variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                • {k}: <strong style={{ color: colors.textMuted }}>{v}</strong>
               </Typography>
             ))}
           </Grid>
@@ -244,8 +250,8 @@ const SavingsTrends: React.FC = () => {
               ['Total period savings', fmt(totalSavings)],
               ['Projected annual impact', fmt(data.monthly_savings * 12)],
             ].map(([k, v]) => (
-              <Typography key={k} variant="body2" sx={{ color: '#8b95a9', mb: 0.5 }}>
-                • {k}: <strong style={{ color: '#4ade80' }}>{v}</strong>
+              <Typography key={k} variant="body2" sx={{ color: colors.textSecondary, mb: 0.5 }}>
+                • {k}: <strong style={{ color: colors.success }}>{v}</strong>
               </Typography>
             ))}
           </Grid>

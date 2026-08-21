@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Grid, Card, CardContent, Chip, CircularProgress,
   Alert, LinearProgress, Stack, Table, TableBody, TableCell,
@@ -7,6 +9,7 @@ import {
 } from '@mui/material';
 import { Lock as LockIcon, Warning as WarningIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface PermissionItem {
   service_account: string;
@@ -31,10 +34,11 @@ interface ExcessivePermissionsData {
 }
 
 // Neutral dark bg, only text colour changes per severity
-const SEV_TEXT: Record<string, string> = { critical: '#ef5350', high: '#ffa726', medium: '#90caf9', low: '#a5d6a7' };
+const SEV_TEXT: Record<string, string> = { critical: colors.danger, high: colors.warning, medium: colors.info, low: colors.success };
 
 const ExcessivePermissions: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ExcessivePermissionsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -62,37 +66,39 @@ const ExcessivePermissions: React.FC = () => {
     return () => { mounted = false; clearInterval(id); };
   }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
       <CircularProgress />
     </Box>
   );
-  if (error) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data) return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">Failed to load data</Alert></Box>;
+  if (error) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data) return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">Failed to load data</Alert></Box>;
 
   const perms = Array.isArray(data.excessive_permissions) ? data.excessive_permissions : [];
   const criticals = perms.filter(p => p.risk_level.toLowerCase() === 'critical');
   const rbacScore = data.rbac_score ?? 0;
-  const scoreColor = rbacScore >= 80 ? '#a5d6a7' : rbacScore >= 60 ? '#ffa726' : '#ef5350';
+  const scoreColor = rbacScore >= 80 ? colors.success : rbacScore >= 60 ? colors.warning : colors.danger;
   const r = 54; const circ = 2 * Math.PI * r;
   const dash = (Math.min(rbacScore, 100) / 100) * circ;
 
   const RISK_ROWS = [
-    { label: 'Critical Risk', count: data.critical_risk ?? 0, color: '#ef5350' },
-    { label: 'High Risk',     count: data.high_risk    ?? 0, color: '#ffa726' },
-    { label: 'Medium Risk',   count: data.medium_risk  ?? 0, color: '#90caf9' },
+    { label: 'Critical Risk', count: data.critical_risk ?? 0, color: colors.danger },
+    { label: 'High Risk',     count: data.high_risk    ?? 0, color: colors.warning },
+    { label: 'Medium Risk',   count: data.medium_risk  ?? 0, color: colors.info },
   ];
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       {/* HEADER */}
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <LockIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+        <LockIcon sx={{ fontSize: 32, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Excessive Permissions
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             RBAC risk analysis · {data.total_service_accounts ?? 0} service accounts ·{' '}
             Last scan {data.last_scan ? new Date(data.last_scan).toLocaleString() : 'N/A'}
           </Typography>
@@ -103,22 +109,22 @@ const ExcessivePermissions: React.FC = () => {
       <Grid container spacing={2} mb={3}>
         {/* Score ring */}
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>RBAC Score</Typography>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>RBAC Score</Typography>
               <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
                 <svg width={130} height={130}>
-                  <circle cx={65} cy={65} r={r} fill="none" stroke="#2a3245" strokeWidth={11} />
+                  <circle cx={65} cy={65} r={r} fill="none" stroke={colors.border} strokeWidth={11} />
                   <circle cx={65} cy={65} r={r} fill="none" stroke={scoreColor} strokeWidth={11}
                     strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
                     transform="rotate(-90 65 65)" />
                 </svg>
                 <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
                   <Typography variant="h4" fontWeight="bold" sx={{ color: scoreColor }}>{rbacScore}</Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>/ 100</Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>/ 100</Typography>
                 </Box>
               </Box>
-              <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mt: 1 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 1 }}>
                 {criticals.length > 0 ? `${criticals.length} critical issue${criticals.length > 1 ? 's' : ''}` : 'No critical issues'}
               </Typography>
             </CardContent>
@@ -129,15 +135,15 @@ const ExcessivePermissions: React.FC = () => {
         <Grid item xs={12} md={9}>
           <Grid container spacing={2} mb={2}>
             {[
-              { label: 'Total Service Accounts',  count: data.total_service_accounts ?? 0,       color: '#90caf9' },
-              { label: 'Over-permissioned',        count: data.excessive_permissions_count ?? 0,  color: '#ffa726' },
-              { label: 'Critical Risk',            count: data.critical_risk ?? 0,                color: '#ef5350' },
-              { label: 'High Risk',                count: data.high_risk ?? 0,                    color: '#ffa726' },
+              { label: 'Total Service Accounts',  count: data.total_service_accounts ?? 0,       color: colors.info },
+              { label: 'Over-permissioned',        count: data.excessive_permissions_count ?? 0,  color: colors.warning },
+              { label: 'Critical Risk',            count: data.critical_risk ?? 0,                color: colors.danger },
+              { label: 'High Risk',                count: data.high_risk ?? 0,                    color: colors.warning },
             ].map(({ label, count, color }) => (
               <Grid item xs={6} md={3} key={label}>
-                <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+                <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
                   <CardContent sx={{ pb: '8px !important' }}>
-                    <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{label}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{label}</Typography>
                     <Typography variant="h4" fontWeight="bold" sx={{ color }}>{count}</Typography>
                   </CardContent>
                 </Card>
@@ -146,18 +152,18 @@ const ExcessivePermissions: React.FC = () => {
           </Grid>
 
           {/* Risk distribution bar */}
-          <Paper sx={{ p: 2, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-            <Typography variant="subtitle2" sx={{ color: '#e8eaf0', mb: 1.5 }}>Risk Distribution</Typography>
+          <Paper sx={{ p: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+            <Typography variant="subtitle2" sx={{ color: colors.textPrimary, mb: 1.5 }}>Risk Distribution</Typography>
             <Stack spacing={1.5}>
               {RISK_ROWS.map(rp => (
                 <Box key={rp.label} display="flex" alignItems="center" gap={2}>
-                  <Typography variant="body2" sx={{ minWidth: 130, color: '#8892a4', fontSize: 12 }}>{rp.label}</Typography>
+                  <Typography variant="body2" sx={{ minWidth: 130, color: colors.textSecondary, fontSize: 12 }}>{rp.label}</Typography>
                   <LinearProgress variant="determinate"
                     value={Math.min((rp.count / Math.max(perms.length + 1, 1)) * 100, 100)}
-                    sx={{ flex: 1, height: 7, borderRadius: 3, bgcolor: '#2a3245',
+                    sx={{ flex: 1, height: 7, borderRadius: 3, bgcolor: colors.border,
                       '& .MuiLinearProgress-bar': { bgcolor: rp.color } }} />
                   <Chip label={rp.count} size="small"
-                    sx={{ bgcolor: '#2a3245', color: rp.color, fontWeight: 'bold', fontSize: 11, minWidth: 28 }} />
+                    sx={{ bgcolor: colors.border, color: rp.color, fontWeight: 'bold', fontSize: 11, minWidth: 28 }} />
                 </Box>
               ))}
             </Stack>
@@ -167,28 +173,28 @@ const ExcessivePermissions: React.FC = () => {
 
       {/* CRITICAL SPOTLIGHT */}
       {criticals.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <WarningIcon sx={{ color: '#ef5350' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Critical Permission Issues</Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>Immediate remediation required</Typography>
+            <WarningIcon sx={{ color: colors.danger }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>Critical Permission Issues</Typography>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>Immediate remediation required</Typography>
           </Box>
           <Stack spacing={1}>
             {criticals.slice(0, 4).map((item, i) => (
-              <Box key={i} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
-                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+              <Box key={i} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
+                <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                   {item.service_account}
                 </Typography>
-                <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                   {(item.namespaces ?? [item.namespace]).join(', ')}
                 </Typography>
-                <Typography variant="body2" sx={{ color: '#8892a4', display: 'block', mt: 0.5, fontSize: 12 }}>
+                <Typography variant="body2" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5, fontSize: 12 }}>
                   {item.recommendation}
                 </Typography>
                 <Box display="flex" flexWrap="wrap" gap={0.5} mt={1}>
                   {item.excessive_permissions.slice(0, 6).map((p, pi) => (
                     <Chip key={pi} label={p} size="small"
-                      sx={{ bgcolor: '#2a3245', color: '#ef5350', fontSize: 10, height: 20 }} />
+                      sx={{ bgcolor: colors.border, color: colors.danger, fontSize: 10, height: 20 }} />
                   ))}
                 </Box>
               </Box>
@@ -198,15 +204,15 @@ const ExcessivePermissions: React.FC = () => {
       )}
 
       {/* ALL PERMISSIONS TABLE */}
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             All Excessive Permissions ({perms.length})
           </Typography>
         </Box>
         {perms.length === 0 ? (
           <Box p={4} textAlign="center">
-            <Typography variant="body1" sx={{ color: '#8892a4' }}>No excessive permissions detected.</Typography>
+            <Typography variant="body1" sx={{ color: colors.textSecondary }}>No excessive permissions detected.</Typography>
           </Box>
         ) : (
           <TableContainer>
@@ -214,8 +220,8 @@ const ExcessivePermissions: React.FC = () => {
               <TableHead>
                 <TableRow>
                   {['Service Account', 'Namespaces', 'Risk Level', 'Pods Using', 'Permissions', 'Recommendation'].map(h => (
-                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4',
-                      bgcolor: '#131d2e', borderColor: '#2a3245' }}>{h}</TableCell>
+                    <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: colors.textSecondary,
+                      bgcolor: colors.surfaceAlt, borderColor: colors.border }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
@@ -223,34 +229,34 @@ const ExcessivePermissions: React.FC = () => {
                 {perms.slice(0, 50).map((item, i) => {
                   const risk = item.risk_level.toLowerCase();
                   return (
-                    <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+                    <TableRow key={i} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
                         {item.service_account}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
                         {(item.namespaces ?? [item.namespace]).slice(0, 2).join(', ')}
-                        {(item.namespaces ?? []).length > 2 && <Typography component="span" variant="caption" sx={{ color: '#4a5568' }}> +{(item.namespaces ?? []).length - 2}</Typography>}
+                        {(item.namespaces ?? []).length > 2 && <Typography component="span" variant="caption" sx={{ color: colors.textSecondary }}> +{(item.namespaces ?? []).length - 2}</Typography>}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Chip label={risk.toUpperCase()} size="small"
-                          sx={{ bgcolor: '#2a3245', color: SEV_TEXT[risk] ?? '#e8eaf0', fontWeight: 'bold', fontSize: 10 }} />
+                          sx={{ bgcolor: colors.border, color: SEV_TEXT[risk] ?? colors.textPrimary, fontWeight: 'bold', fontSize: 10 }} />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
                         {item.used_by_pods ?? 'N/A'}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Box display="flex" flexWrap="wrap" gap={0.5}>
                           {item.excessive_permissions.slice(0, 3).map((p, pi) => (
                             <Chip key={pi} label={p} size="small"
-                              sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10, height: 20 }} />
+                              sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10, height: 20 }} />
                           ))}
                           {item.excessive_permissions.length > 3 && (
                             <Chip label={`+${item.excessive_permissions.length - 3}`} size="small"
-                              sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10, height: 20 }} />
+                              sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10, height: 20 }} />
                           )}
                         </Box>
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', maxWidth: 220 }}>
+                      <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, maxWidth: 220 }}>
                         {item.recommendation}
                       </TableCell>
                     </TableRow>

@@ -8,6 +8,7 @@ import {
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Issue {
   id: string;
@@ -35,7 +36,7 @@ interface ComplianceDashboardData {
 }
 
 const gradeColor = (score: number) =>
-  score >= 90 ? '#2e7d32' : score >= 80 ? '#1565c0' : score >= 70 ? '#e65100' : '#c62828';
+  score >= 90 ? colors.success : score >= 80 ? colors.info : score >= 70 ? colors.warning : colors.danger;
 
 const sevColor: Record<string, 'error' | 'warning' | 'info' | 'default'> = {
   critical: 'error', high: 'warning', medium: 'info', low: 'default',

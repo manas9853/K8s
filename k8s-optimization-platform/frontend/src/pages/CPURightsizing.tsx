@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -51,6 +53,7 @@ interface Recommendation {
 
 const CPURightsizing: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -128,6 +131,8 @@ const CPURightsizing: React.FC = () => {
       minimumFractionDigits: 2
     }).format(amount);
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) {
     return (

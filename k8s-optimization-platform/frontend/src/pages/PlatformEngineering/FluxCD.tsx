@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
+import { useCluster } from '../../contexts/ClusterContext';
+import NoClusterState from '../../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -22,6 +24,7 @@ interface FluxKustomization {
 
 const FluxCD: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<FluxKustomization[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +40,8 @@ const FluxCD: React.FC = () => {
 
   const readyCount = data.filter((r) => r.ready).length;
   const suspendedCount = data.filter((r) => r.suspended).length;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

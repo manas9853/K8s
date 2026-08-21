@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -85,6 +87,7 @@ const RESOURCE_TYPE_ICONS: Record<string, React.ReactElement> = {
 
 const OwnershipMapping: React.FC = () => {
   const { activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<OwnershipRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -190,6 +193,8 @@ const OwnershipMapping: React.FC = () => {
     if (type === 'Deployment') return 'secondary';
     return 'default';
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

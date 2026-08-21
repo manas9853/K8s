@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box,
   Typography,
@@ -23,26 +25,27 @@ import SpeedIcon from '@mui/icons-material/Speed';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const IMPACT: Record<string, string> = {
-  high:   '#f85149',
-  medium: '#d29922',
-  low:    '#3fb950',
+  high:   colors.danger,
+  medium: colors.warning,
+  low:    colors.success,
 };
 const EFFORT: Record<string, string> = {
-  low:    '#3fb950',
-  medium: '#d29922',
-  high:   '#f85149',
+  low:    colors.success,
+  medium: colors.warning,
+  high:   colors.danger,
 };
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -85,7 +88,7 @@ const Badge: React.FC<{ label: string; color: string }> = ({ label, color }) => 
 // ─── KPI card ─────────────────────────────────────────────────────────────────
 const KpiCard: React.FC<{ label: string; value: string | number; accent?: string; icon: React.ReactNode }> = ({ label, value, accent, icon }) => (
   <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
-    <Box sx={{ color: accent ?? '#58a6ff', flexShrink: 0 }}>{icon}</Box>
+    <Box sx={{ color: accent ?? colors.info, flexShrink: 0 }}>{icon}</Box>
     <Box>
       <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{label}</Typography>
       <Typography sx={{ color: accent ?? DK.text, fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2 }}>{value}</Typography>
@@ -96,6 +99,7 @@ const KpiCard: React.FC<{ label: string; value: string | number; accent?: string
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const OptimizationAdvisor: React.FC = () => {
   const { activeClusterId, activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]       = useState<AdvisorPayload | null>(null);
   const [loading, setLoading]       = useState(true);
   const [selected, setSelected]     = useState<Set<string>>(new Set());
@@ -194,9 +198,11 @@ const OptimizationAdvisor: React.FC = () => {
     .reduce((s, r) => s + r.savings, 0);
 
   // ── Loading ───────────────────────────────────────────────────────────────
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#58a6ff' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
@@ -211,7 +217,7 @@ const OptimizationAdvisor: React.FC = () => {
           </Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
             AI-powered savings opportunities for{' '}
-            <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh">
@@ -224,16 +230,16 @@ const OptimizationAdvisor: React.FC = () => {
       {/* KPI row */}
       <Grid container spacing={2} sx={{ mb: 3 }}>
         <Grid item xs={6} md={3}>
-          <KpiCard label="Total Potential Savings" value={`$${totalSavings.toLocaleString()}/mo`} accent="#3fb950" icon={<AttachMoneyIcon />} />
+          <KpiCard label="Total Potential Savings" value={`$${totalSavings.toLocaleString()}/mo`} accent={colors.success} icon={<AttachMoneyIcon />} />
         </Grid>
         <Grid item xs={6} md={3}>
           <KpiCard label="Recommendations" value={recs.length} icon={<TrendingUpIcon />} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <KpiCard label="High Impact" value={highImpact.length} accent="#f85149" icon={<SpeedIcon />} />
+          <KpiCard label="High Impact" value={highImpact.length} accent={colors.danger} icon={<SpeedIcon />} />
         </Grid>
         <Grid item xs={6} md={3}>
-          <KpiCard label="Quick Wins" value={quickWins.length} accent="#d29922" icon={<BoltIcon />} />
+          <KpiCard label="Quick Wins" value={quickWins.length} accent={colors.warning} icon={<BoltIcon />} />
         </Grid>
       </Grid>
 
@@ -246,7 +252,7 @@ const OptimizationAdvisor: React.FC = () => {
           {quickWins.length > 0 && (
             <Box sx={{ mb: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-                <BoltIcon sx={{ fontSize: 16, color: '#d29922' }} />
+                <BoltIcon sx={{ fontSize: 16, color: colors.warning }} />
                 <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.9rem' }}>
                   Quick Wins — low effort, high reward
                 </Typography>
@@ -287,7 +293,7 @@ const OptimizationAdvisor: React.FC = () => {
             ))}
             {recs.length === 0 && (
               <Box sx={{ bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderRadius: 2, p: 3, textAlign: 'center' }}>
-                <CheckCircleOutlineIcon sx={{ fontSize: 32, color: '#3fb950', mb: 1 }} />
+                <CheckCircleOutlineIcon sx={{ fontSize: 32, color: colors.success, mb: 1 }} />
                 <Typography sx={{ color: DK.muted }}>No optimization opportunities found — cluster is well-optimized</Typography>
               </Box>
             )}
@@ -306,7 +312,7 @@ const OptimizationAdvisor: React.FC = () => {
               <Typography sx={{ color: DK.muted, fontSize: '0.72rem', mb: 0.5 }}>
                 Selected ({selected.size} fix{selected.size !== 1 ? 'es' : ''})
               </Typography>
-              <Typography sx={{ color: '#3fb950', fontSize: '1.8rem', fontWeight: 700, lineHeight: 1 }}>
+              <Typography sx={{ color: colors.success, fontSize: '1.8rem', fontWeight: 700, lineHeight: 1 }}>
                 ${selectedSavings.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 <Typography component="span" sx={{ color: DK.muted, fontSize: '0.78rem', ml: 0.5 }}>/mo</Typography>
               </Typography>
@@ -318,7 +324,7 @@ const OptimizationAdvisor: React.FC = () => {
                 <Typography sx={{ color: selected.has(rec.id) ? DK.text : DK.muted, fontSize: '0.78rem', flex: 1, pr: 1 }} noWrap>
                   {rec.title}
                 </Typography>
-                <Typography sx={{ color: '#3fb950', fontSize: '0.78rem', fontWeight: 600, flexShrink: 0 }}>
+                <Typography sx={{ color: colors.success, fontSize: '0.78rem', fontWeight: 600, flexShrink: 0 }}>
                   ${rec.savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}
                 </Typography>
               </Box>
@@ -326,7 +332,7 @@ const OptimizationAdvisor: React.FC = () => {
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1.5, pt: 1 }}>
               <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.83rem' }}>Total potential</Typography>
-              <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '0.9rem' }}>
+              <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '0.9rem' }}>
                 ${totalSavings.toLocaleString(undefined, { maximumFractionDigits: 0 })}/mo
               </Typography>
             </Box>
@@ -341,8 +347,8 @@ const OptimizationAdvisor: React.FC = () => {
                 startIcon={<PlayArrowIcon />}
                 sx={{
                   mt: 2,
-                  bgcolor: '#238636',
-                  '&:hover': { bgcolor: '#2ea043' },
+                  bgcolor: colors.success,
+                  '&:hover': { bgcolor: colors.success },
                   '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
                   fontWeight: 600,
                   fontSize: '0.83rem',
@@ -375,7 +381,7 @@ const RecCard: React.FC<{
   onApply: () => void;
   highlight?: boolean;
 }> = ({ rec, selected, applying, onToggle, onApply, highlight }) => {
-  const borderAccent = highlight ? '#d29922' : DK.border;
+  const borderAccent = highlight ? colors.warning : DK.border;
   const impactColor  = IMPACT[rec.impact] ?? DK.muted;
   const effortColor  = EFFORT[rec.effort] ?? DK.muted;
 
@@ -389,14 +395,14 @@ const RecCard: React.FC<{
     <Box
       sx={{
         bgcolor: DK.surface,
-        border: `1px solid ${selected ? '#58a6ff' : borderAccent}`,
+        border: `1px solid ${selected ? colors.info : borderAccent}`,
         borderLeft: `3px solid ${impactColor}`,
         borderRadius: 2,
         p: 2,
         display: 'flex',
         gap: 1.5,
         transition: 'border-color 0.15s',
-        '&:hover': { borderColor: '#58a6ff', borderLeftColor: impactColor },
+        '&:hover': { borderColor: colors.info, borderLeftColor: impactColor },
       }}
     >
       {/* Checkbox */}
@@ -404,7 +410,7 @@ const RecCard: React.FC<{
         checked={selected}
         onChange={onToggle}
         size="small"
-        sx={{ color: DK.muted, '&.Mui-checked': { color: '#58a6ff' }, p: 0, alignSelf: 'flex-start', mt: 0.25 }}
+        sx={{ color: DK.muted, '&.Mui-checked': { color: colors.info }, p: 0, alignSelf: 'flex-start', mt: 0.25 }}
       />
 
       {/* Icon */}
@@ -437,7 +443,7 @@ const RecCard: React.FC<{
       {/* Right: savings + apply */}
       <Box sx={{ flexShrink: 0, textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 1 }}>
         <Box>
-          <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '1rem', lineHeight: 1 }}>
+          <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '1rem', lineHeight: 1 }}>
             ${rec.savings.toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.65rem' }}>/month</Typography>
@@ -449,12 +455,12 @@ const RecCard: React.FC<{
               onClick={onApply}
               disabled={applying}
               sx={{
-                bgcolor: '#238636',
+                bgcolor: colors.success,
                 color: '#fff',
                 borderRadius: 1.5,
                 width: 32,
                 height: 32,
-                '&:hover': { bgcolor: '#2ea043' },
+                '&:hover': { bgcolor: colors.success },
                 '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted },
               }}
             >

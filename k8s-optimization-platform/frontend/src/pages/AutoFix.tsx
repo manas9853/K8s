@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Grid,
@@ -53,6 +55,7 @@ import {
   Terminal as TerminalIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface ResourceChange {
   field: string;
@@ -97,6 +100,7 @@ interface Summary {
 
 const AutoFix: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [actions, setActions] = useState<FixAction[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -253,6 +257,8 @@ const AutoFix: React.FC = () => {
   const uniqueNamespaces = Array.from(new Set(actions.map(a => a.namespace)));
   const uniqueTypes = Array.from(new Set(actions.map(a => a.fix_type)));
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading && actions.length === 0) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -265,7 +271,7 @@ const AutoFix: React.FC = () => {
     <Box>
       {/* Header */}
       <Box mb={3}>
-        <Typography variant="h4" gutterBottom sx={{ fontWeight: 700, color: '#1a237e' }}>
+        <Typography variant="h4" gutterBottom sx={{ fontWeight: 700, color: colors.info }}>
           <TerminalIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
           One-Click Auto-Fix System
         </Typography>
@@ -283,7 +289,7 @@ const AutoFix: React.FC = () => {
       {/* Summary Cards */}
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+          <Card sx={{ background: `linear-gradient(135deg, ${colors.gradientStart} 0%, ${colors.gradientEnd} 100%)`, color: 'white' }}>
             <CardContent>
               <Typography variant="h3" sx={{ fontWeight: 700 }}>
                 {summary?.total_actions || 0}
@@ -333,7 +339,7 @@ const AutoFix: React.FC = () => {
       </Grid>
 
       {/* Filters and Bulk Actions */}
-      <Card sx={{ mb: 3, background: '#f5f5f5' }}>
+      <Card sx={{ mb: 3, background: colors.surfaceHover }}>
         <CardContent>
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={6} md={2}>
@@ -402,7 +408,7 @@ const AutoFix: React.FC = () => {
       {/* Actions Table */}
       <TableContainer component={Paper} sx={{ boxShadow: 3 }}>
         <Table>
-          <TableHead sx={{ background: '#1a237e' }}>
+          <TableHead sx={{ background: colors.info }}>
             <TableRow>
               <TableCell sx={{ color: 'white', fontWeight: 700 }}>Select</TableCell>
               <TableCell sx={{ color: 'white', fontWeight: 700 }}>Workload</TableCell>
@@ -418,7 +424,7 @@ const AutoFix: React.FC = () => {
           <TableBody>
             {actions.map((action) => (
               <React.Fragment key={action.action_id}>
-                <TableRow hover sx={{ '&:hover': { background: '#f5f5f5' } }}>
+                <TableRow hover sx={{ '&:hover': { background: colors.surfaceHover } }}>
                   <TableCell>
                     <input
                       type="checkbox"
@@ -454,7 +460,7 @@ const AutoFix: React.FC = () => {
                     />
                   </TableCell>
                   <TableCell>
-                    <Typography variant="body2" sx={{ fontWeight: 700, color: '#2e7d32' }}>
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: colors.success }}>
                       ${action.estimated_savings}/mo
                     </Typography>
                   </TableCell>
@@ -543,10 +549,10 @@ const AutoFix: React.FC = () => {
                                       <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>
                                         {change.field}
                                       </TableCell>
-                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: '#d32f2f' }}>
+                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: colors.danger }}>
                                         {change.old_value}
                                       </TableCell>
-                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: '#2e7d32' }}>
+                                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12, color: colors.success }}>
                                         {change.new_value}
                                       </TableCell>
                                       <TableCell sx={{ fontSize: 11 }}>{change.reason}</TableCell>
@@ -600,7 +606,7 @@ const AutoFix: React.FC = () => {
         maxWidth="md"
         fullWidth
       >
-        <DialogTitle sx={{ background: '#1a237e', color: 'white' }}>
+        <DialogTitle sx={{ background: colors.info, color: 'white' }}>
           <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
           Preview Changes
         </DialogTitle>
@@ -618,7 +624,7 @@ const AutoFix: React.FC = () => {
                 Changes to be applied:
               </Typography>
               {previewDialog.action.changes.map((change, idx) => (
-                <Box key={idx} sx={{ mb: 2, p: 2, background: '#f5f5f5', borderRadius: 1 }}>
+                <Box key={idx} sx={{ mb: 2, p: 2, background: colors.surfaceHover, borderRadius: 1 }}>
                   <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
                     {change.field}
                   </Typography>

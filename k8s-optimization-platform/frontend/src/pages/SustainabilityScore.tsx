@@ -14,17 +14,18 @@ import {
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { API_BASE_URL } from '../config/api';
 import ClusterGuard from '../components/ClusterGuard';
+import { colors } from '../theme/colors';
 
 // ── Design tokens ──────────────────────────────────────────────────────────────
 const DK = {
-  bg: '#0d1117', surface: '#161b22', surface2: '#1c2128',
-  border: '#30363d', text: '#e6edf3', muted: '#8b949e',
+  bg: colors.background, surface: colors.surface, surface2: colors.surfaceHover,
+  border: colors.border, text: colors.textPrimary, muted: colors.textSecondary,
 };
-const ACCENT = '#58a6ff';
-const GREEN  = '#3fb950';
-const AMBER  = '#d29922';
-const RED    = '#f85149';
-const PURPLE = '#a371f7';
+const ACCENT = colors.info;
+const GREEN  = colors.success;
+const AMBER  = colors.warning;
+const RED    = colors.danger;
+const PURPLE = colors.purple;
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 const gradeColor = (g: string) =>

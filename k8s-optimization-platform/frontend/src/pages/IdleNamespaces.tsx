@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -12,19 +14,20 @@ import {
   FolderOutlined as FolderIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens — no blues, teals, purples, gradients ─────────────────
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  hover:   '#252e42',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8b95a9',
-  body:    '#c8cdd8',
-  green:   '#4ade80',
-  red:     '#f87171',
-  yellow:  '#f59e0b',
+  bg:      colors.background,
+  card:    colors.surface,
+  hover:   colors.surfaceHover,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  body:    colors.textMuted,
+  green:   colors.success,
+  red:     colors.danger,
+  yellow:  colors.warning,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -57,15 +60,15 @@ const fmtDate = (s: string) => {
 
 // Shared Select sx — no focus colour bleed
 const selectSx = {
-  color: '#c8cdd8', fontSize: 13, height: 38, bgcolor: '#1e2433',
-  '& .MuiOutlinedInput-notchedOutline':             { borderColor: '#2a3245' },
-  '&:hover .MuiOutlinedInput-notchedOutline':       { borderColor: '#8b95a9' },
-  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#2a3245' },
-  '& .MuiSvgIcon-root':                             { color: '#8b95a9' },
+  color: colors.textMuted, fontSize: 13, height: 38, bgcolor: colors.surface,
+  '& .MuiOutlinedInput-notchedOutline':             { borderColor: colors.border },
+  '&:hover .MuiOutlinedInput-notchedOutline':       { borderColor: colors.textSecondary },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: colors.border },
+  '& .MuiSvgIcon-root':                             { color: colors.textSecondary },
 };
 const menuProps = {
   PaperProps: {
-    sx: { bgcolor: '#1e2433', color: '#e8eaf0', border: '1px solid #2a3245', maxHeight: 280 },
+    sx: { bgcolor: colors.surface, color: colors.textPrimary, border: `1px solid ${colors.border}`, maxHeight: 280 },
   },
 };
 
@@ -88,6 +91,7 @@ const StatCard: React.FC<{ label: string; value: number | string; sub?: string; 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const IdleNamespaces: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [items,       setItems]      = useState<IdleNS[]>([]);
   const [summary,     setSummary]    = useState<Summary | null>(null);
   const [loading,     setLoading]    = useState(true);
@@ -159,6 +163,8 @@ const IdleNamespaces: React.FC = () => {
     letterSpacing: 0.8, fontWeight: 600, py: 1.5,
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <CircularProgress sx={{ color: T.green }} />
@@ -167,7 +173,7 @@ const IdleNamespaces: React.FC = () => {
 
   if (error) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
 
@@ -309,7 +315,7 @@ const IdleNamespaces: React.FC = () => {
           <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: '#161f30' }}>
+                <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
                   <TableCell sx={headSx}>Namespace</TableCell>
                   <TableCell sx={headSx}>Reason</TableCell>
                   <TableCell sx={{ ...headSx, textAlign: 'right' }}>Age</TableCell>
@@ -384,9 +390,9 @@ const IdleNamespaces: React.FC = () => {
                     {/* Risk */}
                     <TableCell sx={cellSx}>
                       <Chip label={ns.risk_level} size="small" sx={{
-                        bgcolor: ns.risk_level === 'High'   ? '#450a0a'
-                               : ns.risk_level === 'Medium' ? '#451a03'
-                               :                              '#052e16',
+                        bgcolor: ns.risk_level === 'High'   ? colors.dangerBg
+                               : ns.risk_level === 'Medium' ? colors.warningBg
+                               :                              colors.successBg,
                         color:   ns.risk_level === 'High'   ? T.red
                                : ns.risk_level === 'Medium' ? T.yellow
                                :                              T.green,

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -62,19 +61,21 @@ import BugReportIcon from '@mui/icons-material/BugReport';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PolicyIcon from '@mui/icons-material/Policy';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  hover:  '#252e42',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8b95a9',
-  body:   '#c8cdd8',
-  green:  '#4ade80',
-  red:    '#f87171',
-  yellow: '#f59e0b',
+  bg:     colors.background,
+  card:   colors.surface,
+  hover:  colors.surfaceHover,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  body:   colors.textMuted,
+  green:  colors.success,
+  red:    colors.danger,
+  yellow: colors.warning,
 };
 const selectSx = {
   color: T.text, fontSize: 13, height: 38,
@@ -137,7 +138,6 @@ interface Recommendation {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 const NetworkPolicies: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
   const [selectedClusterId, setSelectedClusterId] = useState<string>(activeClusterId || 'all');
 
@@ -416,15 +416,7 @@ const NetworkPolicies: React.FC = () => {
   }
 
   if (clusters.length === 0) {
-    return (
-      <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 4, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-        <Typography sx={{ color: T.text }} variant="h5">No clusters attached yet</Typography>
-        <Typography sx={{ color: T.muted }} textAlign="center" maxWidth={480}>
-          Connect a cluster first using the Cluster Onboarding page, then come back here to see live data.
-        </Typography>
-        <Button variant="contained" onClick={() => navigate('/cluster-onboarding')} sx={{ bgcolor: T.green, color: '#000', '&:hover': { bgcolor: '#22c55e' } }}>Go to Cluster Onboarding</Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   return (
@@ -454,7 +446,7 @@ const NetworkPolicies: React.FC = () => {
             <Box flex={1}>
               <Box display="flex" alignItems="center" gap={1} mb={0.5}>
                 <Typography sx={{ fontWeight: 600, color: T.text }}>Security Score: {audit.score}/100</Typography>
-                <Chip label={`Risk: ${audit.risk}`} size="small" sx={{ bgcolor: audit.risk.toLowerCase() === 'high' ? '#450a0a' : audit.risk.toLowerCase() === 'medium' ? '#451a03' : '#052e16', color: audit.risk.toLowerCase() === 'high' ? T.red : audit.risk.toLowerCase() === 'medium' ? T.yellow : T.green, fontSize: 11, height: 20 }} />
+                <Chip label={`Risk: ${audit.risk}`} size="small" sx={{ bgcolor: audit.risk.toLowerCase() === 'high' ? colors.dangerBg : audit.risk.toLowerCase() === 'medium' ? colors.warningBg : colors.successBg, color: audit.risk.toLowerCase() === 'high' ? T.red : audit.risk.toLowerCase() === 'medium' ? T.yellow : T.green, fontSize: 11, height: 20 }} />
               </Box>
               <LinearProgress variant="determinate" value={audit.score}
                 sx={{ height: 6, borderRadius: 3, maxWidth: 400, bgcolor: T.border, '& .MuiLinearProgress-bar': { bgcolor: audit.score >= 80 ? T.green : audit.score >= 50 ? T.yellow : T.red } }} />
@@ -464,7 +456,7 @@ const NetworkPolicies: React.FC = () => {
                 <Chip key={l} size="small" label={l} sx={{ bgcolor: T.bg, color: T.muted, border: `1px solid ${T.border}`, fontSize: 11, height: 20 }} />
               ))}
               {audit.uncovered_namespaces > 0 && (
-                <Chip size="small" label={`${audit.uncovered_namespaces} uncovered`} sx={{ bgcolor: '#450a0a', color: T.red, fontSize: 11, height: 20 }} />
+                <Chip size="small" label={`${audit.uncovered_namespaces} uncovered`} sx={{ bgcolor: colors.dangerBg, color: T.red, fontSize: 11, height: 20 }} />
               )}
             </Box>
           </Box>
@@ -491,7 +483,7 @@ const NetworkPolicies: React.FC = () => {
         ))}
       </Grid>
 
-      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
+      {error && <Alert severity="error" sx={{ mb: 2, bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>}
 
       {/* ── Search ── */}
       <Box display="flex" gap={2} mb={2}>
@@ -517,7 +509,7 @@ const NetworkPolicies: React.FC = () => {
         {loading && <LinearProgress sx={{ bgcolor: T.border, '& .MuiLinearProgress-bar': { bgcolor: T.green } }} />}
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: '#161f30' }}>
+            <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
               <TableCell sx={headSx}>Status</TableCell>
               <TableCell sx={headSx}>Name</TableCell>
               <TableCell sx={headSx}>Namespace</TableCell>
@@ -555,14 +547,14 @@ const NetworkPolicies: React.FC = () => {
                   </TableCell>
                   <TableCell sx={cellSx}>
                     <Box display="flex" gap={0.5} flexWrap="wrap">
-                      {pol.policy_types.includes('Ingress') && <Chip label="Ingress" size="small" sx={{ bgcolor: '#052e16', color: T.green, fontSize: 11, height: 20 }} />}
-                      {pol.policy_types.includes('Egress')  && <Chip label="Egress"  size="small" sx={{ bgcolor: '#052e16', color: T.green, fontSize: 11, height: 20 }} />}
+                      {pol.policy_types.includes('Ingress') && <Chip label="Ingress" size="small" sx={{ bgcolor: colors.successBg, color: T.green, fontSize: 11, height: 20 }} />}
+                      {pol.policy_types.includes('Egress')  && <Chip label="Egress"  size="small" sx={{ bgcolor: colors.successBg, color: T.green, fontSize: 11, height: 20 }} />}
                       {pol.policy_types.length === 0        && <Chip label="None"    size="small" sx={{ bgcolor: T.bg, color: T.muted, fontSize: 11, height: 20 }} />}
                     </Box>
                   </TableCell>
                   <TableCell sx={cellSx}>
                     {Object.keys(pol.pod_selector).length === 0
-                      ? <Chip label="all pods" size="small" sx={{ bgcolor: '#451a03', color: T.yellow, fontSize: 11, height: 20 }} />
+                      ? <Chip label="all pods" size="small" sx={{ bgcolor: colors.warningBg, color: T.yellow, fontSize: 11, height: 20 }} />
                       : Object.entries(pol.pod_selector).slice(0, 2).map(([k, v]) => (
                           <Chip key={k} label={`${k}=${v}`} size="small" sx={{ bgcolor: T.bg, color: T.body, border: `1px solid ${T.border}`, fontSize: 11, height: 20, mr: 0.5 }} />
                         ))}
@@ -575,7 +567,7 @@ const NetworkPolicies: React.FC = () => {
                   </TableCell>
                   <TableCell sx={cellSx}>
                     <Chip label={count === 0 ? 'Healthy' : `${count} issues`} size="small"
-                      sx={{ bgcolor: count === 0 ? '#052e16' : '#450a0a', color: count === 0 ? T.green : T.red, border: `1px solid ${count === 0 ? T.green+'44' : T.red+'44'}`, fontSize: 11, height: 20 }} />
+                      sx={{ bgcolor: count === 0 ? colors.successBg : colors.dangerBg, color: count === 0 ? T.green : T.red, border: `1px solid ${count === 0 ? T.green+'44' : T.red+'44'}`, fontSize: 11, height: 20 }} />
                   </TableCell>
                   <TableCell sx={{ ...cellSx, color: T.muted }}>{pol.age || '-'}</TableCell>
                   <TableCell sx={cellSx}>
@@ -587,7 +579,7 @@ const NetworkPolicies: React.FC = () => {
                         </IconButton>
                       </Tooltip>
                       <Tooltip title="Delete Policy">
-                        <IconButton size="small" sx={{ color: T.red, '&:hover': { bgcolor: '#450a0a' } }}
+                        <IconButton size="small" sx={{ color: T.red, '&:hover': { bgcolor: colors.dangerBg } }}
                           onClick={() => handleDelete(pol)} disabled={actionLoading}>
                           <DeleteIcon fontSize="small" />
                         </IconButton>
@@ -610,7 +602,7 @@ const NetworkPolicies: React.FC = () => {
           <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: '#161f30' }}>
+                <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
                   <TableCell sx={{ ...headSx, width: 80 }}>Level</TableCell>
                   <TableCell sx={{ ...headSx, width: 180 }}>Check</TableCell>
                   <TableCell sx={headSx}>Resource</TableCell>
@@ -700,7 +692,7 @@ const NetworkPolicies: React.FC = () => {
                 <Box>
                   {generateInvestigations(selectedPolicy).map((inv, idx) => (
                     <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`,
-                      bgcolor: inv.type === 'error' ? '#1a0a0a' : inv.type === 'warning' ? '#1a1200' : '#0a1a0a' }}>
+                      bgcolor: inv.type === 'error' ? colors.dangerBg : inv.type === 'warning' ? colors.warningBg : colors.successBg }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         {inv.type === 'error'   && <ErrorIcon   sx={{ fontSize: 16, color: T.red }} />}
                         {inv.type === 'warning' && <WarningIcon sx={{ fontSize: 16, color: T.yellow }} />}
@@ -712,7 +704,7 @@ const NetworkPolicies: React.FC = () => {
                     </Box>
                   ))}
                   {generateInvestigations(selectedPolicy).length === 0 && (
-                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: colors.successBg }}>
                       <Typography sx={{ fontSize: 13, color: T.green }}>No issues — policy is well-configured</Typography>
                     </Box>
                   )}
@@ -726,7 +718,7 @@ const NetworkPolicies: React.FC = () => {
                     <Box key={idx} sx={{ mb: 1.5, p: 2, borderRadius: 1, border: `1px solid ${T.border}`, bgcolor: T.bg }}>
                       <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
                         <Chip label={rec.category} size="small" sx={{ bgcolor: T.border, color: T.text, fontSize: 11, height: 20 }} />
-                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? '#450a0a' : rec.priority === 'medium' ? '#451a03' : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
+                        <Chip label={rec.priority} size="small" sx={{ bgcolor: rec.priority === 'high' ? colors.dangerBg : rec.priority === 'medium' ? colors.warningBg : T.border, color: rec.priority === 'high' ? T.red : rec.priority === 'medium' ? T.yellow : T.muted, fontSize: 11, height: 20 }} />
                       </Box>
                       <Typography sx={{ fontSize: 13, fontWeight: 600, color: T.text }}>{rec.title}</Typography>
                       <Typography sx={{ fontSize: 12, color: T.body, mt: 0.5 }}>{rec.description}</Typography>
@@ -735,7 +727,7 @@ const NetworkPolicies: React.FC = () => {
                     </Box>
                   ))}
                   {generateRecommendations(selectedPolicy).length === 0 && (
-                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: '#052e16' }}>
+                    <Box sx={{ p: 2, borderRadius: 1, border: `1px solid ${T.green}44`, bgcolor: colors.successBg }}>
                       <Typography sx={{ fontSize: 13, color: T.green }}>No recommendations — policy looks optimal</Typography>
                     </Box>
                   )}
@@ -765,7 +757,7 @@ const NetworkPolicies: React.FC = () => {
               {/* Actions */}
               {activeTab === 4 && (
                 <Box>
-                  <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: '#dc2626' } }}
+                  <Button variant="contained" fullWidth sx={{ mb: 1, bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: colors.danger } }}
                     onClick={() => handleDelete(selectedPolicy)} disabled={actionLoading}
                     startIcon={actionLoading ? <CircularProgress size={16} /> : <DeleteIcon />}>
                     Delete Policy
@@ -792,7 +784,7 @@ const NetworkPolicies: React.FC = () => {
         </DialogContent>
         <DialogActions sx={{ borderTop: `1px solid ${T.border}` }}>
           <Button onClick={() => setConfirmOpen(false)} sx={{ color: T.muted, textTransform: 'none' }}>Cancel</Button>
-          <Button variant="contained" sx={{ bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: '#dc2626' }, textTransform: 'none' }} onClick={runConfirmed}>Confirm</Button>
+          <Button variant="contained" sx={{ bgcolor: T.red, color: '#fff', '&:hover': { bgcolor: colors.danger }, textTransform: 'none' }} onClick={runConfirmed}>Confirm</Button>
         </DialogActions>
       </Dialog>
 

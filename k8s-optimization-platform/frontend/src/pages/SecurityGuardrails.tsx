@@ -10,6 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface GuardrailException {
   id: number;
@@ -49,9 +50,9 @@ interface SecurityGuardrailsData {
 
 // ── Visual constants ──────────────────────────────────────────────────────────
 const STATUS_STYLE: Record<string, { bg: string; text: string; border: string; label: string }> = {
-  violated: { bg: '#2d1515', text: '#f87171', border: '#4a2020', label: 'VIOLATED' },
-  partial:  { bg: '#2d200a', text: '#f59e0b', border: '#4a3510', label: 'PARTIAL'  },
-  active:   { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a', label: 'PASSING'  },
+  violated: { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg, label: 'VIOLATED' },
+  partial:  { bg: colors.warningBg, text: colors.warning, border: colors.warningBg, label: 'PARTIAL'  },
+  active:   { bg: colors.successBg, text: colors.success, border: colors.successBg, label: 'PASSING'  },
 };
 
 // ── Per-row expandable detail ─────────────────────────────────────────────────
@@ -70,59 +71,59 @@ const GuardrailRow: React.FC<{
     <>
       <TableRow
         hover
-        sx={{ '&:hover': { bgcolor: '#232d3f' }, cursor: 'pointer', bgcolor: open ? '#1a2540' : undefined }}
+        sx={{ '&:hover': { bgcolor: colors.surfaceHover }, cursor: 'pointer', bgcolor: open ? colors.infoBg : undefined }}
         onClick={() => setOpen(o => !o)}
       >
-        <TableCell sx={{ borderColor: '#2a3245', pr: 0.5, width: 32 }}>
-          <IconButton size="small" sx={{ color: '#8892a4', p: 0 }}>
+        <TableCell sx={{ borderColor: colors.border, pr: 0.5, width: 32 }}>
+          <IconButton size="small" sx={{ color: colors.textSecondary, p: 0 }}>
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
 
         {/* Name */}
-        <TableCell sx={{ color: '#e8eaf0', fontWeight: 600, fontSize: 13, borderColor: '#2a3245' }}>{g.name}</TableCell>
+        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600, fontSize: 13, borderColor: colors.border }}>{g.name}</TableCell>
 
         {/* Status chip */}
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={st.label} size="small"
             sx={{ bgcolor: st.bg, color: st.text, border: `1px solid ${st.border}`, fontWeight: 700, fontSize: 10 }} />
         </TableCell>
 
         {/* Enabled chip */}
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={g.enabled ? 'Enabled' : 'Disabled'} size="small"
-            sx={{ bgcolor: g.enabled ? '#0d2d1a' : '#1e2433', color: g.enabled ? '#4ade80' : '#8892a4',
-                  border: `1px solid ${g.enabled ? '#1a4a2a' : '#2a3245'}`, fontSize: 10 }} />
+            sx={{ bgcolor: g.enabled ? colors.successBg : colors.surface, color: g.enabled ? colors.success : colors.textSecondary,
+                  border: `1px solid ${g.enabled ? colors.successBg : colors.border}`, fontSize: 10 }} />
         </TableCell>
 
         {/* Blocked attempts + bar */}
-        <TableCell sx={{ borderColor: '#2a3245', minWidth: 160 }}>
+        <TableCell sx={{ borderColor: colors.border, minWidth: 160 }}>
           <Box display="flex" alignItems="center" gap={1}>
             <LinearProgress variant="determinate"
               value={maxAttempts > 0 ? (g.blocked_attempts / maxAttempts) * 100 : 0}
-              sx={{ flex: 1, height: 5, borderRadius: 3, bgcolor: '#2a3245',
-                    '& .MuiLinearProgress-bar': { bgcolor: g.blocked_attempts > 50 ? '#f87171' : g.blocked_attempts > 0 ? '#f59e0b' : '#4ade80' } }}
+              sx={{ flex: 1, height: 5, borderRadius: 3, bgcolor: colors.border,
+                    '& .MuiLinearProgress-bar': { bgcolor: g.blocked_attempts > 50 ? colors.danger : g.blocked_attempts > 0 ? colors.warning : colors.success } }}
             />
             <Typography variant="caption" fontWeight={700}
-              sx={{ color: g.blocked_attempts > 50 ? '#f87171' : g.blocked_attempts > 0 ? '#f59e0b' : '#4ade80', fontSize: 12, minWidth: 28, textAlign: 'right' }}>
+              sx={{ color: g.blocked_attempts > 50 ? colors.danger : g.blocked_attempts > 0 ? colors.warning : colors.success, fontSize: 12, minWidth: 28, textAlign: 'right' }}>
               {g.blocked_attempts}
             </Typography>
           </Box>
         </TableCell>
 
         {/* Actions */}
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Box display="flex" gap={0.75} onClick={e => e.stopPropagation()}>
             {g.auto_fix_supported && g.blocked_attempts > 0 ? (
               <Button size="small" variant="contained" disabled={busy} onClick={() => onFix(g)}
-                sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' }, fontSize: 10, py: 0.25, minWidth: 48 }}>
+                sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info }, fontSize: 10, py: 0.25, minWidth: 48 }}>
                 {busy ? '…' : 'Fix'}
               </Button>
             ) : (
-              <Chip label="Manual" size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
+              <Chip label="Manual" size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
             )}
             <Button size="small" variant="outlined" disabled={busy} onClick={() => onException(g)}
-              sx={{ borderColor: '#7c5cd8', color: '#c084fc', fontSize: 10, py: 0.25 }}>
+              sx={{ borderColor: colors.purple, color: colors.purple, fontSize: 10, py: 0.25 }}>
               {g.exception ? 'Exception ✓' : 'Except'}
             </Button>
           </Box>
@@ -130,34 +131,34 @@ const GuardrailRow: React.FC<{
       </TableRow>
 
       {/* Expanded detail */}
-      <TableRow sx={{ bgcolor: '#131d2e' }}>
+      <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
         <TableCell colSpan={6} sx={{ p: 0, border: 0 }}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box px={3} py={1.5}>
               <Box display="flex" gap={4} flexWrap="wrap">
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#60a5fa', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.info, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     WHY THIS GUARDRAIL EXISTS
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 12 }}>{g.why}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 12 }}>{g.why}</Typography>
                 </Box>
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#4ade80', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.success, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     REMEDIATION
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#a5d6a7', fontSize: 12 }}>{g.remediation}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.success, fontSize: 12 }}>{g.remediation}</Typography>
                 </Box>
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     CURRENT STATE
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 12 }}>{g.description}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 12 }}>{g.description}</Typography>
                   {g.exception && (
-                    <Typography variant="caption" sx={{ color: '#c084fc', display: 'block', mt: 0.5 }}>
+                    <Typography variant="caption" sx={{ color: colors.purple, display: 'block', mt: 0.5 }}>
                       Exception by {g.exception.owner} until {new Date(g.exception.review_date).toLocaleDateString()}
                     </Typography>
                   )}
-                  <Typography variant="caption" sx={{ color: '#57606a', display: 'block', mt: 0.5 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5 }}>
                     Last evaluated: {new Date(g.last_blocked).toLocaleString()}
                   </Typography>
                 </Box>
@@ -261,25 +262,25 @@ const SecurityGuardrailsInner: React.FC = () => {
   };
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
-  if (error)   return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data)   return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
+  if (error)   return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data)   return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
 
   const guardrails = data.guardrails || [];
   const violated = guardrails.filter(g => g.status !== 'active');
   const maxAttempts = Math.max(...guardrails.map(g => g.blocked_attempts), 1);
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
 
       {/* Header */}
       <Box display="flex" alignItems="center" gap={1.5} mb={1}>
-        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: '#1e2433', border: '1px solid #2a3245',
+        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}`,
                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
           🔒
         </Box>
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Security Guardrails</Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>Security Guardrails</Typography>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Real cluster scan · {data.cluster_name || 'Cluster'} · {data.total_pods || 0} pods,&nbsp;
             {data.total_containers || 0} containers · Enforcement: {data.enforcement_mode} · Last scan: {new Date(data.last_scan).toLocaleString()}
           </Typography>
@@ -289,7 +290,7 @@ const SecurityGuardrailsInner: React.FC = () => {
       {actionMessage && (
         <Alert
           severity={actionMessage.toLowerCase().includes('failed') ? 'error' : 'success'}
-          sx={{ mb: 3, mt: 2, bgcolor: '#131d2e', color: '#e8eaf0', border: '1px solid #2a3245' }}
+          sx={{ mb: 3, mt: 2, bgcolor: colors.surfaceAlt, color: colors.textPrimary, border: `1px solid ${colors.border}` }}
           onClose={() => setActionMessage(null)}
         >
           {actionMessage}
@@ -299,17 +300,17 @@ const SecurityGuardrailsInner: React.FC = () => {
       {/* KPI cards */}
       <Grid container spacing={2} sx={{ mb: 3, mt: 2 }}>
         {[
-          { label: 'Total Guardrails',    value: data.total_guardrails,        color: '#60a5fa' },
-          { label: 'Enabled',             value: data.enabled_guardrails,       color: '#4ade80' },
-          { label: 'Violated / Partial',  value: violated.length,              color: violated.length > 0 ? '#f87171' : '#4ade80' },
-          { label: 'Total Violations',    value: data.total_blocked_attempts,  color: data.total_blocked_attempts > 0 ? '#f87171' : '#4ade80' },
-          { label: 'Auto-fixable',        value: guardrails.filter(g => g.auto_fix_supported && g.blocked_attempts > 0).length, color: '#f59e0b' },
-          { label: 'Enforcement Mode',    value: data.enforcement_mode.toUpperCase(), color: '#4ade80' },
+          { label: 'Total Guardrails',    value: data.total_guardrails,        color: colors.info },
+          { label: 'Enabled',             value: data.enabled_guardrails,       color: colors.success },
+          { label: 'Violated / Partial',  value: violated.length,              color: violated.length > 0 ? colors.danger : colors.success },
+          { label: 'Total Violations',    value: data.total_blocked_attempts,  color: data.total_blocked_attempts > 0 ? colors.danger : colors.success },
+          { label: 'Auto-fixable',        value: guardrails.filter(g => g.auto_fix_supported && g.blocked_attempts > 0).length, color: colors.warning },
+          { label: 'Enforcement Mode',    value: data.enforcement_mode.toUpperCase(), color: colors.success },
         ].map((k) => (
           <Grid item xs={6} sm={4} md={2} key={k.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{k.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{k.label}</Typography>
                 <Typography variant="h5" fontWeight="bold" sx={{ color: k.color, fontSize: k.label === 'Enforcement Mode' ? '0.8rem' : undefined }}>
                   {k.value}
                 </Typography>
@@ -320,19 +321,19 @@ const SecurityGuardrailsInner: React.FC = () => {
       </Grid>
 
       {/* Guardrails table */}
-      <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <CardContent>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1 }}>
             All Guardrails ({data.total_guardrails})
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mb: 2 }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mb: 2 }}>
             Click any row to see why the guardrail exists, the exact remediation step, and its current cluster state.
             Fix queues a direct spec patch through the agent. Exception records an accepted business justification.
           </Typography>
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#131d2e', color: '#8892a4', borderColor: '#2a3245', fontSize: 12 } }}>
+                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceAlt, color: colors.textSecondary, borderColor: colors.border, fontSize: 12 } }}>
                   <TableCell sx={{ width: 32 }} />
                   <TableCell>Guardrail</TableCell>
                   <TableCell>Status</TableCell>
@@ -354,22 +355,22 @@ const SecurityGuardrailsInner: React.FC = () => {
 
       {/* Violation breakdown bar */}
       {violated.length > 0 && (
-        <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mt: 3 }}>
+        <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mt: 3 }}>
           <CardContent>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
               Violation Breakdown — Guardrails with Active Violations
             </Typography>
             <Box display="flex" flexDirection="column" gap={1.25}>
               {[...violated].sort((a, b) => b.blocked_attempts - a.blocked_attempts).map(g => (
                 <Box key={g.id}>
                   <Box display="flex" justifyContent="space-between" mb={0.25}>
-                    <Typography variant="caption" sx={{ color: '#c8d0dc', fontWeight: 600, fontSize: 12 }}>{g.name}</Typography>
-                    <Typography variant="caption" sx={{ color: '#f87171', fontWeight: 700, fontSize: 12 }}>{g.blocked_attempts}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textMuted, fontWeight: 600, fontSize: 12 }}>{g.name}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.danger, fontWeight: 700, fontSize: 12 }}>{g.blocked_attempts}</Typography>
                   </Box>
                   <LinearProgress variant="determinate"
                     value={(g.blocked_attempts / maxAttempts) * 100}
-                    sx={{ height: 5, borderRadius: 3, bgcolor: '#2a3245',
-                          '& .MuiLinearProgress-bar': { bgcolor: g.status === 'violated' ? '#f87171' : '#f59e0b' } }} />
+                    sx={{ height: 5, borderRadius: 3, bgcolor: colors.border,
+                          '& .MuiLinearProgress-bar': { bgcolor: g.status === 'violated' ? colors.danger : colors.warning } }} />
                 </Box>
               ))}
             </Box>
@@ -380,37 +381,37 @@ const SecurityGuardrailsInner: React.FC = () => {
       {/* Exception dialog */}
       <Dialog open={exceptionDialogOpen} onClose={() => setExceptionDialogOpen(false)}
         maxWidth="sm" fullWidth
-        sx={{ '& .MuiDialog-paper': { bgcolor: '#1e2433', color: '#e8eaf0', border: '1px solid #2a3245', borderRadius: 2 } }}>
-        <DialogTitle sx={{ borderBottom: '1px solid #2a3245' }}>Accept Guardrail Exception</DialogTitle>
+        sx={{ '& .MuiDialog-paper': { bgcolor: colors.surface, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 2 } }}>
+        <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}` }}>Accept Guardrail Exception</DialogTitle>
         <DialogContent sx={{ pt: 2, display: 'grid', gap: 2 }}>
-          <Typography variant="body2" sx={{ color: '#8892a4' }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
             Record why this guardrail violation is intentionally accepted and will not be remediated now.
           </Typography>
           <TextField label="Guardrail" value={selectedGuardrail?.name ?? ''} fullWidth disabled
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Business justification" value={exceptionForm.justification}
             onChange={e => setExceptionForm(v => ({ ...v, justification: e.target.value }))}
             fullWidth required multiline minRows={3}
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Owner" value={exceptionForm.owner}
             onChange={e => setExceptionForm(v => ({ ...v, owner: e.target.value }))}
             fullWidth required
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
           <TextField label="Review date" type="date" value={exceptionForm.review_date}
             onChange={e => setExceptionForm(v => ({ ...v, review_date: e.target.value }))}
-            fullWidth required InputLabelProps={{ shrink: true, sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }} />
+            fullWidth required InputLabelProps={{ shrink: true, sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }} />
         </DialogContent>
-        <DialogActions sx={{ borderTop: '1px solid #2a3245', px: 3, py: 2 }}>
-          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: '#8892a4' }}>Cancel</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${colors.border}`, px: 3, py: 2 }}>
+          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: colors.textSecondary }}>Cancel</Button>
           <Button variant="contained"
             disabled={!exceptionForm.justification || !exceptionForm.owner || !exceptionForm.review_date
                       || !selectedGuardrail || submittingId === selectedGuardrail?.id}
             onClick={handleSaveException}
-            sx={{ bgcolor: '#7c5cd8', '&:hover': { bgcolor: '#6d4ec7' } }}>
+            sx={{ bgcolor: colors.purple, '&:hover': { bgcolor: colors.purple } }}>
             Save Exception
           </Button>
         </DialogActions>

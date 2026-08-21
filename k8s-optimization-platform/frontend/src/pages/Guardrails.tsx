@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
@@ -51,6 +53,7 @@ import {
 } from '@mui/icons-material';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface GuardrailPolicy {
   policy_id: string;
@@ -90,6 +93,7 @@ interface GuardrailAnalysis {
 
 const Guardrails: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [policies, setPolicies] = useState<GuardrailPolicy[]>([]);
   const [analyses, setAnalyses] = useState<GuardrailAnalysis[]>([]);
   const [stats, setStats] = useState<any>(null);
@@ -171,14 +175,16 @@ const Guardrails: React.FC = () => {
   };
 
   const violationData = summary ? [
-    { name: 'Passed', value: summary.passed, color: '#4caf50' },
-    { name: 'Failed', value: summary.failed, color: '#f44336' },
+    { name: 'Passed', value: summary.passed, color: colors.success },
+    { name: 'Failed', value: summary.failed, color: colors.danger },
   ] : [];
 
   const savingsData = analyses.map(a => ({
     name: a.deployment_name.substring(0, 15),
     savings: a.potential_savings,
   }));
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>
@@ -286,7 +292,7 @@ const Guardrails: React.FC = () => {
                 <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                 <YAxis />
                 <RechartsTooltip />
-                <Bar dataKey="savings" fill="#4caf50" />
+                <Bar dataKey="savings" fill={colors.success} />
               </BarChart>
             </ResponsiveContainer>
           </Paper>
@@ -413,7 +419,7 @@ const Guardrails: React.FC = () => {
                     {Object.keys(policy.threshold).length > 0 && (
                       <Box sx={{ mt: 2 }}>
                         <Typography variant="subtitle2">Thresholds:</Typography>
-                        <pre style={{ fontSize: '12px', background: '#f5f5f5', padding: '8px', borderRadius: '4px' }}>
+                        <pre style={{ fontSize: '12px', background: colors.surfaceHover, padding: '8px', borderRadius: '4px' }}>
                           {JSON.stringify(policy.threshold, null, 2)}
                         </pre>
                       </Box>
@@ -443,7 +449,7 @@ const Guardrails: React.FC = () => {
                     <Typography variant="body2" color="textSecondary" paragraph>
                       Add this workflow to your repository:
                     </Typography>
-                    <Paper sx={{ p: 2, bgcolor: '#f5f5f5' }}>
+                    <Paper sx={{ p: 2, bgcolor: colors.surfaceHover }}>
                       <pre style={{ fontSize: '11px', margin: 0, overflow: 'auto' }}>
 {`name: Cost Guardrails
 on: [pull_request]
@@ -474,7 +480,7 @@ jobs:
                     <Typography variant="body2" color="textSecondary" paragraph>
                       Add this stage to your .gitlab-ci.yml:
                     </Typography>
-                    <Paper sx={{ p: 2, bgcolor: '#f5f5f5' }}>
+                    <Paper sx={{ p: 2, bgcolor: colors.surfaceHover }}>
                       <pre style={{ fontSize: '11px', margin: 0, overflow: 'auto' }}>
 {`cost-guardrails:
   stage: validate

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { colors } from '../theme/colors';
 import {
   Box,
   Typography,
@@ -27,7 +28,7 @@ const AICopilot: React.FC = () => {
       title: 'Natural Language Queries',
       description: 'Ask questions about your infrastructure in plain English — cost, performance, and health.',
       route: '/autonomous-ai/ai-copilot/natural-language-queries',
-      color: '#1976d2',
+      color: colors.info,
       badge: 'LIVE',
     },
     {
@@ -35,7 +36,7 @@ const AICopilot: React.FC = () => {
       title: 'Optimization Advisor',
       description: 'AI-powered rightsizing and waste-reduction recommendations driven by your real usage data.',
       route: '/autonomous-ai/ai-copilot/optimization-advisor',
-      color: '#9c27b0',
+      color: colors.purple,
       badge: 'LIVE',
     },
     {
@@ -43,7 +44,7 @@ const AICopilot: React.FC = () => {
       title: 'Security Advisor',
       description: 'Identify vulnerabilities, privilege escalations, and policy violations with AI guidance.',
       route: '/autonomous-ai/ai-copilot/security-advisor',
-      color: '#2e7d32',
+      color: colors.success,
       badge: 'LIVE',
     },
     {
@@ -51,7 +52,7 @@ const AICopilot: React.FC = () => {
       title: 'Incident Investigator',
       description: 'Diagnose OOMKills, CrashLoopBackOffs, and deployment failures with root-cause analysis.',
       route: '/autonomous-ai/ai-copilot/incident-investigator',
-      color: '#d32f2f',
+      color: colors.danger,
       badge: 'LIVE',
     },
   ];

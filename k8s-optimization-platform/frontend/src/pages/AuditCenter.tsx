@@ -9,6 +9,7 @@ import {
 import PolicyIcon from '@mui/icons-material/Policy';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface AuditEvent {
   id: string;
@@ -31,25 +32,25 @@ interface AuditCenterData {
 }
 
 const DK = {
-  bg: '#0d1117',
-  surface: '#161b22',
-  border: '#30363d',
-  text: '#e6edf3',
-  muted: '#8b949e',
+  bg: colors.background,
+  surface: colors.surface,
+  border: colors.border,
+  text: colors.textPrimary,
+  muted: colors.textSecondary,
 };
 
 const SEV_COLOR: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 const RESULT_COLOR: Record<string, string> = {
-  blocked: '#f85149',
-  flagged: '#d29922',
-  success: '#3fb950',
-  failure: '#f85149',
+  blocked: colors.danger,
+  flagged: colors.warning,
+  success: colors.success,
+  failure: colors.danger,
 };
 
 const SevChip: React.FC<{ value: string }> = ({ value }) => (
@@ -57,9 +58,9 @@ const SevChip: React.FC<{ value: string }> = ({ value }) => (
     label={value}
     size="small"
     sx={{
-      bgcolor: `${SEV_COLOR[value] ?? '#8b949e'}22`,
-      color: SEV_COLOR[value] ?? '#8b949e',
-      border: `1px solid ${SEV_COLOR[value] ?? '#8b949e'}44`,
+      bgcolor: `${SEV_COLOR[value] ?? colors.textSecondary}22`,
+      color: SEV_COLOR[value] ?? colors.textSecondary,
+      border: `1px solid ${SEV_COLOR[value] ?? colors.textSecondary}44`,
       fontWeight: 600,
       fontSize: '0.7rem',
     }}
@@ -71,9 +72,9 @@ const ResultChip: React.FC<{ value: string }> = ({ value }) => (
     label={value}
     size="small"
     sx={{
-      bgcolor: `${RESULT_COLOR[value] ?? '#8b949e'}22`,
-      color: RESULT_COLOR[value] ?? '#8b949e',
-      border: `1px solid ${RESULT_COLOR[value] ?? '#8b949e'}44`,
+      bgcolor: `${RESULT_COLOR[value] ?? colors.textSecondary}22`,
+      color: RESULT_COLOR[value] ?? colors.textSecondary,
+      border: `1px solid ${RESULT_COLOR[value] ?? colors.textSecondary}44`,
       fontWeight: 600,
       fontSize: '0.7rem',
     }}
@@ -135,13 +136,13 @@ const AuditCenterInner: React.FC = () => {
 
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#3b82f6' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
   if (error) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#2d1317', color: '#f85149', border: '1px solid #f8514944' }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: colors.danger, border: `1px solid ${colors.danger}44` }}>{error}</Alert>
     </Box>
   );
 
@@ -155,7 +156,7 @@ const AuditCenterInner: React.FC = () => {
     color: DK.text,
     '& .MuiOutlinedInput-notchedOutline': { borderColor: DK.border },
     '& .MuiSvgIcon-root': { color: DK.muted },
-    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#3b82f6' },
+    '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: colors.info },
     bgcolor: DK.surface,
   };
 
@@ -163,13 +164,13 @@ const AuditCenterInner: React.FC = () => {
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
       {/* Header */}
       <Box display="flex" alignItems="center" gap={1.5} mb={0.5}>
-        <PolicyIcon sx={{ color: '#3b82f6', fontSize: 28 }} />
+        <PolicyIcon sx={{ color: colors.info, fontSize: 28 }} />
         <Typography sx={{ color: DK.text, fontSize: '1.5rem', fontWeight: 700 }}>
           Audit Center
         </Typography>
         {data.cluster_name && (
           <Chip label={data.cluster_name} size="small"
-            sx={{ bgcolor: '#3b82f622', color: '#3b82f6', border: '1px solid #3b82f644', fontWeight: 600 }} />
+            sx={{ bgcolor: `${colors.info}22`, color: colors.info, border: `1px solid ${colors.info}44`, fontWeight: 600 }} />
         )}
       </Box>
       <Typography sx={{ color: DK.muted, fontSize: '0.85rem', mb: 3 }}>
@@ -182,7 +183,7 @@ const AuditCenterInner: React.FC = () => {
           <KpiCard label="Total Events" value={data.total_events} />
         </Grid>
         <Grid item xs={6} sm={3}>
-          <KpiCard label="Displayed" value={filteredEvents.length} accent="#3b82f6" />
+          <KpiCard label="Displayed" value={filteredEvents.length} accent={colors.info} />
         </Grid>
         <Grid item xs={6} sm={3}>
           <KpiCard label="Retention" value={`${data.retention_days}d`} />
@@ -246,18 +247,18 @@ const AuditCenterInner: React.FC = () => {
               <TableHead>
                 <TableRow>
                   {['Timestamp','Event Type','Severity','User','Resource','Action','Result','Details'].map(h => (
-                    <TableCell key={h} sx={{ bgcolor: '#1c2128', color: DK.muted, fontWeight: 700, fontSize: '0.72rem', borderBottom: `1px solid ${DK.border}`, whiteSpace: 'nowrap' }}>{h}</TableCell>
+                    <TableCell key={h} sx={{ bgcolor: colors.surfaceHover, color: DK.muted, fontWeight: 700, fontSize: '0.72rem', borderBottom: `1px solid ${DK.border}`, whiteSpace: 'nowrap' }}>{h}</TableCell>
                   ))}
                 </TableRow>
               </TableHead>
               <TableBody>
                 {filteredEvents.map((e) => (
-                  <TableRow key={e.id} hover sx={{ '&:hover': { bgcolor: '#1c2128' }, '& td': { borderBottom: `1px solid ${DK.border}22` } }}>
+                  <TableRow key={e.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, '& td': { borderBottom: `1px solid ${DK.border}22` } }}>
                     <TableCell sx={{ color: DK.muted, fontSize: '0.72rem', whiteSpace: 'nowrap' }}>{new Date(e.timestamp).toLocaleString()}</TableCell>
                     <TableCell sx={{ color: DK.text, fontSize: '0.8rem', fontWeight: 500 }}>{e.event_type}</TableCell>
                     <TableCell><SevChip value={e.severity} /></TableCell>
                     <TableCell sx={{ color: DK.muted, fontSize: '0.8rem', fontFamily: 'monospace' }}>{e.user}</TableCell>
-                    <TableCell sx={{ color: '#3b82f6', fontSize: '0.78rem', fontFamily: 'monospace' }}>{e.resource}</TableCell>
+                    <TableCell sx={{ color: colors.info, fontSize: '0.78rem', fontFamily: 'monospace' }}>{e.resource}</TableCell>
                     <TableCell sx={{ color: DK.muted, fontSize: '0.78rem' }}>{e.action}</TableCell>
                     <TableCell><ResultChip value={e.result} /></TableCell>
                     <TableCell sx={{ color: DK.muted, fontSize: '0.75rem', maxWidth: 300 }}>{e.details}</TableCell>

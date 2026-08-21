@@ -284,106 +284,106 @@ function App() {
                   <Suspense fallback={<PageLoader />}>
                     <Routes>
                       <Route path="/" element={<Dashboard />} />
-                      <Route path="/command-center" element={<CommandCenter />} />
-                      <Route path="/executive" element={<Executive />} />
-                      <Route path="/clusters" element={<Clusters />} />
-                      <Route path="/cluster-health" element={<ClusterHealth />} />
-                      <Route path="/cluster-nodes" element={<ClusterNodes />} />
-                      <Route path="/worker-pools" element={<WorkerPools />} />
-                      <Route path="/resource-utilization" element={<ResourceUtilization />} />
-                      <Route path="/cluster-benchmarking" element={<ClusterBenchmarking />} />
-                      <Route path="/cluster-onboarding" element={<ClusterOnboarding />} />
-                      <Route path="/deployments" element={<Deployments />} />
-                      <Route path="/statefulsets" element={<StatefulSets />} />
-                      <Route path="/daemonsets" element={<DaemonSets />} />
-                      <Route path="/jobs" element={<Jobs />} />
-                      <Route path="/cronjobs" element={<CronJobs />} />
-                      <Route path="/cpu-analysis" element={<CPUAnalysis />} />
-                      <Route path="/memory-analysis" element={<MemoryAnalysis />} />
-                      <Route path="/restart-analysis" element={<RestartAnalysis />} />
-                      <Route path="/oom-events" element={<OOMEvents />} />
-                      <Route path="/pod-health" element={<PodHealth />} />
-                      <Route path="/pvcs" element={<PVCs />} />
-                      <Route path="/pvs" element={<PVs />} />
-                      <Route path="/storage-consumption" element={<StorageConsumption />} />
-                      <Route path="/orphaned-volumes" element={<OrphanedVolumes />} />
-                      <Route path="/storage-forecasting" element={<StorageForecasting />} />
-                      <Route path="/pvc-file-analysis" element={<PVCFileAnalysis />} />
-                      <Route path="/services" element={<Services />} />
-                      <Route path="/ingress" element={<Ingress />} />
-                      <Route path="/traffic-analysis" element={<TrafficAnalysis />} />
-                      <Route path="/external-exposure" element={<ExternalExposure />} />
-                      <Route path="/network-policies" element={<NetworkPolicies />} />
-                      <Route path="/metrics" element={<Metrics />} />
-                      <Route path="/logs" element={<Logs />} />
-                      <Route path="/events" element={<Events />} />
-                      <Route path="/traces" element={<Traces />} />
-                      <Route path="/service-health" element={<ServiceHealth />} />
-                      <Route path="/recommendations" element={<Recommendations />} />
-                      <Route path="/cpu-rightsizing" element={<CPURightsizing />} />
-                      <Route path="/memory-rightsizing" element={<MemoryRightsizing />} />
-                      <Route path="/resource-allocation" element={<ResourceAllocation />} />
+                      <Route path="/dashboard/command-center" element={<CommandCenter />} />
+                      <Route path="/dashboard/executive" element={<Executive />} />
+                      <Route path="/operations/clusters" element={<Clusters />} />
+                      <Route path="/operations/clusters/cluster-health" element={<ClusterHealth />} />
+                      <Route path="/operations/clusters/cluster-nodes" element={<ClusterNodes />} />
+                      <Route path="/operations/clusters/worker-pools" element={<WorkerPools />} />
+                      <Route path="/operations/clusters/resource-utilization" element={<ResourceUtilization />} />
+                      <Route path="/operations/clusters/cluster-benchmarking" element={<ClusterBenchmarking />} />
+                      <Route path="/admin/cluster-onboarding" element={<ClusterOnboarding />} />
+                      <Route path="/operations/workloads/deployments" element={<Deployments />} />
+                      <Route path="/operations/workloads/statefulsets" element={<StatefulSets />} />
+                      <Route path="/operations/workloads/daemonsets" element={<DaemonSets />} />
+                      <Route path="/operations/workloads/jobs" element={<Jobs />} />
+                      <Route path="/operations/workloads/cronjobs" element={<CronJobs />} />
+                      <Route path="/operations/pods/cpu-analysis" element={<CPUAnalysis />} />
+                      <Route path="/operations/pods/memory-analysis" element={<MemoryAnalysis />} />
+                      <Route path="/operations/pods/restart-analysis" element={<RestartAnalysis />} />
+                      <Route path="/operations/pods/oom-events" element={<OOMEvents />} />
+                      <Route path="/operations/pods/pod-health" element={<PodHealth />} />
+                      <Route path="/operations/storage/pvcs" element={<PVCs />} />
+                      <Route path="/operations/storage/pvs" element={<PVs />} />
+                      <Route path="/operations/storage/storage-consumption" element={<StorageConsumption />} />
+                      <Route path="/operations/storage/orphaned-volumes" element={<OrphanedVolumes />} />
+                      <Route path="/operations/storage/storage-forecasting" element={<StorageForecasting />} />
+                      <Route path="/operations/storage/pvc-file-analysis" element={<PVCFileAnalysis />} />
+                      <Route path="/operations/network/services" element={<Services />} />
+                      <Route path="/operations/network/ingress" element={<Ingress />} />
+                      <Route path="/operations/network/traffic-analysis" element={<TrafficAnalysis />} />
+                      <Route path="/operations/network/external-exposure" element={<ExternalExposure />} />
+                      <Route path="/operations/network/network-policies" element={<NetworkPolicies />} />
+                      <Route path="/operations/observability/metrics" element={<Metrics />} />
+                      <Route path="/operations/observability/logs" element={<Logs />} />
+                      <Route path="/operations/observability/events" element={<Events />} />
+                      <Route path="/operations/observability/traces" element={<Traces />} />
+                      <Route path="/operations/observability/service-health" element={<ServiceHealth />} />
+                      <Route path="/optimization/recommendations" element={<Recommendations />} />
+                      <Route path="/optimization/recommendations/cpu-rightsizing" element={<CPURightsizing />} />
+                      <Route path="/optimization/recommendations/memory-rightsizing" element={<MemoryRightsizing />} />
+                      <Route path="/optimization/recommendations/resource-allocation" element={<ResourceAllocation />} />
                       <Route path="/pods" element={<Pods />} />
-                      <Route path="/cost-savings" element={<CostSavings />} />
-                      <Route path="/monthly-savings" element={<MonthlySavings />} />
-                      <Route path="/annual-savings" element={<AnnualSavings />} />
-                      <Route path="/cost-breakdown" element={<CostBreakdown />} />
-                      <Route path="/savings-trends" element={<SavingsTrends />} />
+                      <Route path="/optimization/cost-savings" element={<CostSavings />} />
+                      <Route path="/optimization/cost-savings/monthly-savings" element={<MonthlySavings />} />
+                      <Route path="/optimization/cost-savings/annual-savings" element={<AnnualSavings />} />
+                      <Route path="/optimization/cost-savings/cost-breakdown" element={<CostBreakdown />} />
+                      <Route path="/optimization/cost-savings/savings-trends" element={<SavingsTrends />} />
                       <Route path="/cleanup" element={<Cleanup />} />
-                      <Route path="/zombie-resources" element={<ZombieResources />} />
-                      <Route path="/unused-deployments" element={<UnusedDeployments />} />
-                      <Route path="/stale-configmaps" element={<StaleConfigMaps />} />
-                      <Route path="/stale-secrets" element={<StaleSecrets />} />
-                      <Route path="/old-replicasets" element={<OldReplicaSets />} />
-                      <Route path="/unattached-pvcs" element={<UnattachedPVCs />} />
-                      <Route path="/idle-namespaces" element={<IdleNamespaces />} />
-                      <Route path="/cluster-waste" element={<ClusterWaste />} />
-                      <Route path="/namespace-waste" element={<NamespaceWaste />} />
-                      <Route path="/team-waste" element={<TeamWaste />} />
-                      <Route path="/application-waste" element={<ApplicationWaste />} />
-                      <Route path="/cluster-score" element={<ClusterScore />} />
-                      <Route path="/namespace-score" element={<NamespaceScore />} />
-                      <Route path="/team-score" element={<TeamScore />} />
-                      <Route path="/security-command-center" element={<SecurityCommandCenter />} />
-                      <Route path="/security-score" element={<SecurityScore />} />
-                      <Route path="/cve-dashboard" element={<CVEDashboard />} />
-                      <Route path="/image-scanning" element={<ImageScanning />} />
-                      <Route path="/dependency-scanning" element={<DependencyScanning />} />
-                      <Route path="/patch-recommendations" element={<PatchRecommendations />} />
-                      <Route path="/runtime-security" element={<RuntimeSecurity />} />
-                      <Route path="/privileged-containers" element={<PrivilegedContainers />} />
-                      <Route path="/root-containers" element={<RootContainers />} />
-                      <Route path="/image-trust" element={<ImageTrust />} />
-                      <Route path="/secret-exposure" element={<SecretExposure />} />
-                      <Route path="/secret-rotation" element={<SecretRotation />} />
-                      <Route path="/certificate-management" element={<CertificateManagement />} />
-                      <Route path="/credential-audit" element={<CredentialAudit />} />
-                      <Route path="/excessive-permissions" element={<ExcessivePermissions />} />
-                      <Route path="/cluster-admin-review" element={<ClusterAdminReview />} />
-                      <Route path="/service-accounts-analysis" element={<ServiceAccountsAnalysis />} />
-                      <Route path="/least-privilege-review" element={<LeastPrivilegeReview />} />
-                      <Route path="/network-policies-security" element={<NetworkPolicies />} />
-                      <Route path="/external-exposure-security" element={<ExternalExposure />} />
-                      <Route path="/east-west-traffic" element={<EastWestTraffic />} />
-                      <Route path="/zero-trust-review" element={<ZeroTrustReview />} />
-                      <Route path="/baseline-comparison" element={<BaselineComparison />} />
-                      <Route path="/drift-alerts" element={<DriftAlerts />} />
-                      <Route path="/auto-remediation-security" element={<AutoRemediation />} />
-                      <Route path="/compliance/dashboard" element={<ComplianceDashboard />} />
-                      <Route path="/compliance/score" element={<ComplianceScore />} />
-                      <Route path="/compliance/cis-benchmark" element={<CISBenchmark />} />
-                      <Route path="/compliance/soc2" element={<SOC2Compliance />} />
-                      <Route path="/compliance/pci-dss" element={<PCIDSSCompliance />} />
-                      <Route path="/compliance/iso27001" element={<ISO27001Compliance />} />
-                      <Route path="/compliance/hipaa" element={<HIPAACompliance />} />
-                      <Route path="/compliance/gdpr" element={<GDPRCompliance />} />
-                      <Route path="/compliance/nist" element={<NISTCompliance />} />
-                      <Route path="/compliance/policy-engine" element={<PolicyEngine />} />
-                      <Route path="/compliance/governance-rules" element={<GovernanceRules />} />
-                      <Route path="/compliance/security-guardrails" element={<SecurityGuardrails />} />
-                      <Route path="/compliance/cicd-guardrails" element={<CICDGuardrails />} />
-                      <Route path="/compliance/audit-center" element={<AuditCenter />} />
-                      <Route path="/compliance/change-management" element={<ChangeManagement />} />
+                      <Route path="/optimization/cleanup-center/zombie-resources" element={<ZombieResources />} />
+                      <Route path="/optimization/cleanup-center/unused-deployments" element={<UnusedDeployments />} />
+                      <Route path="/optimization/cleanup-center/stale-configmaps" element={<StaleConfigMaps />} />
+                      <Route path="/optimization/cleanup-center/stale-secrets" element={<StaleSecrets />} />
+                      <Route path="/optimization/cleanup-center/old-replicasets" element={<OldReplicaSets />} />
+                      <Route path="/optimization/cleanup-center/unattached-pvcs" element={<UnattachedPVCs />} />
+                      <Route path="/optimization/cleanup-center/idle-namespaces" element={<IdleNamespaces />} />
+                      <Route path="/optimization/waste-heatmap/cluster-waste" element={<ClusterWaste />} />
+                      <Route path="/optimization/waste-heatmap/namespace-waste" element={<NamespaceWaste />} />
+                      <Route path="/optimization/waste-heatmap/team-waste" element={<TeamWaste />} />
+                      <Route path="/optimization/waste-heatmap/application-waste" element={<ApplicationWaste />} />
+                      <Route path="/optimization/optimization-score/cluster-score" element={<ClusterScore />} />
+                      <Route path="/optimization/optimization-score/namespace-score" element={<NamespaceScore />} />
+                      <Route path="/optimization/optimization-score/team-score" element={<TeamScore />} />
+                      <Route path="/security/security-command-center" element={<SecurityCommandCenter />} />
+                      <Route path="/security/security-score" element={<SecurityScore />} />
+                      <Route path="/security/vulnerability-management/cve-dashboard" element={<CVEDashboard />} />
+                      <Route path="/security/vulnerability-management/image-scanning" element={<ImageScanning />} />
+                      <Route path="/security/vulnerability-management/dependency-scanning" element={<DependencyScanning />} />
+                      <Route path="/security/vulnerability-management/patch-recommendations" element={<PatchRecommendations />} />
+                      <Route path="/security/container-security/runtime-security" element={<RuntimeSecurity />} />
+                      <Route path="/security/container-security/privileged-containers" element={<PrivilegedContainers />} />
+                      <Route path="/security/container-security/root-containers" element={<RootContainers />} />
+                      <Route path="/security/container-security/image-trust" element={<ImageTrust />} />
+                      <Route path="/security/secrets-security/secret-exposure" element={<SecretExposure />} />
+                      <Route path="/security/secrets-security/secret-rotation" element={<SecretRotation />} />
+                      <Route path="/security/secrets-security/certificate-management" element={<CertificateManagement />} />
+                      <Route path="/security/secrets-security/credential-audit" element={<CredentialAudit />} />
+                      <Route path="/security/rbac-analysis/excessive-permissions" element={<ExcessivePermissions />} />
+                      <Route path="/security/rbac-analysis/cluster-admin-review" element={<ClusterAdminReview />} />
+                      <Route path="/security/rbac-analysis/service-accounts-analysis" element={<ServiceAccountsAnalysis />} />
+                      <Route path="/security/rbac-analysis/least-privilege-review" element={<LeastPrivilegeReview />} />
+                      <Route path="/security/network-security/network-policies-security" element={<NetworkPolicies />} />
+                      <Route path="/security/network-security/external-exposure-security" element={<ExternalExposure />} />
+                      <Route path="/security/network-security/east-west-traffic" element={<EastWestTraffic />} />
+                      <Route path="/security/network-security/zero-trust-review" element={<ZeroTrustReview />} />
+                      <Route path="/security/security-drift-detection/baseline-comparison" element={<BaselineComparison />} />
+                      <Route path="/security/security-drift-detection/drift-alerts" element={<DriftAlerts />} />
+                      <Route path="/security/security-drift-detection/auto-remediation-security" element={<AutoRemediation />} />
+                      <Route path="/compliance/overview/dashboard" element={<ComplianceDashboard />} />
+                      <Route path="/compliance/overview/score" element={<ComplianceScore />} />
+                      <Route path="/compliance/compliance-frameworks/cis-benchmark" element={<CISBenchmark />} />
+                      <Route path="/compliance/compliance-frameworks/soc2" element={<SOC2Compliance />} />
+                      <Route path="/compliance/compliance-frameworks/pci-dss" element={<PCIDSSCompliance />} />
+                      <Route path="/compliance/compliance-frameworks/iso27001" element={<ISO27001Compliance />} />
+                      <Route path="/compliance/compliance-frameworks/hipaa" element={<HIPAACompliance />} />
+                      <Route path="/compliance/compliance-frameworks/gdpr" element={<GDPRCompliance />} />
+                      <Route path="/compliance/compliance-frameworks/nist" element={<NISTCompliance />} />
+                      <Route path="/compliance/policy-and-governance/policy-engine" element={<PolicyEngine />} />
+                      <Route path="/compliance/policy-and-governance/governance-rules" element={<GovernanceRules />} />
+                      <Route path="/compliance/policy-and-governance/security-guardrails" element={<SecurityGuardrails />} />
+                      <Route path="/compliance/policy-and-governance/cicd-guardrails" element={<CICDGuardrails />} />
+                      <Route path="/compliance/audit-and-change/audit-center" element={<AuditCenter />} />
+                      <Route path="/compliance/audit-and-change/change-management" element={<ChangeManagement />} />
                       <Route path="/autofix" element={<AutoFix />} />
                       <Route path="/rollback" element={<Rollback />} />
                       <Route path="/ai-copilot" element={<AICopilot />} />
@@ -401,10 +401,10 @@ function App() {
                       <Route path="/autonomous-ai/autonomous-operations/autonomous-mode" element={<AutonomousMode />} />
 
                       {/* Autonomous AI - Auto-Fix Center Routes */}
-                      <Route path="/autonomous-ai/autofix-center/resource-fixes" element={<ResourceFixes />} />
-                      <Route path="/autonomous-ai/autofix-center/security-fixes" element={<SecurityFixes />} />
-                      <Route path="/autonomous-ai/autofix-center/compliance-fixes" element={<ComplianceFixes />} />
-                      <Route path="/autonomous-ai/autofix-center/bulk-fixes" element={<BulkFixes />} />
+                      <Route path="/autonomous-ai/auto-fix-center/resource-fixes" element={<ResourceFixes />} />
+                      <Route path="/autonomous-ai/auto-fix-center/security-fixes" element={<SecurityFixes />} />
+                      <Route path="/autonomous-ai/auto-fix-center/compliance-fixes" element={<ComplianceFixes />} />
+                      <Route path="/autonomous-ai/auto-fix-center/bulk-fixes" element={<BulkFixes />} />
 
                       {/* Autonomous AI - Rollback Center Routes */}
                       <Route path="/autonomous-ai/rollback-center/deployment-rollback" element={<DeploymentRollback />} />
@@ -419,31 +419,31 @@ function App() {
                       <Route path="/autonomous-ai/ai-recommendations/security" element={<SecurityRecommendations />} />
                       <Route path="/autonomous-ai/ai-recommendations/compliance" element={<ComplianceRecommendations />} />
 
-                      <Route path="/scoring" element={<Scoring />} />
-                      <Route path="/team-accountability" element={<TeamAccountability />} />
+                      <Route path="/dashboard/scoring" element={<Scoring />} />
+                      <Route path="/people/team-accountability" element={<TeamAccountability />} />
                       <Route path="/guardrails" element={<Guardrails />} />
-                      <Route path="/simulation" element={<Simulation />} />
+                      <Route path="/intelligence/simulation" element={<Simulation />} />
                       <Route path="/heatmap" element={<Heatmap />} />
-                      <Route path="/root-cause" element={<RootCause />} />
-                      <Route path="/incidents" element={<Incidents />} />
-                      <Route path="/predictive" element={<Predictive />} />
-                      <Route path="/predictive-failures" element={<PredictiveFailures />} />
-                      <Route path="/capacity-forecasting" element={<CapacityForecasting />} />
-                      <Route path="/anomaly-detection" element={<AnomalyDetection />} />
-                      <Route path="/dependency-mapping" element={<DependencyMapping />} />
-                      <Route path="/cost-forecasting" element={<CostForecasting />} />
-                      <Route path="/ai-insights" element={<AIInsights />} />
-                      <Route path="/cost-management" element={<CostManagement />} />
-                      <Route path="/cost-allocation" element={<CostAllocation />} />
-                      <Route path="/chargeback-showback" element={<ChargebackShowback />} />
-                      <Route path="/budget-tracking" element={<BudgetTracking />} />
-                      <Route path="/savings-tracker" element={<SavingsTracker />} />
-                      <Route path="/carbon" element={<Carbon />} />
-                      <Route path="/energy-consumption" element={<EnergyConsumption />} />
-                      <Route path="/sustainability-score" element={<SustainabilityScore />} />
-                      <Route path="/financial-benchmarking" element={<FinancialBenchmarking />} />
-                      <Route path="/settings/cloud-discovery" element={<CloudDiscovery />} />
-                      <Route path="/benchmarking" element={<Benchmarking />} />
+                      <Route path="/intelligence/root-cause" element={<RootCause />} />
+                      <Route path="/intelligence/incidents" element={<Incidents />} />
+                      <Route path="/intelligence/predictive" element={<Predictive />} />
+                      <Route path="/intelligence/predictive-failures" element={<PredictiveFailures />} />
+                      <Route path="/intelligence/capacity-forecasting" element={<CapacityForecasting />} />
+                      <Route path="/intelligence/anomaly-detection" element={<AnomalyDetection />} />
+                      <Route path="/intelligence/dependency-mapping" element={<DependencyMapping />} />
+                      <Route path="/intelligence/cost-forecasting" element={<CostForecasting />} />
+                      <Route path="/intelligence/ai-insights" element={<AIInsights />} />
+                      <Route path="/finops-sustainability/cost-management" element={<CostManagement />} />
+                      <Route path="/finops-sustainability/cost-allocation" element={<CostAllocation />} />
+                      <Route path="/finops-sustainability/chargeback-showback" element={<ChargebackShowback />} />
+                      <Route path="/finops-sustainability/budget-tracking" element={<BudgetTracking />} />
+                      <Route path="/finops-sustainability/savings-tracker" element={<SavingsTracker />} />
+                      <Route path="/finops-sustainability/carbon" element={<Carbon />} />
+                      <Route path="/finops-sustainability/energy-consumption" element={<EnergyConsumption />} />
+                      <Route path="/finops-sustainability/sustainability-score" element={<SustainabilityScore />} />
+                      <Route path="/finops-sustainability/financial-benchmarking" element={<FinancialBenchmarking />} />
+                      <Route path="/finops-sustainability/cloud-discovery" element={<CloudDiscovery />} />
+                      <Route path="/reports/benchmarking" element={<Benchmarking />} />
                       <Route path="/reports" element={<Reports />} />
                       <Route path="/reports/finops" element={<FinOpsReports />} />
                       <Route path="/reports/security" element={<SecurityReports />} />
@@ -474,10 +474,10 @@ function App() {
                       <Route path="/platform/gitops/drift-detection" element={<GitopsDriftDetection />} />
 
                       {/* Platform Engineering - CI/CD */}
-                      <Route path="/platform/cicd/jenkins" element={<JenkinsIntegration />} />
-                      <Route path="/platform/cicd/github-actions" element={<GitHubActions />} />
-                      <Route path="/platform/cicd/gitlab-ci" element={<GitLabCI />} />
-                      <Route path="/platform/cicd/tekton" element={<TektonPipelines />} />
+                      <Route path="/platform/ci-cd-integrations/jenkins" element={<JenkinsIntegration />} />
+                      <Route path="/platform/ci-cd-integrations/github-actions" element={<GitHubActions />} />
+                      <Route path="/platform/ci-cd-integrations/gitlab-ci" element={<GitLabCI />} />
+                      <Route path="/platform/ci-cd-integrations/tekton" element={<TektonPipelines />} />
 
                       {/* Platform Engineering - Other */}
                       <Route path="/platform/policy-as-code" element={<PolicyAsCode />} />
@@ -501,25 +501,25 @@ function App() {
                       <Route path="/attack-investigation/incident-timeline" element={<IncidentTimeline />} />
                       <Route path="/attack-investigation/attack-path" element={<AttackPathAnalysis />} />
                       <Route path="/attack-investigation/blast-radius" element={<BlastRadiusAnalysis />} />
-                      <Route path="/attack-investigation/suspicious-pods" element={<SuspiciousPods />} />
-                      <Route path="/attack-investigation/suspicious-processes" element={<SuspiciousProcesses />} />
-                      <Route path="/attack-investigation/suspicious-users" element={<SuspiciousUsers />} />
-                      <Route path="/attack-investigation/threat-queries" element={<ThreatQueries />} />
-                      <Route path="/attack-investigation/pod-evidence" element={<PodEvidence />} />
-                      <Route path="/attack-investigation/audit-logs" element={<AuditLogs />} />
-                      <Route path="/attack-investigation/process-history" element={<ProcessHistory />} />
-                      <Route path="/attack-investigation/network-evidence" element={<NetworkEvidence />} />
+                      <Route path="/attack-investigation/threat-hunting/suspicious-pods" element={<SuspiciousPods />} />
+                      <Route path="/attack-investigation/threat-hunting/suspicious-processes" element={<SuspiciousProcesses />} />
+                      <Route path="/attack-investigation/threat-hunting/suspicious-users" element={<SuspiciousUsers />} />
+                      <Route path="/attack-investigation/threat-hunting/threat-queries" element={<ThreatQueries />} />
+                      <Route path="/attack-investigation/kubernetes-forensics/pod-evidence" element={<PodEvidence />} />
+                      <Route path="/attack-investigation/kubernetes-forensics/audit-logs" element={<AuditLogs />} />
+                      <Route path="/attack-investigation/kubernetes-forensics/process-history" element={<ProcessHistory />} />
+                      <Route path="/attack-investigation/kubernetes-forensics/network-evidence" element={<NetworkEvidence />} />
                       <Route path="/attack-investigation/data-exfiltration" element={<DataExfiltration />} />
                       <Route path="/attack-investigation/crypto-miner" element={<CryptoMinerDetection />} />
                       <Route path="/attack-investigation/insider-threat" element={<InsiderThreat />} />
                       <Route path="/attack-investigation/mitre-attack" element={<MitreAttackMapping />} />
                       <Route path="/attack-investigation/playbooks" element={<IncidentPlaybooks />} />
                       <Route path="/attack-investigation/playbook-execution" element={<PlaybookExecution />} />
-                      <Route path="/attack-investigation/quarantine" element={<QuarantineResource />} />
-                      <Route path="/attack-investigation/kill-pod" element={<KillPod />} />
-                      <Route path="/attack-investigation/block-traffic" element={<BlockTraffic />} />
-                      <Route path="/attack-investigation/rotate-secrets" element={<RotateSecrets />} />
-                      <Route path="/attack-investigation/emergency-rollback" element={<EmergencyRollback />} />
+                      <Route path="/attack-investigation/incident-response/quarantine" element={<QuarantineResource />} />
+                      <Route path="/attack-investigation/incident-response/kill-pod" element={<KillPod />} />
+                      <Route path="/attack-investigation/incident-response/block-traffic" element={<BlockTraffic />} />
+                      <Route path="/attack-investigation/incident-response/rotate-secrets" element={<RotateSecrets />} />
+                      <Route path="/attack-investigation/incident-response/emergency-rollback" element={<EmergencyRollback />} />
                     </Routes>
                   </Suspense>
                   </ErrorBoundary>

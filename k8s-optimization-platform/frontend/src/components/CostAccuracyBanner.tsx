@@ -73,7 +73,7 @@ const CostAccuracyBanner: React.FC<Props> = ({ clusterName }) => {
       <Button
         size="small"
         variant="outlined"
-        onClick={() => navigate('/settings/cloud-discovery')}
+        onClick={() => navigate('/finops-sustainability/cloud-discovery')}
         sx={{
           borderColor: '#d29922', color: '#d29922', fontSize: '0.73rem',
           textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0,

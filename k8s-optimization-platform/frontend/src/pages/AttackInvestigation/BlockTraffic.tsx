@@ -14,6 +14,7 @@ import {
 import { Block as BlockIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface BlockTrafficResponse {
   action: string;
@@ -60,12 +61,12 @@ const BlockTrafficInner: React.FC = () => {
   };
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-        <Typography variant="h4" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: '#e8eaf0' }}>
-          <BlockIcon sx={{ color: '#90caf9' }} /> Block Traffic
+        <Typography variant="h4" fontWeight="bold" sx={{ display: 'flex', alignItems: 'center', gap: 1, color: colors.textPrimary }}>
+          <BlockIcon sx={{ color: colors.info }} /> Block Traffic
         </Typography>
-        <Button variant="contained" onClick={() => { setSource(''); setDestination(''); setResult(null); setError(null); }} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => { setSource(''); setDestination(''); setResult(null); setError(null); }} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Reset
         </Button>
       </Box>
@@ -88,10 +89,10 @@ const BlockTrafficInner: React.FC = () => {
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={7}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: '#e8eaf0' }}>Block Network Traffic</Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4', mb: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ color: colors.textPrimary }}>Block Network Traffic</Typography>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, mb: 3 }}>
                 Send a real block-traffic request to the backend queue. The backend currently queues the action and returns status, source, destination, actions taken, and timestamp.
               </Typography>
               <TextField
@@ -102,8 +103,8 @@ const BlockTrafficInner: React.FC = () => {
                 placeholder="pod name, namespace, or IP"
                 sx={{ mb: 2 }}
                 size="small"
-                InputLabelProps={{ style: { color: '#8892a4' } }}
-                InputProps={{ sx: { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }}
+                InputLabelProps={{ style: { color: colors.textSecondary } }}
+                InputProps={{ sx: { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }}
               />
               <TextField
                 fullWidth
@@ -113,8 +114,8 @@ const BlockTrafficInner: React.FC = () => {
                 placeholder="pod name, namespace, service, or IP:port"
                 sx={{ mb: 3 }}
                 size="small"
-                InputLabelProps={{ style: { color: '#8892a4' } }}
-                InputProps={{ sx: { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }}
+                InputLabelProps={{ style: { color: colors.textSecondary } }}
+                InputProps={{ sx: { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }}
               />
               <Button
                 variant="contained"
@@ -132,14 +133,14 @@ const BlockTrafficInner: React.FC = () => {
         </Grid>
 
         <Grid item xs={12} md={5}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ color: '#e8eaf0' }}>Current backend behavior</Typography>
+              <Typography variant="h6" gutterBottom sx={{ color: colors.textPrimary }}>Current backend behavior</Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                <Chip label="Real API wired" size="small" sx={{ bgcolor: '#131d2e', color: '#90caf9', border: '1px solid #2a3245' }} />
-                <Chip label="Queued action" size="small" sx={{ bgcolor: '#131d2e', color: '#ffa726', border: '1px solid #2a3245' }} />
+                <Chip label="Real API wired" size="small" sx={{ bgcolor: colors.surfaceAlt, color: colors.info, border: `1px solid ${colors.border}` }} />
+                <Chip label="Queued action" size="small" sx={{ bgcolor: colors.surfaceAlt, color: colors.warning, border: `1px solid ${colors.border}` }} />
               </Box>
-              <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.75 }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.75 }}>
                 The backend response confirms the request was accepted and queued, but the action still depends on cluster network policy access. This page is now functional because it uses the live backend endpoint instead of a broken local path.
               </Typography>
             </CardContent>

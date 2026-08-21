@@ -17,16 +17,17 @@ import {
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import ClusterGuard from '../components/ClusterGuard';
+import { colors } from '../theme/colors';
 
 // ── Design tokens (same as every other page) ─────────────────────────────────
 const DK = {
-  bg: '#0d1117', surface: '#161b22', surface2: '#1c2128',
-  border: '#30363d', text: '#e6edf3', muted: '#8b949e',
+  bg: colors.background, surface: colors.surface, surface2: colors.surfaceHover,
+  border: colors.border, text: colors.textPrimary, muted: colors.textSecondary,
 };
-const ACCENT = '#58a6ff';
-const GREEN  = '#3fb950';
-const AMBER  = '#d29922';
-const RED    = '#f85149';
+const ACCENT = colors.info;
+const GREEN  = colors.success;
+const AMBER  = colors.warning;
+const RED    = colors.danger;
 
 const sx = {
   card: {

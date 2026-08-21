@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
+import { useCluster } from '../../contexts/ClusterContext';
+import NoClusterState from '../../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -21,6 +23,7 @@ interface ArgoCDApp {
 
 const ArgoCD: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ArgoCDApp[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +40,8 @@ const ArgoCD: React.FC = () => {
   const syncedCount = data.filter((r) => r.syncStatus === 'Synced').length;
   const healthyCount = data.filter((r) => r.healthStatus === 'Healthy').length;
   const clusterCount = new Set(data.map((r) => r.cluster)).size;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

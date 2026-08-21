@@ -6,6 +6,8 @@ import {
 } from '@mui/material';
 import { Search as SearchIcon } from '@mui/icons-material';
 import axios from 'axios';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 
 const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -18,6 +20,7 @@ interface SearchResult {
 }
 
 const GlobalSearch: React.FC = () => {
+  const { clusters } = useCluster();
   const [query, setQuery] = useState('');
   const [tab, setTab] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -113,6 +116,8 @@ const GlobalSearch: React.FC = () => {
   const totalResults = pods.length + workloads.length + recommendations.length;
   const tabData = [pods, workloads, recommendations];
   const tabLabels = ['Pods', 'Workloads', 'Recommendations'];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

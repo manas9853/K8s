@@ -21,6 +21,7 @@ import {
 import { PlayArrow as PlaybookIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface IncidentPlaybook {
   id: string;
@@ -42,16 +43,16 @@ interface IncidentPlaybooksResponse {
 }
 
 const SEVERITY_COLOR: Record<string, string> = {
-  critical: '#ef5350',
-  high: '#ffa726',
-  medium: '#90caf9',
-  low: '#a5d6a7',
+  critical: colors.danger,
+  high: colors.warning,
+  medium: colors.info,
+  low: colors.success,
 };
 
 const AUTOMATION_COLOR: Record<string, string> = {
-  'fully-automated': '#a5d6a7',
-  'semi-automated': '#ffd54f',
-  manual: '#8892a4',
+  'fully-automated': colors.success,
+  'semi-automated': colors.warning,
+  manual: colors.textSecondary,
 };
 
 function formatTimestamp(value?: string) {
@@ -126,7 +127,7 @@ const IncidentPlaybooksInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -134,7 +135,7 @@ const IncidentPlaybooksInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -142,43 +143,43 @@ const IncidentPlaybooksInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load playbooks</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <PlaybookIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <PlaybookIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Incident Playbooks
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real remediation playbooks for {data.cluster_name || 'cluster'} · Last updated {formatTimestamp(data.last_updated)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
 
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Total Playbooks', value: data.total_playbooks, color: '#90caf9' },
-          { label: 'Active Playbooks', value: activePlaybooks.length, color: activePlaybooks.length > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Affected Pods', value: totalAffectedPods, color: totalAffectedPods > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Semi/Fully Automated', value: automatedPlaybooks, color: '#90caf9' },
-          { label: 'Critical Severity', value: criticalPlaybooks, color: criticalPlaybooks > 0 ? '#ef5350' : '#a5d6a7' },
+          { label: 'Total Playbooks', value: data.total_playbooks, color: colors.info },
+          { label: 'Active Playbooks', value: activePlaybooks.length, color: activePlaybooks.length > 0 ? colors.danger : colors.success },
+          { label: 'Affected Pods', value: totalAffectedPods, color: totalAffectedPods > 0 ? colors.danger : colors.success },
+          { label: 'Semi/Fully Automated', value: automatedPlaybooks, color: colors.info },
+          { label: 'Critical Severity', value: criticalPlaybooks, color: criticalPlaybooks > 0 ? colors.danger : colors.success },
         ].map((item) => (
           <Grid item xs={6} md key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', height: '100%' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, height: '100%' }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                   {item.label}
                 </Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>
@@ -191,27 +192,27 @@ const IncidentPlaybooksInner: React.FC = () => {
       </Grid>
 
       {activePlaybooks.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Why these playbooks are active
           </Typography>
           <Stack spacing={1.5}>
             {activePlaybooks.map((playbook) => (
-              <Box key={playbook.id} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={playbook.id} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" justifyContent="space-between" gap={1} flexWrap="wrap" mb={1}>
                   <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
-                    <Chip label={playbook.id} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Chip label={playbook.id} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontWeight: 'bold', fontSize: 10 }} />
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {playbook.name}
                     </Typography>
                   </Box>
                   <Box display="flex" gap={1} flexWrap="wrap">
-                    <Chip label={playbook.severity.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: SEVERITY_COLOR[playbook.severity] || '#8892a4', fontWeight: 'bold', fontSize: 10 }} />
-                    <Chip label={`${playbook.affected_pods} affected pod${playbook.affected_pods !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: '#2a3245', color: '#ef5350', fontWeight: 'bold', fontSize: 10 }} />
-                    <Chip label={playbook.automation_level} size="small" sx={{ bgcolor: '#2a3245', color: AUTOMATION_COLOR[playbook.automation_level] || '#8892a4', fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={playbook.severity.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: SEVERITY_COLOR[playbook.severity] || colors.textSecondary, fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={`${playbook.affected_pods} affected pod${playbook.affected_pods !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: colors.border, color: colors.danger, fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={playbook.automation_level} size="small" sx={{ bgcolor: colors.border, color: AUTOMATION_COLOR[playbook.automation_level] || colors.textSecondary, fontWeight: 'bold', fontSize: 10 }} />
                   </Box>
                 </Box>
-                <Typography variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.75 }}>
+                <Typography variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.75 }}>
                   {buildPlaybookReason(playbook)}
                 </Typography>
               </Box>
@@ -220,16 +221,16 @@ const IncidentPlaybooksInner: React.FC = () => {
         </Paper>
       )}
 
-      <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <CardContent>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
             Available Playbooks
           </Typography>
           <Table size="small">
             <TableHead>
               <TableRow>
                 {['ID', 'Name', 'Description', 'Severity', 'Affected Pods', 'Steps', 'Est. Time', 'Automation', 'Status', 'Why it matters'].map((header) => (
-                  <TableCell key={header} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>
+                  <TableCell key={header} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>
                     {header}
                   </TableCell>
                 ))}
@@ -237,29 +238,29 @@ const IncidentPlaybooksInner: React.FC = () => {
             </TableHead>
             <TableBody>
               {data.playbooks.map((playbook) => (
-                <TableRow key={playbook.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' }, bgcolor: '#131d2e' }}>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={playbook.id} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
+                <TableRow key={playbook.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, bgcolor: colors.surfaceAlt }}>
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={playbook.id} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontWeight: 'bold', fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ color: '#e8eaf0', fontWeight: 700, borderColor: '#2a3245', minWidth: 220 }}>
+                  <TableCell sx={{ color: colors.textPrimary, fontWeight: 700, borderColor: colors.border, minWidth: 220 }}>
                     {playbook.name}
                   </TableCell>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12, minWidth: 280 }}>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, minWidth: 280 }}>
                     {playbook.description}
                   </TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={playbook.severity.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: SEVERITY_COLOR[playbook.severity] || '#8892a4', fontWeight: 'bold', fontSize: 10 }} />
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={playbook.severity.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: SEVERITY_COLOR[playbook.severity] || colors.textSecondary, fontWeight: 'bold', fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>{playbook.affected_pods}</TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>{playbook.steps}</TableCell>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245' }}>{playbook.estimated_time}</TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={playbook.automation_level} size="small" sx={{ bgcolor: '#2a3245', color: AUTOMATION_COLOR[playbook.automation_level] || '#8892a4', fontWeight: 'bold', fontSize: 10 }} />
+                  <TableCell sx={{ borderColor: colors.border }}>{playbook.affected_pods}</TableCell>
+                  <TableCell sx={{ borderColor: colors.border }}>{playbook.steps}</TableCell>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border }}>{playbook.estimated_time}</TableCell>
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={playbook.automation_level} size="small" sx={{ bgcolor: colors.border, color: AUTOMATION_COLOR[playbook.automation_level] || colors.textSecondary, fontWeight: 'bold', fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={playbook.active ? 'ACTIVE' : 'INACTIVE'} size="small" sx={{ bgcolor: '#2a3245', color: playbook.active ? '#ef5350' : '#a5d6a7', fontWeight: 'bold', fontSize: 10 }} />
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={playbook.active ? 'ACTIVE' : 'INACTIVE'} size="small" sx={{ bgcolor: colors.border, color: playbook.active ? colors.danger : colors.success, fontWeight: 'bold', fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 11, lineHeight: 1.6, minWidth: 320 }}>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 11, lineHeight: 1.6, minWidth: 320 }}>
                     {buildPlaybookReason(playbook)}
                   </TableCell>
                 </TableRow>

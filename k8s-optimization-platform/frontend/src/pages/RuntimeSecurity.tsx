@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Paper, Grid, Card, CardContent, Chip, CircularProgress,
   Alert, Button, Stack, Tooltip, Table, TableBody,
@@ -12,6 +14,7 @@ import {
   Block as BlockIcon, ArrowForward as ArrowIcon, Search as SearchIcon
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface RuntimeThreat {
   id: string; severity: string; threat_type: string; pod_name: string;
@@ -35,11 +38,12 @@ const MITRE_MAP: Record<string, { tactic: string; technique: string; id: string 
   'Memory Pressure':            { tactic: 'Impact',               technique: 'Endpoint Denial of Service',           id: 'T1499' },
 };
 
-const SEV_COLOR: Record<string, string> = { critical: '#f87171', high: '#f59e0b', medium: '#60a5fa', low: '#4ade80' };
-const SEV_BG:    Record<string, string> = { critical: '#2d1515',  high: '#2d200a',  medium: '#0d1f3c',  low: '#0d2d1a' };
+const SEV_COLOR: Record<string, string> = { critical: colors.danger, high: colors.warning, medium: colors.info, low: colors.success };
+const SEV_BG:    Record<string, string> = { critical: colors.dangerBg,  high: colors.warningBg,  medium: colors.infoBg,  low: colors.successBg };
 
 const RuntimeSecurity: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data, setData] = useState<RuntimeSecurityData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,14 +62,16 @@ const RuntimeSecurity: React.FC = () => {
     finally { setLoading(false); }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
-    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
-      <CircularProgress size={48} sx={{ color: '#60a5fa' }} />
+    <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
+      <CircularProgress size={48} sx={{ color: colors.info }} />
     </Box>
   );
   if (!data) return <Alert severity="error">Failed to load runtime security data</Alert>;
 
-  const scoreColor = data.runtime_score >= 80 ? '#4ade80' : data.runtime_score >= 60 ? '#f59e0b' : '#f87171';
+  const scoreColor = data.runtime_score >= 80 ? colors.success : data.runtime_score >= 60 ? colors.warning : colors.danger;
   const r = 54; const circ = 2 * Math.PI * r;
   const dash = (Math.min(data.runtime_score, 100) / 100) * circ;
 
@@ -88,14 +94,14 @@ const RuntimeSecurity: React.FC = () => {
   const criticalThreats = threats.filter(t => t.severity === 'critical');
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
 
       {/* HEADER */}
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <SecurityIcon sx={{ fontSize: 36, color: '#60a5fa' }} />
+        <SecurityIcon sx={{ fontSize: 36, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Runtime Security</Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>Runtime Security</Typography>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Signal-based threat detection · {data.containers_monitored} containers · {data.total_threats} signals · Last scan {new Date(data.last_scan).toLocaleString()}
           </Typography>
         </Box>
@@ -105,30 +111,30 @@ const RuntimeSecurity: React.FC = () => {
       <Grid container spacing={2} mb={3}>
         {/* Score ring */}
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>Security Score</Typography>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>Security Score</Typography>
               <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
                 <svg width={130} height={130}>
-                  <circle cx={65} cy={65} r={r} fill="none" stroke="#2a3245" strokeWidth={11} />
+                  <circle cx={65} cy={65} r={r} fill="none" stroke={colors.border} strokeWidth={11} />
                   <circle cx={65} cy={65} r={r} fill="none" stroke={scoreColor} strokeWidth={11}
                     strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
                     transform="rotate(-90 65 65)" />
                 </svg>
                 <Box sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)' }}>
                   <Typography variant="h4" fontWeight="bold" sx={{ color: scoreColor }}>{data.runtime_score}</Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>/ 100</Typography>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>/ 100</Typography>
                 </Box>
               </Box>
-              <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mt: 0.5 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5 }}>
                 {data.clean_containers ?? 0} / {data.containers_monitored} containers clean
               </Typography>
               <Chip
                 label={data.risky_containers ? `${data.risky_containers} risky containers` : 'All clean'}
                 size="small"
                 sx={{ mt: 1,
-                  bgcolor: (data.risky_containers ?? 0) > 0 ? '#2d1515' : '#0d2d1a',
-                  color:   (data.risky_containers ?? 0) > 0 ? '#f87171' : '#4ade80',
+                  bgcolor: (data.risky_containers ?? 0) > 0 ? colors.dangerBg : colors.successBg,
+                  color:   (data.risky_containers ?? 0) > 0 ? colors.danger : colors.success,
                   fontWeight: 'bold' }}
               />
             </CardContent>
@@ -137,9 +143,9 @@ const RuntimeSecurity: React.FC = () => {
 
         {/* Severity breakdown */}
         <Grid item xs={12} md={9}>
-          <Card sx={{ height: '100%', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>Threat Signal Breakdown</Typography>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>Threat Signal Breakdown</Typography>
               <Grid container spacing={1} mt={0.5}>
                 {[
                   { label: 'Critical', count: data.critical_threats, sub: 'Privileged containers' },
@@ -159,7 +165,7 @@ const RuntimeSecurity: React.FC = () => {
                           '&:hover': { border: `2px solid ${SEV_COLOR[lbl]}` } }}>
                         <Typography variant="h4" fontWeight="bold" sx={{ color: SEV_COLOR[lbl] }}>{count}</Typography>
                         <Typography variant="caption" fontWeight="bold" sx={{ color: SEV_COLOR[lbl] }}>{label}</Typography>
-                        <Typography variant="caption" display="block" sx={{ color: '#8892a4' }}>{sub}</Typography>
+                        <Typography variant="caption" display="block" sx={{ color: colors.textSecondary }}>{sub}</Typography>
                       </Box>
                     </Grid>
                   );
@@ -172,37 +178,37 @@ const RuntimeSecurity: React.FC = () => {
 
       {/* CRITICAL THREATS SPOTLIGHT */}
       {criticalThreats.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, border: '1px solid #f87171', bgcolor: '#2d1515' }}>
+        <Paper sx={{ p: 2.5, mb: 3, border: `1px solid ${colors.danger}`, bgcolor: colors.dangerBg }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <ErrorIcon sx={{ color: '#f87171' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#f87171' }}>
+            <ErrorIcon sx={{ color: colors.danger }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.danger }}>
               Critical Threats — {criticalThreats.length} Privileged Containers
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>Can escape to host node</Typography>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>Can escape to host node</Typography>
           </Box>
           <Grid container spacing={1.5}>
             {criticalThreats.slice(0, 6).map((threat) => {
               const mitre = MITRE_MAP[threat.threat_type] ?? null;
               return (
                 <Grid item xs={12} md={6} key={threat.id}>
-                  <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: '#1a1010', border: '1px solid #f8717140' }}>
+                  <Box sx={{ p: 2, borderRadius: 1.5, bgcolor: colors.dangerBg, border: `1px solid ${colors.danger}40` }}>
                     <Box display="flex" alignItems="center" gap={1} mb={0.5} flexWrap="wrap">
-                      <Chip label="CRITICAL" size="small" sx={{ bgcolor: '#f87171', color: '#fff', fontWeight: 'bold', fontSize: 10 }} />
-                      <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>{threat.threat_type}</Typography>
+                      <Chip label="CRITICAL" size="small" sx={{ bgcolor: colors.danger, color: '#fff', fontWeight: 'bold', fontSize: 10 }} />
+                      <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>{threat.threat_type}</Typography>
                       {mitre && (
                         <Tooltip title={`${mitre.tactic} → ${mitre.technique}`}>
                           <Chip label={mitre.id} size="small" variant="outlined"
-                            sx={{ fontSize: 10, borderColor: '#a78bfa', color: '#a78bfa' }} />
+                            sx={{ fontSize: 10, borderColor: colors.purple, color: colors.purple }} />
                         </Tooltip>
                       )}
                     </Box>
-                    <Typography variant="body2" sx={{ color: '#e8eaf0', fontWeight: 600 }}>
+                    <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 600 }}>
                       {threat.pod_name}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {threat.container_name} · {threat.namespace}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#f87171', display: 'block', mt: 0.5 }}>
+                    <Typography variant="caption" sx={{ color: colors.danger, display: 'block', mt: 0.5 }}>
                       {threat.details}
                     </Typography>
                   </Box>
@@ -211,18 +217,18 @@ const RuntimeSecurity: React.FC = () => {
             })}
           </Grid>
           {criticalThreats.length > 6 && (
-            <Typography variant="caption" sx={{ color: '#f87171', mt: 1, display: 'block' }}>
+            <Typography variant="caption" sx={{ color: colors.danger, mt: 1, display: 'block' }}>
               +{criticalThreats.length - 6} more critical threats — see table below
             </Typography>
           )}
           <Box mt={2} display="flex" gap={1}>
             <Button variant="contained" startIcon={<BlockIcon />}
-              onClick={() => navigate('/auto-remediation-security')}
-              sx={{ bgcolor: '#f87171', '&:hover': { bgcolor: '#ef4444' } }}>
+              onClick={() => navigate('/security/security-drift-detection/auto-remediation-security')}
+              sx={{ bgcolor: colors.danger, '&:hover': { bgcolor: colors.danger } }}>
               Remediate All ({criticalThreats.length})
             </Button>
-            <Button variant="outlined" onClick={() => navigate('/privileged-containers')}
-              sx={{ borderColor: '#f87171', color: '#f87171' }}>
+            <Button variant="outlined" onClick={() => navigate('/security/container-security/privileged-containers')}
+              sx={{ borderColor: colors.danger, color: colors.danger }}>
               View Privileged Containers
             </Button>
           </Box>
@@ -230,9 +236,9 @@ const RuntimeSecurity: React.FC = () => {
       )}
 
       {/* FULL THREAT TABLE */}
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2} display="flex" alignItems="center" justifyContent="space-between" flexWrap="wrap" gap={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             All Runtime Threats ({filtered.length})
           </Typography>
           <Box display="flex" gap={1.5} flexWrap="wrap">
@@ -240,15 +246,15 @@ const RuntimeSecurity: React.FC = () => {
             <TextField size="small" placeholder="Search pod / namespace…"
               value={search} onChange={e => setSearch(e.target.value)}
               InputProps={{
-                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: '#8892a4', fontSize: 18 }} /></InputAdornment>,
-                sx: { bgcolor: '#131d2e', color: '#e8eaf0', border: '1px solid #2a3245', borderRadius: 1,
-                  '& input': { color: '#e8eaf0' }, fontSize: 13 }
+                startAdornment: <InputAdornment position="start"><SearchIcon sx={{ color: colors.textSecondary, fontSize: 18 }} /></InputAdornment>,
+                sx: { bgcolor: colors.surfaceAlt, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 1,
+                  '& input': { color: colors.textPrimary }, fontSize: 13 }
               }}
               sx={{ minWidth: 200 }} variant="outlined" />
             {/* Severity filter */}
             <FormControl size="small" sx={{ minWidth: 120 }}>
               <Select value={sevFilter} onChange={e => setSevFilter(e.target.value)}
-                sx={{ bgcolor: '#131d2e', color: '#e8eaf0', border: '1px solid #2a3245', borderRadius: 1, fontSize: 13 }}>
+                sx={{ bgcolor: colors.surfaceAlt, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 1, fontSize: 13 }}>
                 <MenuItem value="all">All Severities</MenuItem>
                 <MenuItem value="critical">Critical</MenuItem>
                 <MenuItem value="high">High</MenuItem>
@@ -258,14 +264,14 @@ const RuntimeSecurity: React.FC = () => {
             {/* Namespace filter */}
             <FormControl size="small" sx={{ minWidth: 150 }}>
               <Select value={nsFilter} onChange={e => setNsFilter(e.target.value)}
-                sx={{ bgcolor: '#131d2e', color: '#e8eaf0', border: '1px solid #2a3245', borderRadius: 1, fontSize: 13 }}>
+                sx={{ bgcolor: colors.surfaceAlt, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 1, fontSize: 13 }}>
                 <MenuItem value="all">All Namespaces</MenuItem>
                 {namespaces.map(ns => <MenuItem key={ns} value={ns}>{ns}</MenuItem>)}
               </Select>
             </FormControl>
           </Box>
           <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/attack-investigation/active-threats')}
-            sx={{ color: '#60a5fa' }}>
+            sx={{ color: colors.info }}>
             Full Investigation
           </Button>
         </Box>
@@ -275,8 +281,8 @@ const RuntimeSecurity: React.FC = () => {
             <TableHead>
               <TableRow>
                 {['Severity', 'Threat Type', 'MITRE', 'Pod', 'Container', 'Namespace', 'Fix'].map(h => (
-                  <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: '#8892a4',
-                    bgcolor: '#131d2e', borderColor: '#2a3245' }}>{h}</TableCell>
+                  <TableCell key={h} sx={{ fontWeight: 700, fontSize: 12, color: colors.textSecondary,
+                    bgcolor: colors.surfaceAlt, borderColor: colors.border }}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
@@ -284,34 +290,34 @@ const RuntimeSecurity: React.FC = () => {
               {filtered.slice(0, 100).map((t, i) => {
                 const mitre = MITRE_MAP[t.threat_type];
                 return (
-                  <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                    <TableCell sx={{ borderColor: '#2a3245' }}>
+                  <TableRow key={i} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                    <TableCell sx={{ borderColor: colors.border }}>
                       <Chip label={t.severity.toUpperCase()} size="small"
                         sx={{ bgcolor: SEV_BG[t.severity], color: SEV_COLOR[t.severity], fontWeight: 'bold', fontSize: 10 }} />
                     </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: '#e8eaf0', fontWeight: 600, borderColor: '#2a3245' }}>
+                    <TableCell sx={{ fontSize: 12, color: colors.textPrimary, fontWeight: 600, borderColor: colors.border }}>
                       {t.threat_type}
                     </TableCell>
-                    <TableCell sx={{ borderColor: '#2a3245' }}>
+                    <TableCell sx={{ borderColor: colors.border }}>
                       {mitre ? (
                         <Tooltip title={`${mitre.tactic}: ${mitre.technique}`} arrow>
                           <Chip label={mitre.id} size="small" variant="outlined"
-                            sx={{ fontSize: 10, borderColor: '#a78bfa', color: '#a78bfa', cursor: 'help' }} />
+                            sx={{ fontSize: 10, borderColor: colors.purple, color: colors.purple, cursor: 'help' }} />
                         </Tooltip>
-                      ) : <Typography sx={{ color: '#8892a4', fontSize: 12 }}>—</Typography>}
+                      ) : <Typography sx={{ color: colors.textSecondary, fontSize: 12 }}>—</Typography>}
                     </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: '#e8eaf0', fontWeight: 500, borderColor: '#2a3245', maxWidth: 160,
+                    <TableCell sx={{ fontSize: 12, color: colors.textPrimary, fontWeight: 500, borderColor: colors.border, maxWidth: 160,
                       overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {t.pod_name}
                     </TableCell>
-                    <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>{t.container_name}</TableCell>
-                    <TableCell sx={{ fontSize: 12, borderColor: '#2a3245' }}>
+                    <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>{t.container_name}</TableCell>
+                    <TableCell sx={{ fontSize: 12, borderColor: colors.border }}>
                       <Chip label={t.namespace} size="small"
-                        sx={{ bgcolor: '#1a2035', color: '#8892a4', fontSize: 10, border: '1px solid #2a3245' }} />
+                        sx={{ bgcolor: colors.surfaceAlt, color: colors.textSecondary, fontSize: 10, border: `1px solid ${colors.border}` }} />
                     </TableCell>
-                    <TableCell sx={{ borderColor: '#2a3245' }}>
+                    <TableCell sx={{ borderColor: colors.border }}>
                       <Tooltip title={t.recommended_action} arrow>
-                        <Typography variant="caption" sx={{ color: '#60a5fa', fontSize: 10, cursor: 'help',
+                        <Typography variant="caption" sx={{ color: colors.info, fontSize: 10, cursor: 'help',
                           maxWidth: 160, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {t.recommended_action.split(';')[0]}
                         </Typography>
@@ -324,8 +330,8 @@ const RuntimeSecurity: React.FC = () => {
           </Table>
         </TableContainer>
         {filtered.length > 100 && (
-          <Box p={1.5} sx={{ borderTop: '1px solid #2a3245' }}>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Box p={1.5} sx={{ borderTop: `1px solid ${colors.border}` }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Showing 100 of {filtered.length} threats. Use filters to narrow results.
             </Typography>
           </Box>

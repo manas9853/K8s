@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Grid, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Tabs, Tab,
@@ -9,23 +11,24 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import GavelIcon from '@mui/icons-material/Gavel';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
-const SEV_COLOR: Record<string, string> = { critical: '#f85149', high: '#d29922', medium: '#3b82f6' };
+const SEV_COLOR: Record<string, string> = { critical: colors.danger, high: colors.warning, medium: colors.info };
 const FW_COLOR: Record<string, string>  = {
-  'CIS Benchmark': '#58a6ff',
-  'PCI DSS':       '#f85149',
-  'ISO 27001':     '#3fb950',
-  'HIPAA':         '#a371f7',
-  'GDPR':          '#d29922',
+  'CIS Benchmark': colors.info,
+  'PCI DSS':       colors.danger,
+  'ISO 27001':     colors.success,
+  'HIPAA':         colors.purple,
+  'GDPR':          colors.warning,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -54,7 +57,7 @@ const ScoreRing: React.FC<{ score: number; size?: number }> = ({ score, size = 8
   const circ = 2 * Math.PI * r;
   const pct  = Math.max(0, Math.min(100, score));
   const dash = (pct / 100) * circ;
-  const color = pct >= 80 ? '#3fb950' : pct >= 60 ? '#d29922' : '#f85149';
+  const color = pct >= 80 ? colors.success : pct >= 60 ? colors.warning : colors.danger;
   return (
     <Box sx={{ position: 'relative', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
@@ -91,6 +94,7 @@ async function pollCommand(cmdId: number): Promise<{ ok: boolean; errMsg?: strin
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const ComplianceFixes: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [payload, setPayload]   = useState<CompPayload | null>(null);
   const [loading, setLoading]   = useState(true);
   const [activeTab, setActiveTab] = useState(0);
@@ -133,9 +137,11 @@ const ComplianceFixes: React.FC = () => {
     for (const fix of fixes) await applyFix(fix);
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <CircularProgress sx={{ color: '#58a6ff' }} />
+      <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
 
@@ -145,7 +151,7 @@ const ComplianceFixes: React.FC = () => {
   const fwFixes  = fixes.filter(f => f.framework === activeFw);
   const fwFixed  = fwFixes.filter(f => fixedIds.has(f.fix_id)).length;
   const fwScore  = fwFixes.length > 0 ? Math.round((fwFixed / fwFixes.length) * 100) : 100;
-  const fwColor  = FW_COLOR[activeFw] ?? '#58a6ff';
+  const fwColor  = FW_COLOR[activeFw] ?? colors.info;
   const fwUnfixed = fwFixes.filter(f => !fixedIds.has(f.fix_id));
 
   return (
@@ -154,7 +160,7 @@ const ComplianceFixes: React.FC = () => {
         <Box>
           <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>Compliance Fixes</Typography>
           <Typography sx={{ color: DK.muted, fontSize: '0.83rem', mt: 0.25 }}>
-            Framework compliance fixes for <span style={{ color: '#58a6ff' }}>{activeClusterName}</span>
+            Framework compliance fixes for <span style={{ color: colors.info }}>{activeClusterName}</span>
           </Typography>
         </Box>
         <Tooltip title="Refresh"><IconButton onClick={fetchData} sx={{ color: DK.muted, '&:hover': { color: DK.text } }}><RefreshIcon /></IconButton></Tooltip>
@@ -166,7 +172,7 @@ const ComplianceFixes: React.FC = () => {
           sx={{ borderBottom: `1px solid ${DK.border}`, '& .MuiTab-root': { color: DK.muted, minHeight: 44 }, '& .Mui-selected': { color: DK.text }, '& .MuiTabs-indicator': { bgcolor: fwColor } }}>
           {frameworks.map((fw, i) => {
             const count = (payload?.frameworks ?? {})[fw] ?? 0;
-            const c = FW_COLOR[fw] ?? '#58a6ff';
+            const c = FW_COLOR[fw] ?? colors.info;
             return (
               <Tab key={fw} label={
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -205,8 +211,8 @@ const ComplianceFixes: React.FC = () => {
                   const sevColor = SEV_COLOR[fix.impact] ?? DK.muted;
                   const isFixed  = fixedIds.has(fix.fix_id);
                   return (
-                    <Box key={fix.fix_id} sx={{ bgcolor: DK.surface2, border: `1px solid ${isFixed ? '#3fb95044' : DK.border}`,
-                      borderLeft: `3px solid ${isFixed ? '#3fb950' : sevColor}`, borderRadius: 2, p: 2,
+                    <Box key={fix.fix_id} sx={{ bgcolor: DK.surface2, border: `1px solid ${isFixed ? `${colors.success}44` : DK.border}`,
+                      borderLeft: `3px solid ${isFixed ? colors.success : sevColor}`, borderRadius: 2, p: 2,
                       display: 'flex', gap: 1.5, opacity: isFixed ? 0.55 : 1, transition: 'all 0.2s' }}>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center', mb: 0.4 }}>
@@ -219,9 +225,9 @@ const ComplianceFixes: React.FC = () => {
                       <Tooltip title={isFixed ? 'Applied' : 'Apply fix'}>
                         <span>
                           <IconButton size="small" onClick={() => applyFix(fix)} disabled={applying !== null || isFixed}
-                            sx={{ bgcolor: isFixed ? 'transparent' : '#238636', color: isFixed ? '#3fb950' : '#fff',
+                            sx={{ bgcolor: isFixed ? 'transparent' : colors.success, color: isFixed ? colors.success : '#fff',
                               borderRadius: 1.5, width: 30, height: 30, flexShrink: 0,
-                              '&:hover': { bgcolor: isFixed ? 'transparent' : '#2ea043' },
+                              '&:hover': { bgcolor: isFixed ? 'transparent' : colors.success },
                               '&.Mui-disabled': { bgcolor: DK.surface2, color: DK.muted } }}>
                             {isFixed ? <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />
                              : applying === fix.fix_id ? <CircularProgress size={12} sx={{ color: '#fff' }} />
@@ -237,7 +243,7 @@ const ComplianceFixes: React.FC = () => {
           )}
           {frameworks.length === 0 && (
             <Box sx={{ textAlign: 'center', py: 3 }}>
-              <CheckCircleOutlineIcon sx={{ fontSize: 36, color: '#3fb950', mb: 1 }} />
+              <CheckCircleOutlineIcon sx={{ fontSize: 36, color: colors.success, mb: 1 }} />
               <Typography sx={{ color: DK.muted }}>No compliance issues found</Typography>
             </Box>
           )}

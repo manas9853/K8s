@@ -1,23 +1,26 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ── Design tokens (matches ImageTrust.tsx palette) ────────────────────────────
 const T = {
-  bg:     '#0f1724',
-  card:   '#1e2433',
-  border: '#2a3245',
-  text:   '#e8eaf0',
-  muted:  '#8892a4',
-  accent: '#3b82f6',
+  bg:     colors.background,
+  card:   colors.surface,
+  border: colors.border,
+  text:   colors.textPrimary,
+  muted:  colors.textSecondary,
+  accent: colors.info,
   // status
-  overdue:       { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  needs_rotation:{ bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  rotated:       { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  overdue:       { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  needs_rotation:{ bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  rotated:       { bg: colors.successBg, text: colors.success, border: colors.successBg },
   // severity
-  high:   { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  medium: { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  low:    { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  high:   { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  medium: { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  low:    { bg: colors.successBg, text: colors.success, border: colors.successBg },
 };
 
 const statusPal = (s: string) =>
@@ -26,7 +29,7 @@ const statusPal = (s: string) =>
 const sevPal = (s: string) =>
   s === 'high' ? T.high : s === 'medium' ? T.medium : T.low;
 
-const scoreColor = (n: number) => (n >= 80 ? '#4ade80' : n >= 50 ? '#f59e0b' : '#f87171');
+const scoreColor = (n: number) => (n >= 80 ? colors.success : n >= 50 ? colors.warning : colors.danger);
 
 interface SecretStatus {
   secret_name:     string;
@@ -56,6 +59,7 @@ interface RotationData {
 
 export default function SecretRotation() {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData]       = useState<RotationData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -110,6 +114,8 @@ export default function SecretRotation() {
   }, [secrets]);
 
   // ── Loading / Error ──────────────────────────────────────────────────────────
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: T.muted, fontSize: 15 }}>Loading secret rotation data…</div>
@@ -117,7 +123,7 @@ export default function SecretRotation() {
   );
   if (error || !data) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ color: '#f87171', fontSize: 15 }}>Error: {error || 'No data'}</div>
+      <div style={{ color: colors.danger, fontSize: 15 }}>Error: {error || 'No data'}</div>
     </div>
   );
 
@@ -147,14 +153,14 @@ export default function SecretRotation() {
         {/* Score ring */}
         <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <svg width="110" height="110" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="40" fill="none" stroke="#2a3245" strokeWidth="8" />
+            <circle cx="50" cy="50" r="40" fill="none" stroke={colors.border} strokeWidth="8" />
             <circle cx="50" cy="50" r="40" fill="none"
               stroke={col} strokeWidth="8"
               strokeDasharray={`${(score / 100) * 251.3} 251.3`}
               strokeLinecap="round"
               transform="rotate(-90 50 50)" />
             <text x="50" y="46" textAnchor="middle" fill={col} fontSize="18" fontWeight="700">{Math.round(score)}</text>
-            <text x="50" y="62" textAnchor="middle" fill="#8892a4" fontSize="9">Rotation Score</text>
+            <text x="50" y="62" textAnchor="middle" fill={colors.textSecondary} fontSize="9">Rotation Score</text>
           </svg>
           <div style={{ fontSize: 12, color: T.muted, marginTop: 4 }}>
             {score >= 80 ? '🟢 Good' : score >= 50 ? '🟡 Fair' : '🔴 Poor'}
@@ -168,9 +174,9 @@ export default function SecretRotation() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
           {[
             { label: 'Total Secrets',    value: data.total_secrets,    col: T.accent },
-            { label: 'Up to Date',       value: data.rotated_secrets,  col: '#4ade80' },
-            { label: 'Needs Rotation',   value: data.needs_rotation,   col: '#f59e0b' },
-            { label: 'Overdue',          value: data.overdue_rotation, col: '#f87171' },
+            { label: 'Up to Date',       value: data.rotated_secrets,  col: colors.success },
+            { label: 'Needs Rotation',   value: data.needs_rotation,   col: colors.warning },
+            { label: 'Overdue',          value: data.overdue_rotation, col: colors.danger },
           ].map(s => (
             <div key={s.label} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: '14px 16px' }}>
               <div style={{ fontSize: 12, color: T.muted, marginBottom: 6 }}>{s.label}</div>
@@ -199,7 +205,7 @@ export default function SecretRotation() {
           ) : (
             <div style={{ maxHeight: 240, overflowY: 'auto' }}>
               {overdueList.map((s, i) => (
-                <div key={i} style={{ padding: '8px 10px', background: '#151f30', borderRadius: 8, marginBottom: 6, border: `1px solid ${T.overdue.border}` }}>
+                <div key={i} style={{ padding: '8px 10px', background: colors.surfaceAlt, borderRadius: 8, marginBottom: 6, border: `1px solid ${T.overdue.border}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                     <span style={{ fontFamily: 'monospace', fontSize: 12, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }} title={s.secret_name}>
                       {s.secret_name}
@@ -243,8 +249,8 @@ export default function SecretRotation() {
                         <span style={{ padding: '1px 6px', borderRadius: 3, fontSize: 10, background: T.rotated.bg, color: T.rotated.text, border: `1px solid ${T.rotated.border}` }}>{row.ok} ok</span>
                       )}
                     </div>
-                    <div style={{ height: 4, background: '#2a3245', borderRadius: 2, marginTop: 4 }}>
-                      <div style={{ height: '100%', width: `${pctOk}%`, background: '#4ade80', borderRadius: 2 }} />
+                    <div style={{ height: 4, background: colors.border, borderRadius: 2, marginTop: 4 }}>
+                      <div style={{ height: '100%', width: `${pctOk}%`, background: colors.success, borderRadius: 2 }} />
                     </div>
                   </div>
                 );
@@ -294,24 +300,24 @@ export default function SecretRotation() {
               placeholder="Search name / namespace / type…"
               value={search}
               onChange={e => setSearch(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 12px', color: T.text, fontSize: 13, width: 220, outline: 'none' }}
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 12px', color: T.text, fontSize: 13, width: 220, outline: 'none' }}
             />
             <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Statuses</option>
               <option value="overdue">Overdue</option>
               <option value="needs_rotation">Needs Rotation</option>
               <option value="rotated">Up to Date</option>
             </select>
             <select value={filterSev} onChange={e => setFilterSev(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Severities</option>
               <option value="high">High</option>
               <option value="medium">Medium</option>
               <option value="low">Low</option>
             </select>
             <select value={filterNs} onChange={e => setFilterNs(e.target.value)}
-              style={{ background: '#151f30', border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
+              style={{ background: colors.surfaceAlt, border: `1px solid ${T.border}`, borderRadius: 7, padding: '6px 10px', color: T.text, fontSize: 13, cursor: 'pointer' }}>
               <option value="all">All Namespaces</option>
               {namespaces.filter(n => n !== 'all').map(n => <option key={n} value={n}>{n}</option>)}
             </select>
@@ -332,12 +338,12 @@ export default function SecretRotation() {
               {filtered.slice(0, 200).map((s, i) => {
                 const sp  = statusPal(s.status);
                 const svp = sevPal(s.severity);
-                const ageCol = s.age_days > 180 ? '#f87171' : s.age_days > 90 ? '#f59e0b' : T.text;
+                const ageCol = s.age_days > 180 ? colors.danger : s.age_days > 90 ? colors.warning : T.text;
                 return (
                   <tr key={i}
-                    style={{ borderBottom: `1px solid ${T.border}`, background: s.status === 'overdue' ? '#180f0f' : s.status === 'needs_rotation' ? '#15100a' : 'transparent' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#1a2035')}
-                    onMouseLeave={e => (e.currentTarget.style.background = s.status === 'overdue' ? '#180f0f' : s.status === 'needs_rotation' ? '#15100a' : 'transparent')}>
+                    style={{ borderBottom: `1px solid ${T.border}`, background: s.status === 'overdue' ? colors.dangerBg : s.status === 'needs_rotation' ? colors.warningBg : 'transparent' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = colors.surfaceAlt)}
+                    onMouseLeave={e => (e.currentTarget.style.background = s.status === 'overdue' ? colors.dangerBg : s.status === 'needs_rotation' ? colors.warningBg : 'transparent')}>
                     {/* Secret Name */}
                     <td style={{ padding: '9px 12px', maxWidth: 200 }}>
                       <div style={{ fontFamily: 'monospace', fontSize: 12, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.secret_name}>
@@ -346,7 +352,7 @@ export default function SecretRotation() {
                     </td>
                     {/* Namespace */}
                     <td style={{ padding: '9px 12px', whiteSpace: 'nowrap' }}>
-                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: '#1e2433', color: '#60a5fa', border: '1px solid #2a3245' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: 11, background: colors.surface, color: colors.info, border: `1px solid ${colors.border}` }}>
                         {s.namespace}
                       </span>
                     </td>
@@ -376,7 +382,7 @@ export default function SecretRotation() {
                     </td>
                     {/* Referenced */}
                     <td style={{ padding: '9px 12px', textAlign: 'center' }}>
-                      <span style={{ fontSize: 14, color: s.is_referenced ? '#4ade80' : '#f87171' }}>
+                      <span style={{ fontSize: 14, color: s.is_referenced ? colors.success : colors.danger }}>
                         {s.is_referenced ? '✓' : '✗'}
                       </span>
                     </td>

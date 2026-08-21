@@ -15,8 +15,7 @@ import {
   Select,
   MenuItem,
   SelectChangeEvent,
-  Button,
-} from '@mui/material';
+  } from '@mui/material';
 import {
   TrendingDown,
   Storage,
@@ -24,12 +23,11 @@ import {
   AccountTree,
   Dns
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
-import { Add as AddIcon } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
+import NoClusterState from '../components/NoClusterState';
 
 interface ClusterSummary {
   total_clusters: number;
@@ -55,6 +53,42 @@ interface SimulationMetrics {
   last_updated: string;
 }
 
+interface PricingConstants {
+  cpu_cost_per_core_hour: number;
+  memory_cost_per_gb_hour: number;
+  hours_per_month: number;
+}
+
+// Fallback used only if /clusters/pricing is unreachable — kept in sync with
+// backend/utils/cost_engine.py so a failed fetch never silently produces a
+// number that disagrees with every other cost page.
+const FALLBACK_PRICING: PricingConstants = {
+  cpu_cost_per_core_hour: 0.031,
+  memory_cost_per_gb_hour: 0.004,
+  hours_per_month: 730,
+};
+
+// Cached across calls so we only hit the endpoint once per page load.
+let cachedPricing: PricingConstants | null = null;
+
+async function getPricingConstants(): Promise<PricingConstants> {
+  if (cachedPricing) return cachedPricing;
+  try {
+    const res = await fetch(`${API_BASE_URL}/clusters/pricing`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    cachedPricing = {
+      cpu_cost_per_core_hour: data.cpu_cost_per_core_hour,
+      memory_cost_per_gb_hour: data.memory_cost_per_gb_hour,
+      hours_per_month: data.hours_per_month,
+    };
+  } catch (err) {
+    console.error('Failed to fetch pricing constants, using fallback:', err);
+    cachedPricing = FALLBACK_PRICING;
+  }
+  return cachedPricing;
+}
+
 interface ClusterFilter {
   environment: string;
   namespace: string;
@@ -62,7 +96,6 @@ interface ClusterFilter {
 }
 
 const Dashboard: React.FC = () => {
-  const navigate = useNavigate();
   // 🌐 Cluster-scoped: re-fetches whenever the active cluster changes or is deleted
   const { clusterParam, activeClusterName, activeClusterId } = useActiveCluster();
   const { clusters, loading: clustersLoading } = useCluster();
@@ -147,11 +180,13 @@ const Dashboard: React.FC = () => {
       let pendingPods = 0;
       let failedPods = 0;
 
-      // Cost constants — matches backend _calculate_costs()
+      // Cost constants — fetched from the backend's single source of truth
+      // (utils/cost_engine.py via GET /clusters/pricing) so this can never
+      // drift from the numbers every other cost page displays.
       // Use node capacity (not requested) to avoid inflated cost when over-committed
-      const CPU_COST_PER_CORE_HOUR = 0.04;
-      const MEMORY_COST_PER_GB_HOUR = 0.005;
-      const HOURS_PER_MONTH = 730;
+      const { cpu_cost_per_core_hour: CPU_COST_PER_CORE_HOUR,
+              memory_cost_per_gb_hour: MEMORY_COST_PER_GB_HOUR,
+              hours_per_month: HOURS_PER_MONTH } = await getPricingConstants();
 
       for (const cluster of targetClusters) {
         const mRes = await fetch(`${API_BASE_URL}/agents/clusters/${encodeURIComponent(cluster.cluster_name)}/metrics`);
@@ -278,18 +313,7 @@ const Dashboard: React.FC = () => {
   }
 
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          The dashboard aggregates data from all registered clusters. Connect a cluster
-          first using the Cluster Onboarding page and metrics will start appearing here.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   if (loading) {

@@ -11,6 +11,7 @@ from datetime import datetime
 import logging
 
 from database.db import db_manager
+from api.workloads import _format_age as _age_from_iso
 
 router = APIRouter(tags=["platform-engineering"])
 logger = logging.getLogger(__name__)
@@ -43,6 +44,13 @@ def _domain(cluster_id: Optional[str], key: str) -> Dict[str, Any]:
     return val
 
 
+def _cluster_name(cluster_id: Optional[str]) -> str:
+    clusters = db_manager.get_all_clusters()
+    if not clusters:
+        return cluster_id or "unknown"
+    return cluster_id or clusters[0]["cluster_name"]
+
+
 # ── ArgoCD ─────────────────────────────────────────────────────────────────────
 
 @router.get("/argocd/apps")
@@ -51,7 +59,19 @@ async def get_argocd_apps(cluster_id: Optional[str] = Query(None)):
     try:
         platform = _domain(cluster_id, "platform")
         apps = platform.get("argocd", {}).get("apps", [])
-        return apps
+        cluster = _cluster_name(cluster_id)
+        return [
+            {
+                "appName":        a.get("name"),
+                "repoUrl":        a.get("repo"),
+                "targetRevision": a.get("target_revision"),
+                "syncStatus":     a.get("sync_status"),
+                "healthStatus":   a.get("health_status"),
+                "lastSyncTime":   a.get("last_sync_at"),
+                "cluster":        cluster,
+            }
+            for a in apps
+        ]
     except Exception as e:
         logger.error(f"Error fetching ArgoCD apps: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -64,7 +84,20 @@ async def get_flux_kustomizations(cluster_id: Optional[str] = Query(None)):
     """Return Flux kustomization list from agent_metrics platform domain."""
     try:
         platform = _domain(cluster_id, "platform")
-        return platform.get("fluxcd", {}).get("kustomizations", [])
+        items = platform.get("fluxcd", {}).get("kustomizations", [])
+        return [
+            {
+                "name":                   k.get("name"),
+                "namespace":              k.get("namespace"),
+                "sourceRef":              k.get("source"),
+                "ready":                  k.get("ready", False),
+                "suspended":              k.get("suspended", False),
+                "lastAppliedRevision":    k.get("revision"),
+                "lastAttemptedRevision":  k.get("last_attempted_revision"),
+                "age":                    _age_from_iso(k.get("created")),
+            }
+            for k in items
+        ]
     except Exception as e:
         logger.error(f"Error fetching FluxCD kustomizations: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -74,10 +107,27 @@ async def get_flux_kustomizations(cluster_id: Optional[str] = Query(None)):
 
 @router.get("/gitops/drift")
 async def get_gitops_drift(cluster_id: Optional[str] = Query(None)):
-    """Return GitOps drift events from agent_metrics platform domain."""
+    """
+    Return GitOps drift events, derived from ArgoCD applications whose live
+    cluster state has diverged from git (sync_status == OutOfSync).
+    Resource-level diffs aren't available — ArgoCD's own API only exposes
+    "in sync or not" at the Application level, not a field-by-field diff.
+    """
     try:
         platform = _domain(cluster_id, "platform")
-        return platform.get("gitops_drift", [])
+        drift = platform.get("gitops_drift", [])
+        return [
+            {
+                "resourceName":  d.get("name"),
+                "kind":          "Application",
+                "namespace":     d.get("namespace"),
+                "expectedState": "Synced",
+                "currentState":  f"{d.get('sync_status')} ({d.get('health_status')})",
+                "driftStatus":   "Drifted",
+                "detectedAt":    None,
+            }
+            for d in drift
+        ]
     except Exception as e:
         logger.error(f"Error fetching GitOps drift: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -87,9 +137,14 @@ async def get_gitops_drift(cluster_id: Optional[str] = Query(None)):
 
 @router.get("/pipelines/github-actions")
 async def get_github_actions(cluster_id: Optional[str] = Query(None)):
+    """
+    Real GitHub Actions runs, polled by the backend (see
+    api/cicd_integrations.py — these are external SaaS the agent can't
+    reach from inside the cluster's own scope of concern). Empty list
+    means "not connected yet", not an error.
+    """
     try:
-        platform = _domain(cluster_id, "platform")
-        return platform.get("github_actions", [])
+        return db_manager.get_cicd_pipeline_cache(_cluster_name(cluster_id), "GitHub Actions")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -97,8 +152,7 @@ async def get_github_actions(cluster_id: Optional[str] = Query(None)):
 @router.get("/pipelines/gitlab-ci")
 async def get_gitlab_ci(cluster_id: Optional[str] = Query(None)):
     try:
-        platform = _domain(cluster_id, "platform")
-        return platform.get("gitlab_ci", [])
+        return db_manager.get_cicd_pipeline_cache(_cluster_name(cluster_id), "GitLab CI")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -106,17 +160,40 @@ async def get_gitlab_ci(cluster_id: Optional[str] = Query(None)):
 @router.get("/pipelines/jenkins")
 async def get_jenkins_jobs(cluster_id: Optional[str] = Query(None)):
     try:
-        platform = _domain(cluster_id, "platform")
-        return platform.get("jenkins", [])
+        return db_manager.get_cicd_pipeline_cache(_cluster_name(cluster_id), "Jenkins")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+def _tekton_duration(start: Optional[str], end: Optional[str]) -> str:
+    if not start or not end:
+        return ""
+    try:
+        s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        secs = max(int((e - s).total_seconds()), 0)
+        return f"{secs // 60}m{secs % 60}s" if secs >= 60 else f"{secs}s"
+    except Exception:
+        return ""
 
 
 @router.get("/pipelines/tekton")
 async def get_tekton_pipelines(cluster_id: Optional[str] = Query(None)):
     try:
         platform = _domain(cluster_id, "platform")
-        return platform.get("tekton", {}).get("pipelines", [])
+        runs = platform.get("tekton", {}).get("pipelines", [])
+        return [
+            {
+                "name":           r.get("name"),
+                "namespace":      r.get("namespace"),
+                "status":         r.get("status"),
+                "taskCount":      r.get("task_count", 0),
+                "duration":       _tekton_duration(r.get("start_time"), r.get("completion_time")),
+                "startTime":      r.get("start_time"),
+                "completionTime": r.get("completion_time"),
+            }
+            for r in runs
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -138,7 +215,19 @@ async def get_policy_as_code(cluster_id: Optional[str] = Query(None)):
     """Return policy-as-code (OPA/Kyverno) violations."""
     try:
         platform = _domain(cluster_id, "platform")
-        return platform.get("policy_as_code", [])
+        violations = platform.get("policy_as_code", [])
+        return [
+            {
+                "policy":     v.get("policy"),
+                "kind":       v.get("kind"),
+                "resource":   v.get("resource"),
+                "namespace":  v.get("namespace"),
+                "severity":   v.get("severity"),
+                "message":    v.get("message"),
+                "detectedAt": v.get("detected_at"),
+            }
+            for v in violations
+        ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

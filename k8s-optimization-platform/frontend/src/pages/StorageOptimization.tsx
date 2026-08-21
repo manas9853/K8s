@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box, Typography, Paper, Grid, Card, CardContent,
@@ -34,6 +36,7 @@ interface ConsumptionRow {
 
 const StorageOptimization: React.FC = () => {
   const { activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [orphaned, setOrphaned] = useState<OrphanedPVC[]>([]);
   const [consumption, setConsumption] = useState<ConsumptionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -72,6 +75,8 @@ const StorageOptimization: React.FC = () => {
   const totalOrphanedGB = orphaned.reduce((s, r) => s + (r.capacity_gb ?? 0), 0);
   const totalSavings = orphaned.reduce((s, r) => s + (r.estimated_monthly_cost ?? 0), 0);
   const totalConsumptionGB = consumption.reduce((s, r) => s + (r.total_gb ?? 0), 0);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

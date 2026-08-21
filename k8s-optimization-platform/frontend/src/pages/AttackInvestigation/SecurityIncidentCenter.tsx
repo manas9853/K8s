@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface Incident {
   id: string;
@@ -66,17 +67,17 @@ interface IncidentCenterData {
 }
 
 const SEV_COLOR: Record<string, string> = {
-  critical: '#ef5350',
-  high: '#ffa726',
-  medium: '#90caf9',
-  low: '#a5d6a7',
+  critical: colors.danger,
+  high: colors.warning,
+  medium: colors.info,
+  low: colors.success,
 };
 
 const STATUS_COLOR: Record<string, string> = {
-  active: '#ef5350',
-  investigating: '#ffa726',
-  contained: '#90caf9',
-  resolved: '#a5d6a7',
+  active: colors.danger,
+  investigating: colors.warning,
+  contained: colors.info,
+  resolved: colors.success,
 };
 
 const SecurityIncidentCenterInner: React.FC = () => {
@@ -117,7 +118,7 @@ const SecurityIncidentCenterInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -125,7 +126,7 @@ const SecurityIncidentCenterInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -133,7 +134,7 @@ const SecurityIncidentCenterInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load incident data</Alert>
       </Box>
     );
@@ -146,20 +147,20 @@ const SecurityIncidentCenterInner: React.FC = () => {
   const activeScore = summary.total_threats_detected > 0
     ? Math.max(0, Math.round(100 - (summary.high_priority / Math.max(summary.total_threats_detected, 1)) * 100))
     : 100;
-  const scoreColor = activeScore >= 80 ? '#a5d6a7' : activeScore >= 50 ? '#ffa726' : '#ef5350';
+  const scoreColor = activeScore >= 80 ? colors.success : activeScore >= 50 ? colors.warning : colors.danger;
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const dash = (Math.min(activeScore, 100) / 100) * circumference;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <SecurityIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+        <SecurityIcon sx={{ fontSize: 32, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Security Incident Center
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Real incident stream for {data.cluster_name ?? 'cluster'} · Last updated{' '}
             {data.last_updated ? new Date(data.last_updated).toLocaleString() : 'N/A'}
           </Typography>
@@ -168,14 +169,14 @@ const SecurityIncidentCenterInner: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>
                 Incident Posture
               </Typography>
               <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
                 <svg width={130} height={130}>
-                  <circle cx={65} cy={65} r={radius} fill="none" stroke="#2a3245" strokeWidth={11} />
+                  <circle cx={65} cy={65} r={radius} fill="none" stroke={colors.border} strokeWidth={11} />
                   <circle
                     cx={65}
                     cy={65}
@@ -192,12 +193,12 @@ const SecurityIncidentCenterInner: React.FC = () => {
                   <Typography variant="h4" fontWeight="bold" sx={{ color: scoreColor }}>
                     {activeScore}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                     / 100
                   </Typography>
                 </Box>
               </Box>
-              <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mt: 1 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 1 }}>
                 {criticalIncidents.length} critical incident{criticalIncidents.length !== 1 ? 's' : ''}
               </Typography>
             </CardContent>
@@ -207,15 +208,15 @@ const SecurityIncidentCenterInner: React.FC = () => {
         <Grid item xs={12} md={9}>
           <Grid container spacing={2} mb={2}>
             {[
-              { label: 'Total Threats', count: summary.total_threats_detected ?? 0, color: '#90caf9' },
-              { label: 'High Priority', count: summary.high_priority ?? 0, color: '#ef5350' },
-              { label: 'Suspicious Pods', count: summary.total_suspicious_pods ?? 0, color: '#ffa726' },
-              { label: 'Namespaces Affected', count: summary.affected_namespaces ?? 0, color: '#a5d6a7' },
+              { label: 'Total Threats', count: summary.total_threats_detected ?? 0, color: colors.info },
+              { label: 'High Priority', count: summary.high_priority ?? 0, color: colors.danger },
+              { label: 'Suspicious Pods', count: summary.total_suspicious_pods ?? 0, color: colors.warning },
+              { label: 'Namespaces Affected', count: summary.affected_namespaces ?? 0, color: colors.success },
             ].map(({ label, count, color }) => (
               <Grid item xs={6} md={3} key={label}>
-                <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+                <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
                   <CardContent sx={{ pb: '8px !important' }}>
-                    <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{label}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{label}</Typography>
                     <Typography variant="h4" fontWeight="bold" sx={{ color }}>{count}</Typography>
                   </CardContent>
                 </Card>
@@ -225,14 +226,14 @@ const SecurityIncidentCenterInner: React.FC = () => {
 
           <Grid container spacing={2}>
             {[
-              { label: 'Active', value: summary.active_incidents, color: '#ef5350' },
-              { label: 'Investigating', value: summary.investigating, color: '#ffa726' },
-              { label: 'Contained', value: summary.contained, color: '#90caf9' },
-              { label: 'Resolved Today', value: summary.resolved_today, color: '#a5d6a7' },
+              { label: 'Active', value: summary.active_incidents, color: colors.danger },
+              { label: 'Investigating', value: summary.investigating, color: colors.warning },
+              { label: 'Contained', value: summary.contained, color: colors.info },
+              { label: 'Resolved Today', value: summary.resolved_today, color: colors.success },
             ].map(({ label, value, color }) => (
               <Grid item xs={6} md={3} key={label}>
-                <Paper sx={{ p: 1.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>{label}</Typography>
+                <Paper sx={{ p: 1.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>{label}</Typography>
                   <Typography variant="h5" fontWeight="bold" sx={{ color }}>{value}</Typography>
                 </Paper>
               </Grid>
@@ -243,36 +244,36 @@ const SecurityIncidentCenterInner: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245', height: '100%' }}>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+          <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}`, height: '100%' }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
               Response Metrics
             </Typography>
             <Stack spacing={1}>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
-                Mean time to detect: <Box component="span" sx={{ color: '#e8eaf0' }}>{summary.mean_time_to_detect}</Box>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Mean time to detect: <Box component="span" sx={{ color: colors.textPrimary }}>{summary.mean_time_to_detect}</Box>
               </Typography>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
-                Mean time to respond: <Box component="span" sx={{ color: '#e8eaf0' }}>{summary.mean_time_to_respond}</Box>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
+                Mean time to respond: <Box component="span" sx={{ color: colors.textPrimary }}>{summary.mean_time_to_respond}</Box>
               </Typography>
             </Stack>
           </Paper>
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245', height: '100%' }}>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+          <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}`, height: '100%' }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
               Threat Trends
             </Typography>
             <Grid container spacing={2}>
               {[
-                { label: 'Critical', value: trends.critical, color: '#ef5350' },
-                { label: 'High', value: trends.high, color: '#ffa726' },
-                { label: 'Medium', value: trends.medium, color: '#90caf9' },
-                { label: 'Violations', value: trends.total_violations, color: '#a5d6a7' },
+                { label: 'Critical', value: trends.critical, color: colors.danger },
+                { label: 'High', value: trends.high, color: colors.warning },
+                { label: 'Medium', value: trends.medium, color: colors.info },
+                { label: 'Violations', value: trends.total_violations, color: colors.success },
               ].map(({ label, value, color }) => (
                 <Grid item xs={6} key={label}>
-                  <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>{label}</Typography>
+                  <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>{label}</Typography>
                     <Typography variant="h5" fontWeight="bold" sx={{ color }}>{value}</Typography>
                   </Box>
                 </Grid>
@@ -283,33 +284,33 @@ const SecurityIncidentCenterInner: React.FC = () => {
       </Grid>
 
       {criticalIncidents.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <WarningIcon sx={{ color: '#ef5350' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <WarningIcon sx={{ color: colors.danger }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Critical Incidents
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>
               {criticalIncidents.length} incident{criticalIncidents.length !== 1 ? 's' : ''} require immediate review
             </Typography>
           </Box>
           <Stack spacing={1}>
             {criticalIncidents.slice(0, 5).map((incident) => (
-              <Box key={incident.id} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={incident.id} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={1} mb={0.5}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {incident.title}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {incident.id} · {incident.assigned_to} · {new Date(incident.detection_time).toLocaleString()}
                     </Typography>
                   </Box>
-                  <Chip label="CRITICAL" size="small" sx={{ bgcolor: '#2a3245', color: '#ef5350', fontWeight: 'bold', fontSize: 10 }} />
+                  <Chip label="CRITICAL" size="small" sx={{ bgcolor: colors.border, color: colors.danger, fontWeight: 'bold', fontSize: 10 }} />
                 </Box>
                 <Box display="flex" flexWrap="wrap" gap={0.5} mt={1}>
                   {incident.affected_resources.slice(0, 3).map((resource) => (
-                    <Chip key={resource} label={resource} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10, height: 20 }} />
+                    <Chip key={resource} label={resource} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10, height: 20 }} />
                   ))}
                 </Box>
               </Box>
@@ -318,15 +319,15 @@ const SecurityIncidentCenterInner: React.FC = () => {
         </Paper>
       )}
 
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Recent Incidents ({incidents.length})
           </Typography>
         </Box>
         {incidents.length === 0 ? (
           <Box p={4} textAlign="center">
-            <Typography variant="body1" sx={{ color: '#8892a4' }}>
+            <Typography variant="body1" sx={{ color: colors.textSecondary }}>
               No recent incidents found.
             </Typography>
           </Box>
@@ -341,9 +342,9 @@ const SecurityIncidentCenterInner: React.FC = () => {
                       sx={{
                         fontWeight: 700,
                         fontSize: 12,
-                        color: '#8892a4',
-                        bgcolor: '#131d2e',
-                        borderColor: '#2a3245',
+                        color: colors.textSecondary,
+                        bgcolor: colors.surfaceAlt,
+                        borderColor: colors.border,
                         whiteSpace: 'nowrap',
                       }}
                     >
@@ -357,50 +358,50 @@ const SecurityIncidentCenterInner: React.FC = () => {
                   const severity = incident.severity?.toLowerCase() ?? 'low';
                   const status = incident.status?.toLowerCase() ?? 'active';
                   return (
-                    <TableRow key={incident.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                    <TableRow key={incident.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Chip
                           label={severity.toUpperCase()}
                           size="small"
-                          sx={{ bgcolor: '#2a3245', color: SEV_COLOR[severity] ?? '#e8eaf0', fontWeight: 'bold', fontSize: 10 }}
+                          sx={{ bgcolor: colors.border, color: SEV_COLOR[severity] ?? colors.textPrimary, fontWeight: 'bold', fontSize: 10 }}
                         />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#e8eaf0', fontWeight: 600, borderColor: '#2a3245', whiteSpace: 'nowrap' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textPrimary, fontWeight: 600, borderColor: colors.border, whiteSpace: 'nowrap' }}>
                         {incident.id}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245', minWidth: 220 }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textPrimary, borderColor: colors.border, minWidth: 220 }}>
                         {incident.title}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Chip
                           label={status.toUpperCase()}
                           size="small"
-                          sx={{ bgcolor: '#2a3245', color: STATUS_COLOR[status] ?? '#90caf9', fontWeight: 'bold', fontSize: 10 }}
+                          sx={{ bgcolor: colors.border, color: STATUS_COLOR[status] ?? colors.info, fontWeight: 'bold', fontSize: 10 }}
                         />
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, color: '#8892a4', borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 12, color: colors.textSecondary, borderColor: colors.border }}>
                         {incident.assigned_to}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', whiteSpace: 'nowrap' }}>
+                      <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, whiteSpace: 'nowrap' }}>
                         {incident.detection_time ? new Date(incident.detection_time).toLocaleString() : '—'}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Box display="flex" flexWrap="wrap" gap={0.5}>
                           {incident.affected_resources.slice(0, 2).map((resource) => (
-                            <Chip key={resource} label={resource} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10, height: 20 }} />
+                            <Chip key={resource} label={resource} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10, height: 20 }} />
                           ))}
                           {incident.affected_resources.length > 2 && (
-                            <Chip label={`+${incident.affected_resources.length - 2}`} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10, height: 20 }} />
+                            <Chip label={`+${incident.affected_resources.length - 2}`} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10, height: 20 }} />
                           )}
                         </Box>
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Box display="flex" flexWrap="wrap" gap={0.5}>
                           {incident.mitre_tactics.slice(0, 2).map((tactic) => (
-                            <Chip key={tactic} label={tactic} size="small" sx={{ bgcolor: '#2a3245', color: '#ffa726', fontSize: 10, height: 20 }} />
+                            <Chip key={tactic} label={tactic} size="small" sx={{ bgcolor: colors.border, color: colors.warning, fontSize: 10, height: 20 }} />
                           ))}
                           {incident.mitre_tactics.length > 2 && (
-                            <Chip label={`+${incident.mitre_tactics.length - 2}`} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10, height: 20 }} />
+                            <Chip label={`+${incident.mitre_tactics.length - 2}`} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10, height: 20 }} />
                           )}
                         </Box>
                       </TableCell>

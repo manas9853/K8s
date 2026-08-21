@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, TextField,
@@ -11,19 +13,20 @@ import BlockIcon from '@mui/icons-material/Block';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens (red-accent danger theme) ──────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
-const DANGER = '#f85149';
-const DANGER_DARK = '#2d0b0b';
-const DANGER_BORDER = '#f8514966';
+const DANGER = colors.danger;
+const DANGER_DARK = colors.dangerBg;
+const DANGER_BORDER = `${colors.danger}66`;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Snapshot {
@@ -96,6 +99,7 @@ const SnapshotRow: React.FC<{ snap: Snapshot; selected: boolean; onSelect: () =>
 // ─── Main component ───────────────────────────────────────────────────────────
 const ClusterRollback: React.FC = () => {
   const { clusterParam, activeClusterId, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ClusterPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -164,6 +168,8 @@ const ClusterRollback: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
       {/* Danger header */}
@@ -174,7 +180,7 @@ const ClusterRollback: React.FC = () => {
               <WarningAmberIcon sx={{ color: DANGER, fontSize: 22 }} />
               <Typography variant="h5" sx={{ color: DANGER, fontWeight: 700 }}>Cluster Rollback</Typography>
             </Box>
-            <Typography sx={{ color: '#e6edf3cc', fontSize: '0.85rem' }}>
+            <Typography sx={{ color: `${colors.textPrimary}cc`, fontSize: '0.85rem' }}>
               {activeClusterName} — restart ALL deployments across the entire cluster
             </Typography>
           </Box>
@@ -183,7 +189,7 @@ const ClusterRollback: React.FC = () => {
             variant="contained" startIcon={<BlockIcon />}
             onClick={handleAbort}
             disabled={confirmStep === 0 && !executing}
-            sx={{ bgcolor: DANGER, '&:hover': { bgcolor: '#c13636' }, textTransform: 'none', fontWeight: 700,
+            sx={{ bgcolor: DANGER, '&:hover': { bgcolor: DANGER, opacity: 0.85 }, textTransform: 'none', fontWeight: 700,
                   fontFamily: 'monospace', letterSpacing: 1, flexShrink: 0,
                   '&:disabled': { bgcolor: DK.surface, color: DK.muted } }}
           >
@@ -210,10 +216,10 @@ const ClusterRollback: React.FC = () => {
           </Box>
 
           {rollbackDone ? (
-            <Box sx={{ bgcolor: '#0b2d0b', border: '1px solid #3fb95066', borderRadius: 2, p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
-              <CheckCircleOutlineIcon sx={{ color: '#3fb950', fontSize: 32 }} />
+            <Box sx={{ bgcolor: colors.successBg, border: `1px solid ${colors.success}66`, borderRadius: 2, p: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <CheckCircleOutlineIcon sx={{ color: colors.success, fontSize: 32 }} />
               <Box>
-                <Typography sx={{ color: '#3fb950', fontWeight: 700, fontSize: '1rem' }}>Cluster rollback complete</Typography>
+                <Typography sx={{ color: colors.success, fontWeight: 700, fontSize: '1rem' }}>Cluster rollback complete</Typography>
                 <Typography sx={{ color: DK.muted, fontSize: '0.82rem', mt: 0.25 }}>
                   All deployments in {clusterName} have been rolled back and restarted.
                 </Typography>
@@ -232,7 +238,7 @@ const ClusterRollback: React.FC = () => {
                     It is irreversible once started. Use only in emergencies.
                   </Typography>
                   <Button variant="contained" startIcon={<ReplayIcon />} onClick={() => setConfirmStep(1)}
-                    sx={{ bgcolor: DANGER, '&:hover': { bgcolor: '#c13636' }, textTransform: 'none', fontWeight: 600 }}>
+                    sx={{ bgcolor: DANGER, '&:hover': { bgcolor: DANGER, opacity: 0.85 }, textTransform: 'none', fontWeight: 600 }}>
                     Begin Cluster Rollback
                   </Button>
                 </Box>
@@ -251,7 +257,7 @@ const ClusterRollback: React.FC = () => {
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button variant="contained" onClick={() => setConfirmStep(2)}
-                      sx={{ bgcolor: DANGER, '&:hover': { bgcolor: '#c13636' }, textTransform: 'none', fontWeight: 600 }}>
+                      sx={{ bgcolor: DANGER, '&:hover': { bgcolor: DANGER, opacity: 0.85 }, textTransform: 'none', fontWeight: 600 }}>
                       I Understand the Risk
                     </Button>
                     <Button variant="outlined" onClick={() => setConfirmStep(0)}
@@ -274,12 +280,12 @@ const ClusterRollback: React.FC = () => {
                       placeholder={clusterName} size="small" autoFocus
                       sx={{ maxWidth: 320,
                             '& .MuiInputBase-root': { bgcolor: DK.surface, color: DK.text, fontFamily: 'monospace' },
-                            '& .MuiOutlinedInput-notchedOutline': { borderColor: nameMatch ? '#3fb950' : DANGER } }}
+                            '& .MuiOutlinedInput-notchedOutline': { borderColor: nameMatch ? colors.success : DANGER } }}
                     />
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Button variant="contained" disabled={!nameMatch} onClick={() => setConfirmStep(3)}
-                      sx={{ bgcolor: DANGER, '&:hover': { bgcolor: '#c13636' }, textTransform: 'none', fontWeight: 600,
+                      sx={{ bgcolor: DANGER, '&:hover': { bgcolor: DANGER, opacity: 0.85 }, textTransform: 'none', fontWeight: 600,
                             '&:disabled': { opacity: 0.4 } }}>
                       Continue to Snapshot Selection
                     </Button>
@@ -312,7 +318,7 @@ const ClusterRollback: React.FC = () => {
                     <Button variant="contained"
                       disabled={data.snapshots.length > 0 && selectedSnap === null}
                       onClick={handleExecute}
-                      sx={{ bgcolor: DANGER, '&:hover': { bgcolor: '#c13636' }, textTransform: 'none', fontWeight: 700 }}>
+                      sx={{ bgcolor: DANGER, '&:hover': { bgcolor: DANGER, opacity: 0.85 }, textTransform: 'none', fontWeight: 700 }}>
                       Execute Cluster Rollback
                     </Button>
                     <Button variant="outlined" onClick={() => setConfirmStep(0)}

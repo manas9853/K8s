@@ -1,21 +1,22 @@
 import React, { useEffect } from 'react';
 import { SignUp as ClerkSignUp, useAuth } from '@clerk/clerk-react';
 import { useNavigate } from 'react-router-dom';
+import { colors } from '../theme/colors';
 
 /* ── Design tokens — same dark K8s terminal theme as Login ── */
 const C = {
-  bg:              '#050d1a',
-  bgCard:          '#0b1628',
-  bgSurface:       '#0f1e35',
+  bg:              colors.background,
+  bgCard:          colors.surfaceAlt,
+  bgSurface:       colors.surfaceAlt,
   borderDim:       '#1a2e4a',
-  border:          '#1e3a5f',
+  border:          colors.info,
   cyan:            '#00d4ff',
   cyanGlow:        'rgba(0,212,255,0.15)',
   cyanGlowStrong:  'rgba(0,212,255,0.25)',
-  primary:         '#2563eb',
-  textPrimary:     '#e2f0ff',
-  textSecondary:   '#7ca5cc',
-  textMuted:       '#3d6080',
+  primary:         colors.info,
+  textPrimary:     colors.infoBg,
+  textSecondary:   colors.info,
+  textMuted:       colors.info,
 };
 
 const HexGrid: React.FC = () => (
@@ -223,7 +224,7 @@ const SignUpPage: React.FC = () => {
             forceRedirectUrl="/onboarding"
             appearance={{
               variables: {
-                colorPrimary:         '#2563eb',
+                colorPrimary:         colors.info,
                 colorBackground:      'transparent',
                 colorText:            C.textPrimary,
                 colorTextSecondary:   C.textSecondary,
@@ -268,7 +269,7 @@ const SignUpPage: React.FC = () => {
                   fontSize: '14px', width: '100%', boxSizing: 'border-box' as const,
                 },
                 formButtonPrimary: {
-                  background: 'linear-gradient(135deg, #1e40af, #1d4ed8)',
+                  background: `linear-gradient(135deg, #1e40af, ${colors.info})`,
                   border: `1px solid rgba(0,212,255,0.3)`, borderRadius: '8px',
                   fontWeight: 700, fontSize: '14px', height: '44px', width: '100%',
                   letterSpacing: '0.04em', boxShadow: '0 0 20px rgba(37,99,235,0.3)', marginTop: '4px',

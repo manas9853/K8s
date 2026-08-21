@@ -1,12 +1,12 @@
 /**
  * Compliance Reports
  * Pulls real data from /api/v1/compliance/dashboard for each framework.
- * Shows NoClusterBanner when no cluster is attached.
+ * Shows NoClusterState when no cluster is attached.
  */
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
-import NoClusterBanner from '../components/NoClusterBanner';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -138,7 +138,7 @@ const ComplianceReports: React.FC = () => {
   };
 
   if (clustersLoading) return <LinearProgress />;
-  if (clusters.length === 0) return <NoClusterBanner dataDescription="compliance framework audit data" />;
+  if (clusters.length === 0) return <NoClusterState />;
 
   const avgScore = results.length > 0
     ? Math.round(results.reduce((s, r) => s + r.score, 0) / results.length)

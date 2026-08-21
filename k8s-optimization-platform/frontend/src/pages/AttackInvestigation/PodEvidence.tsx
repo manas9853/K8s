@@ -21,6 +21,7 @@ import {
 import { FindInPage as EvidenceIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface SecurityContext {
   privileged?: boolean;
@@ -161,7 +162,7 @@ const PodEvidenceInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -169,7 +170,7 @@ const PodEvidenceInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -177,7 +178,7 @@ const PodEvidenceInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">No pod evidence available</Alert>
       </Box>
     );
@@ -188,21 +189,21 @@ const PodEvidenceInner: React.FC = () => {
   const res = data.pod_spec?.resources;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <EvidenceIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <EvidenceIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Pod Evidence
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
-              Forensic evidence for <strong style={{ color: '#e8eaf0' }}>{data.pod_name}</strong> in cluster {data.cluster_name} · Collected {formatTimestamp(data.evidence_collected)}
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
+              Forensic evidence for <strong style={{ color: colors.textPrimary }}>{data.pod_name}</strong> in cluster {data.cluster_name} · Collected {formatTimestamp(data.evidence_collected)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
@@ -217,10 +218,10 @@ const PodEvidenceInner: React.FC = () => {
           { label: 'Filesystem Changes', value: String(data.file_system_changes?.length ?? 0), mono: false },
         ].map((item) => (
           <Grid item xs={12} sm={6} md key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{item.label}</Typography>
-                <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', fontFamily: item.mono ? 'monospace' : 'inherit', wordBreak: 'break-all', fontSize: item.mono ? 13 : 18 }}>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{item.label}</Typography>
+                <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, fontFamily: item.mono ? 'monospace' : 'inherit', wordBreak: 'break-all', fontSize: item.mono ? 13 : 18 }}>
                   {item.value}
                 </Typography>
               </CardContent>
@@ -230,13 +231,13 @@ const PodEvidenceInner: React.FC = () => {
       </Grid>
 
       {/* Why this pod is suspicious */}
-      <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#ffa726', mb: 1.5 }}>
+      <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.warning, mb: 1.5 }}>
           Why this pod is suspicious
         </Typography>
         <Stack spacing={1}>
           {reasons.map((reason, i) => (
-            <Typography key={i} variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.75 }}>
+            <Typography key={i} variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.75 }}>
               • {reason}
             </Typography>
           ))}
@@ -244,30 +245,30 @@ const PodEvidenceInner: React.FC = () => {
       </Paper>
 
       {/* Pod Spec */}
-      <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Pod Specification
         </Typography>
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <Box sx={{ p: 1.5, bgcolor: '#131d2e', border: '1px solid #2a3245', borderRadius: 1, mb: 2 }}>
-              <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 0.5 }}>Image</Typography>
-              <Typography variant="body2" sx={{ color: '#60a5fa', fontFamily: 'monospace', wordBreak: 'break-all' }}>
+            <Box sx={{ p: 1.5, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}`, borderRadius: 1, mb: 2 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 0.5 }}>Image</Typography>
+              <Typography variant="body2" sx={{ color: colors.info, fontFamily: 'monospace', wordBreak: 'break-all' }}>
                 {data.pod_spec?.image ?? 'unknown'}
               </Typography>
             </Box>
           </Grid>
           <Grid item xs={12} md={6}>
-            <Box sx={{ p: 1.5, bgcolor: '#131d2e', border: '1px solid #2a3245', borderRadius: 1 }}>
-              <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 1 }}>Security Context</Typography>
+            <Box sx={{ p: 1.5, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}`, borderRadius: 1 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 1 }}>Security Context</Typography>
               <Stack spacing={0.75}>
                 {SEC_CTX_ITEMS(sc).map((item) => (
                   <Box key={item.label} display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>{item.label}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>{item.label}</Typography>
                     <Chip
                       label={item.value}
                       size="small"
-                      sx={{ bgcolor: '#2a3245', color: item.bad ? '#ef5350' : '#a5d6a7', fontWeight: 'bold', fontSize: 10 }}
+                      sx={{ bgcolor: colors.border, color: item.bad ? colors.danger : colors.success, fontWeight: 'bold', fontSize: 10 }}
                     />
                   </Box>
                 ))}
@@ -275,8 +276,8 @@ const PodEvidenceInner: React.FC = () => {
             </Box>
           </Grid>
           <Grid item xs={12} md={6}>
-            <Box sx={{ p: 1.5, bgcolor: '#131d2e', border: '1px solid #2a3245', borderRadius: 1 }}>
-              <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 1 }}>Resources</Typography>
+            <Box sx={{ p: 1.5, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}`, borderRadius: 1 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 1 }}>Resources</Typography>
               <Stack spacing={0.75}>
                 {[
                   { label: 'CPU Request', value: res?.cpu_request !== undefined ? String(res.cpu_request) : 'none' },
@@ -285,11 +286,11 @@ const PodEvidenceInner: React.FC = () => {
                   { label: 'Memory Limit', value: res?.memory_limit_mb ? `${res.memory_limit_mb} MB` : 'none' },
                 ].map((item) => (
                   <Box key={item.label} display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>{item.label}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>{item.label}</Typography>
                     <Chip
                       label={item.value}
                       size="small"
-                      sx={{ bgcolor: '#2a3245', color: item.value === 'none' ? '#ef5350' : '#a5d6a7', fontWeight: 'bold', fontSize: 10 }}
+                      sx={{ bgcolor: colors.border, color: item.value === 'none' ? colors.danger : colors.success, fontWeight: 'bold', fontSize: 10 }}
                     />
                   </Box>
                 ))}
@@ -300,28 +301,28 @@ const PodEvidenceInner: React.FC = () => {
       </Paper>
 
       {/* Running Processes */}
-      <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Running Processes
         </Typography>
         {(data.running_processes ?? []).length === 0 ? (
-          <Typography variant="body2" sx={{ color: '#8892a4' }}>No process telemetry available from the cluster.</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>No process telemetry available from the cluster.</Typography>
         ) : (
           <Table size="small">
             <TableHead>
               <TableRow>
                 {['PID', 'Name', 'CPU %', 'Memory (MB)'].map((h) => (
-                  <TableCell key={h} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>{h}</TableCell>
+                  <TableCell key={h} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {data.running_processes.map((p, i) => (
-                <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontFamily: 'monospace' }}>{p.pid}</TableCell>
-                  <TableCell sx={{ color: p.name !== 'sh' ? '#ef5350' : '#a5d6a7', borderColor: '#2a3245', fontWeight: p.name !== 'sh' ? 700 : 400 }}>{p.name}</TableCell>
-                  <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245' }}>{p.cpu}</TableCell>
-                  <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245' }}>{p.memory}</TableCell>
+                <TableRow key={i} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontFamily: 'monospace' }}>{p.pid}</TableCell>
+                  <TableCell sx={{ color: p.name !== 'sh' ? colors.danger : colors.success, borderColor: colors.border, fontWeight: p.name !== 'sh' ? 700 : 400 }}>{p.name}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border }}>{p.cpu}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border }}>{p.memory}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -330,31 +331,31 @@ const PodEvidenceInner: React.FC = () => {
       </Paper>
 
       {/* Network Connections */}
-      <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Network Connections
         </Typography>
         {(data.network_connections ?? []).length === 0 ? (
-          <Typography variant="body2" sx={{ color: '#8892a4' }}>No active network connections detected for this pod. Live socket telemetry requires the k8s-agent running on the same node.</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>No active network connections detected for this pod. Live socket telemetry requires the k8s-agent running on the same node.</Typography>
         ) : (
           <Table size="small">
             <TableHead>
               <TableRow>
                 {['Local', 'Remote', 'State', 'Sent (KB)', 'Received (KB)'].map((h) => (
-                  <TableCell key={h} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>{h}</TableCell>
+                  <TableCell key={h} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {data.network_connections.map((c, i) => (
-                <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontFamily: 'monospace', fontSize: 12 }}>{c.local}</TableCell>
-                  <TableCell sx={{ color: '#ef5350', borderColor: '#2a3245', fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>{c.remote}</TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={c.state} size="small" sx={{ bgcolor: '#2a3245', color: c.state === 'ESTABLISHED' ? '#ef5350' : '#8892a4', fontWeight: 'bold', fontSize: 10 }} />
+                <TableRow key={i} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontFamily: 'monospace', fontSize: 12 }}>{c.local}</TableCell>
+                  <TableCell sx={{ color: colors.danger, borderColor: colors.border, fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>{c.remote}</TableCell>
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={c.state} size="small" sx={{ bgcolor: colors.border, color: c.state === 'ESTABLISHED' ? colors.danger : colors.textSecondary, fontWeight: 'bold', fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245' }}>{((c.bytes_sent ?? 0) / 1024).toFixed(1)}</TableCell>
-                  <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245' }}>{((c.bytes_received ?? 0) / 1024).toFixed(1)}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border }}>{((c.bytes_sent ?? 0) / 1024).toFixed(1)}</TableCell>
+                  <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border }}>{((c.bytes_received ?? 0) / 1024).toFixed(1)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -363,29 +364,29 @@ const PodEvidenceInner: React.FC = () => {
       </Paper>
 
       {/* Filesystem Changes */}
-      <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Filesystem Changes
         </Typography>
         {(data.file_system_changes ?? []).length === 0 ? (
-          <Typography variant="body2" sx={{ color: '#8892a4' }}>No filesystem modification events detected. inotify-based filesystem auditing requires the k8s-agent to be active on the pod's node.</Typography>
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>No filesystem modification events detected. inotify-based filesystem auditing requires the k8s-agent to be active on the pod's node.</Typography>
         ) : (
           <Table size="small">
             <TableHead>
               <TableRow>
                 {['Path', 'Action', 'Timestamp'].map((h) => (
-                  <TableCell key={h} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>{h}</TableCell>
+                  <TableCell key={h} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>{h}</TableCell>
                 ))}
               </TableRow>
             </TableHead>
             <TableBody>
               {data.file_system_changes.map((f, i) => (
-                <TableRow key={i} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                  <TableCell sx={{ color: '#60a5fa', borderColor: '#2a3245', fontFamily: 'monospace', fontSize: 12 }}>{f.path}</TableCell>
-                  <TableCell sx={{ borderColor: '#2a3245' }}>
-                    <Chip label={f.action} size="small" sx={{ bgcolor: '#2a3245', color: f.action === 'created' ? '#ffa726' : '#ef5350', fontWeight: 'bold', fontSize: 10 }} />
+                <TableRow key={i} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                  <TableCell sx={{ color: colors.info, borderColor: colors.border, fontFamily: 'monospace', fontSize: 12 }}>{f.path}</TableCell>
+                  <TableCell sx={{ borderColor: colors.border }}>
+                    <Chip label={f.action} size="small" sx={{ bgcolor: colors.border, color: f.action === 'created' ? colors.warning : colors.danger, fontWeight: 'bold', fontSize: 10 }} />
                   </TableCell>
-                  <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12 }}>{formatTimestamp(f.timestamp)}</TableCell>
+                  <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12 }}>{formatTimestamp(f.timestamp)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

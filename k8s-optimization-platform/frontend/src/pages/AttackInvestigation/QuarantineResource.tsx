@@ -16,6 +16,7 @@ import {
 import { Block as QuarantineIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface QuarantineStatus {
   quarantined_resources: unknown[];
@@ -73,7 +74,7 @@ const QuarantineResourceInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -81,7 +82,7 @@ const QuarantineResourceInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -89,27 +90,27 @@ const QuarantineResourceInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load quarantine data</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <QuarantineIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <QuarantineIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Quarantine
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real quarantine status for {data.cluster_name || 'cluster'}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
@@ -118,10 +119,10 @@ const QuarantineResourceInner: React.FC = () => {
 
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={4}>
-          <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>Currently Quarantined</Typography>
-              <Typography variant="h4" fontWeight="bold" sx={{ color: data.total_quarantined > 0 ? '#ef5350' : '#a5d6a7' }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>Currently Quarantined</Typography>
+              <Typography variant="h4" fontWeight="bold" sx={{ color: data.total_quarantined > 0 ? colors.danger : colors.success }}>
                 {data.total_quarantined}
               </Typography>
             </CardContent>
@@ -130,16 +131,16 @@ const QuarantineResourceInner: React.FC = () => {
       </Grid>
 
       {!hasQuarantinedResources ? (
-        <Paper sx={{ p: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1 }}>
+        <Paper sx={{ p: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1 }}>
             Nothing to display for {data.cluster_name || 'this cluster'}
           </Typography>
-          <Typography variant="body2" sx={{ color: '#8892a4', lineHeight: 1.75, mb: data.available_targets.length > 0 ? 2 : 0 }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary, lineHeight: 1.75, mb: data.available_targets.length > 0 ? 2 : 0 }}>
             {data.note || `No quarantine records were returned for ${data.cluster_name || 'this cluster'}.`}
           </Typography>
           {data.available_targets.length > 0 && (
             <Box>
-              <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mb: 1 }}>
+              <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mb: 1 }}>
                 Available targets from the backend threat context
               </Typography>
               <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
@@ -148,7 +149,7 @@ const QuarantineResourceInner: React.FC = () => {
                     key={target}
                     label={target}
                     onClick={() => handleQuarantine(target)}
-                    sx={{ bgcolor: '#131d2e', color: '#90caf9', border: '1px solid #2a3245' }}
+                    sx={{ bgcolor: colors.surfaceAlt, color: colors.info, border: `1px solid ${colors.border}` }}
                   />
                 ))}
               </Stack>

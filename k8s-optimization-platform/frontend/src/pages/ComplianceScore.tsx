@@ -8,6 +8,7 @@ import {
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface FrameworkScore {
   framework: string;
@@ -29,7 +30,7 @@ interface ComplianceScoreData {
 }
 
 const gradeColor = (score: number) =>
-  score >= 90 ? '#2e7d32' : score >= 80 ? '#1565c0' : score >= 70 ? '#e65100' : '#c62828';
+  score >= 90 ? colors.success : score >= 80 ? colors.info : score >= 70 ? colors.warning : colors.danger;
 
 const gradeChipColor = (grade: string): 'success' | 'primary' | 'warning' | 'error' =>
   grade === 'A' ? 'success' : grade === 'B' ? 'primary' : grade === 'C' ? 'warning' : 'error';
@@ -112,8 +113,8 @@ const ComplianceScoreInner: React.FC = () => {
                     </TableCell>
                     <TableCell><Chip label={fw.grade} size="small" color={gradeChipColor(fw.grade)} /></TableCell>
                     <TableCell align="right">{fw.total_controls}</TableCell>
-                    <TableCell align="right" sx={{ color: '#2e7d32', fontWeight: 600 }}>{fw.passed_controls}</TableCell>
-                    <TableCell align="right" sx={{ color: fw.failed_controls > 0 ? '#c62828' : 'inherit', fontWeight: 600 }}>{fw.failed_controls}</TableCell>
+                    <TableCell align="right" sx={{ color: colors.success, fontWeight: 600 }}>{fw.passed_controls}</TableCell>
+                    <TableCell align="right" sx={{ color: fw.failed_controls > 0 ? colors.danger : 'inherit', fontWeight: 600 }}>{fw.failed_controls}</TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(fw.last_assessment).toLocaleDateString()}</TableCell>
                   </TableRow>
                 ))}

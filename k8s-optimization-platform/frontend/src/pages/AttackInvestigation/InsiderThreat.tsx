@@ -21,6 +21,7 @@ import {
 import { Visibility as InsiderIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface InsiderThreatRecord {
   id: string;
@@ -51,16 +52,16 @@ function formatTimestamp(value?: string) {
 }
 
 function riskColor(score: number) {
-  if (score >= 80) return '#ef5350';
-  if (score >= 60) return '#ffa726';
-  if (score >= 40) return '#90caf9';
-  return '#a5d6a7';
+  if (score >= 80) return colors.danger;
+  if (score >= 60) return colors.warning;
+  if (score >= 40) return colors.info;
+  return colors.success;
 }
 
 function statusColor(status: string) {
-  if (status === 'investigating') return '#ef5350';
-  if (status === 'monitoring') return '#ffa726';
-  return '#8892a4';
+  if (status === 'investigating') return colors.danger;
+  if (status === 'monitoring') return colors.warning;
+  return colors.textSecondary;
 }
 
 function buildReason(threat: InsiderThreatRecord): string[] {
@@ -139,7 +140,7 @@ const InsiderThreatInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -147,7 +148,7 @@ const InsiderThreatInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -155,28 +156,28 @@ const InsiderThreatInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load insider threat data</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <InsiderIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <InsiderIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               Insider Threat Detection
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real service-account threat signals for {data.cluster_name || 'cluster'} · Last updated {formatTimestamp(data.last_updated)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
@@ -184,15 +185,15 @@ const InsiderThreatInner: React.FC = () => {
       {/* Summary cards */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'High Risk Identities', value: data.high_risk_users, color: data.high_risk_users > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Total Alerts', value: data.total_alerts, color: '#90caf9' },
-          { label: 'Under Investigation', value: investigating, color: investigating > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Default SA Namespaces', value: defaultSAThreats, color: defaultSAThreats > 0 ? '#ffa726' : '#a5d6a7' },
+          { label: 'High Risk Identities', value: data.high_risk_users, color: data.high_risk_users > 0 ? colors.danger : colors.success },
+          { label: 'Total Alerts', value: data.total_alerts, color: colors.info },
+          { label: 'Under Investigation', value: investigating, color: investigating > 0 ? colors.danger : colors.success },
+          { label: 'Default SA Namespaces', value: defaultSAThreats, color: defaultSAThreats > 0 ? colors.warning : colors.success },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{item.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{item.label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>{item.value}</Typography>
               </CardContent>
             </Card>
@@ -202,31 +203,31 @@ const InsiderThreatInner: React.FC = () => {
 
       {/* Why these threats matter */}
       {threats.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Why these identities are insider-threat risks
           </Typography>
           <Stack spacing={1.5}>
             {threats.map((threat) => (
-              <Box key={threat.id} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={threat.id} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" justifyContent="space-between" gap={1} flexWrap="wrap" mb={1}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0', fontFamily: 'monospace' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary, fontFamily: 'monospace' }}>
                       {threat.user}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       {threat.user_type} · First detected {formatTimestamp(threat.first_detected)}
                     </Typography>
                   </Box>
                   <Box display="flex" gap={1} flexWrap="wrap">
-                    <Chip label={threat.id} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
-                    <Chip label={threat.status} size="small" sx={{ bgcolor: '#2a3245', color: statusColor(threat.status), fontWeight: 'bold', fontSize: 10 }} />
-                    <Chip label={`Risk ${threat.risk_score}`} size="small" sx={{ bgcolor: '#2a3245', color: riskColor(threat.risk_score), fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={threat.id} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
+                    <Chip label={threat.status} size="small" sx={{ bgcolor: colors.border, color: statusColor(threat.status), fontWeight: 'bold', fontSize: 10 }} />
+                    <Chip label={`Risk ${threat.risk_score}`} size="small" sx={{ bgcolor: colors.border, color: riskColor(threat.risk_score), fontWeight: 'bold', fontSize: 10 }} />
                   </Box>
                 </Box>
                 <Stack spacing={0.75}>
                   {buildReason(threat).map((reason) => (
-                    <Typography key={reason} variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.7 }}>
+                    <Typography key={reason} variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.7 }}>
                       • {reason}
                     </Typography>
                   ))}
@@ -238,15 +239,15 @@ const InsiderThreatInner: React.FC = () => {
       )}
 
       {/* Full table */}
-      <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-        <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+      <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+        <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
           Insider Threat Actors
         </Typography>
         <Table size="small">
           <TableHead>
             <TableRow>
               {['ID', 'Identity', 'Type', 'Risk Score', 'Status', 'Pods / Actions', 'Data Scope', 'Last Activity', 'Anomalies', 'Suspicious Activities'].map((header) => (
-                <TableCell key={header} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>
+                <TableCell key={header} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>
                   {header}
                 </TableCell>
               ))}
@@ -254,41 +255,41 @@ const InsiderThreatInner: React.FC = () => {
           </TableHead>
           <TableBody>
             {threats.map((threat) => (
-              <TableRow key={threat.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' }, bgcolor: '#131d2e' }}>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={threat.id} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
+              <TableRow key={threat.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, bgcolor: colors.surfaceAlt }}>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={threat.id} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245', fontFamily: 'monospace', fontWeight: 700, minWidth: 180, fontSize: 12 }}>
+                <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border, fontFamily: 'monospace', fontWeight: 700, minWidth: 180, fontSize: 12 }}>
                   {threat.user}
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={threat.user_type} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10 }} />
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={threat.user_type} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={String(threat.risk_score)} size="small" sx={{ bgcolor: '#2a3245', color: riskColor(threat.risk_score), fontWeight: 'bold', fontSize: 10 }} />
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={String(threat.risk_score)} size="small" sx={{ bgcolor: colors.border, color: riskColor(threat.risk_score), fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={threat.status} size="small" sx={{ bgcolor: '#2a3245', color: statusColor(threat.status), fontWeight: 'bold', fontSize: 10 }} />
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={threat.status} size="small" sx={{ bgcolor: colors.border, color: statusColor(threat.status), fontWeight: 'bold', fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ color: '#e8eaf0', borderColor: '#2a3245', fontWeight: 700 }}>{threat.actions_taken}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
-                  <Chip label={threat.data_accessed} size="small" sx={{ bgcolor: '#2a3245', color: threat.data_accessed === 'host-level' ? '#ef5350' : '#ffa726', fontSize: 10 }} />
+                <TableCell sx={{ color: colors.textPrimary, borderColor: colors.border, fontWeight: 700 }}>{threat.actions_taken}</TableCell>
+                <TableCell sx={{ borderColor: colors.border }}>
+                  <Chip label={threat.data_accessed} size="small" sx={{ bgcolor: colors.border, color: threat.data_accessed === 'host-level' ? colors.danger : colors.warning, fontSize: 10 }} />
                 </TableCell>
-                <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12, minWidth: 145 }}>{formatTimestamp(threat.last_activity)}</TableCell>
-                <TableCell sx={{ borderColor: '#2a3245' }}>
+                <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, minWidth: 145 }}>{formatTimestamp(threat.last_activity)}</TableCell>
+                <TableCell sx={{ borderColor: colors.border }}>
                   <Box display="flex" flexWrap="wrap" gap={0.5}>
                     {threat.anomalies.map((anomaly) => (
-                      <Chip key={anomaly} label={anomaly} size="small" sx={{ bgcolor: '#2a3245', color: '#ffa726', fontSize: 10, height: 20 }} />
+                      <Chip key={anomaly} label={anomaly} size="small" sx={{ bgcolor: colors.border, color: colors.warning, fontSize: 10, height: 20 }} />
                     ))}
                   </Box>
                 </TableCell>
-                <TableCell sx={{ borderColor: '#2a3245', minWidth: 260 }}>
+                <TableCell sx={{ borderColor: colors.border, minWidth: 260 }}>
                   <Box display="flex" flexWrap="wrap" gap={0.5}>
                     {threat.suspicious_activities.slice(0, 2).map((activity) => (
-                      <Chip key={activity} label={activity} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontSize: 10, height: 20 }} />
+                      <Chip key={activity} label={activity} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontSize: 10, height: 20 }} />
                     ))}
                     {threat.suspicious_activities.length > 2 && (
-                      <Chip label={`+${threat.suspicious_activities.length - 2}`} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10, height: 20 }} />
+                      <Chip label={`+${threat.suspicious_activities.length - 2}`} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10, height: 20 }} />
                     )}
                   </Box>
                 </TableCell>

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent,
   CircularProgress, Alert, IconButton, Table, TableBody, TableCell,
@@ -13,19 +15,20 @@ import {
   Lock as LockIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme tokens ────────────────────────────────────────────────────────
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  hover:   '#252e42',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8b95a9',
-  body:    '#c8cdd8',
-  green:   '#4ade80',
-  red:     '#f87171',
-  yellow:  '#f59e0b',
+  bg:      colors.background,
+  card:    colors.surface,
+  hover:   colors.surfaceHover,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  body:    colors.textMuted,
+  green:   colors.success,
+  red:     colors.danger,
+  yellow:  colors.warning,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -88,6 +91,7 @@ const StatCard: React.FC<{ label: string; value: number | string; sub?: string; 
 // ─── Main component ───────────────────────────────────────────────────────────
 const StaleSecrets: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [items,     setItems]     = useState<StaleSecret[]>([]);
   const [summary,   setSummary]   = useState<Summary | null>(null);
   const [loading,   setLoading]   = useState(true);
@@ -144,6 +148,8 @@ const StaleSecrets: React.FC = () => {
   const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <CircularProgress sx={{ color: T.green }} />
@@ -152,7 +158,7 @@ const StaleSecrets: React.FC = () => {
 
   if (error) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
-      <Alert severity="error" sx={{ bgcolor: '#1a0a0a', color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
+      <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
 
@@ -251,7 +257,7 @@ const StaleSecrets: React.FC = () => {
           <TableContainer component={Paper} sx={{ bgcolor: T.card, border: `1px solid ${T.border}`, borderRadius: 2 }}>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ bgcolor: '#161f30' }}>
+                <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
                   <TableCell sx={headSx}>Name</TableCell>
                   <TableCell sx={headSx}>Namespace</TableCell>
                   <TableCell sx={headSx}>Type</TableCell>

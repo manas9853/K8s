@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Card,
@@ -29,9 +31,11 @@ import {
   Clear as ClearIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 const Logs: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
 
   // ── Selectors ─────────────────────────────────────────────────────────────
   const [namespaces, setNamespaces] = useState<string[]>([]);
@@ -169,10 +173,10 @@ const Logs: React.FC = () => {
 
   const lineColor = (line: string): string => {
     const l = line.toLowerCase();
-    if (l.includes('error') || l.includes('err]') || l.includes('fatal') || l.includes('critical')) return '#ff6b6b';
-    if (l.includes('warn') || l.includes('warning')) return '#ffd93d';
-    if (l.includes('info')) return '#6bcb77';
-    return '#d4d4d4';
+    if (l.includes('error') || l.includes('err]') || l.includes('fatal') || l.includes('critical')) return colors.danger;
+    if (l.includes('warn') || l.includes('warning')) return colors.warning;
+    if (l.includes('info')) return colors.success;
+    return colors.textMuted;
   };
 
   // ── Log-level summary ─────────────────────────────────────────────────────
@@ -191,6 +195,8 @@ const Logs: React.FC = () => {
         return chunk.filter(l => /error|warn/i.test(l)).length * 2 + chunk.length;
       })
     : [];
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>
@@ -292,10 +298,10 @@ const Logs: React.FC = () => {
         <Box display="flex" gap={2} mb={2} flexWrap="wrap" alignItems="center">
           <Typography variant="caption" color="textSecondary" fontWeight={600}>Log Levels:</Typography>
           {[
-            { label: 'ERROR', count: logLevelCounts.error, color: '#ef4444' },
-            { label: 'WARN', count: logLevelCounts.warn, color: '#f59e0b' },
-            { label: 'INFO', count: logLevelCounts.info, color: '#22c55e' },
-            { label: 'DEBUG', count: logLevelCounts.debug, color: '#9ca3af' },
+            { label: 'ERROR', count: logLevelCounts.error, color: colors.danger },
+            { label: 'WARN', count: logLevelCounts.warn, color: colors.warning },
+            { label: 'INFO', count: logLevelCounts.info, color: colors.success },
+            { label: 'DEBUG', count: logLevelCounts.debug, color: colors.textSecondary },
           ].map(({ label, count, color }) => (
             <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 0.5,
               bgcolor: color + '15', border: `1px solid ${color}`, borderRadius: 1, px: 1, py: 0.25 }}>
@@ -310,7 +316,7 @@ const Logs: React.FC = () => {
                 const max = Math.max(...volumeBuckets, 1);
                 return (
                   <Box key={i} sx={{ width: 6, height: `${Math.max(20, (v / max) * 100)}%`,
-                    bgcolor: '#3b82f6', borderRadius: '1px 1px 0 0', opacity: 0.7 }} />
+                    bgcolor: colors.info, borderRadius: '1px 1px 0 0', opacity: 0.7 }} />
                 );
               })}
             </Box>
@@ -386,8 +392,8 @@ const Logs: React.FC = () => {
             ref={logBoxRef}
             sx={{
               p: 2,
-              bgcolor: '#1e1e1e',
-              color: '#d4d4d4',
+              bgcolor: colors.surface,
+              color: colors.textMuted,
               fontFamily: 'monospace',
               fontSize: '0.8rem',
               lineHeight: 1.6,

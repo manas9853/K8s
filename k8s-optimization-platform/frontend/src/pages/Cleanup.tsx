@@ -7,6 +7,8 @@ import {
 } from '@mui/material';
 import { Refresh, Delete, Schedule, Warning, CheckCircle } from '@mui/icons-material';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import { API_BASE_URL } from '../config/api';
 
@@ -43,6 +45,7 @@ interface CleanupData {
 
 const Cleanup: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters: registeredClusters } = useCluster();
   const [data, setData] = useState<CleanupData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +120,8 @@ const Cleanup: React.FC = () => {
     };
     return colors[type] || 'default';
   };
+
+  if (registeredClusters.length === 0) return <NoClusterState />;
 
   if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
   if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;

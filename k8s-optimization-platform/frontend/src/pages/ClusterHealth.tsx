@@ -1,21 +1,22 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box, Card, CardContent, Typography, Grid, CircularProgress, Alert,
   LinearProgress, Chip, List, ListItem, ListItemIcon, ListItemText,
-  Paper, Button, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent,
+  Paper, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent,
   Tooltip, Divider, IconButton, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon, Warning as WarningIcon, Error as ErrorIcon,
-  Lightbulb as LightbulbIcon, Add as AddIcon, Refresh as RefreshIcon,
+  Lightbulb as LightbulbIcon, Refresh as RefreshIcon,
   TrendingUp as TrendingUpIcon, TrendingDown as TrendingDownIcon,
   Timeline as TimelineIcon, Speed as SpeedIcon, Memory as MemoryIcon,
   Storage as StorageIcon, Widgets as PodsIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 interface ClusterHealthData {
   cluster_id: string;
@@ -55,7 +56,7 @@ const GaugeRing: React.FC<{ value: number; color: string; size?: number }> = ({ 
   const dash = (value / 100) * circ;
   return (
     <svg width={size} height={size}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e5e7eb" strokeWidth={8} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={colors.border} strokeWidth={8} />
       <circle
         cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={8}
         strokeDasharray={`${dash} ${circ - dash}`}
@@ -70,7 +71,7 @@ const GaugeRing: React.FC<{ value: number; color: string; size?: number }> = ({ 
 };
 
 // Health score color helpers
-const hColor = (s: number) => s >= 90 ? '#22c55e' : s >= 70 ? '#f59e0b' : '#ef4444';
+const hColor = (s: number) => s >= 90 ? colors.success : s >= 70 ? colors.warning : colors.danger;
 const hMuiColor = (s: number): 'success' | 'warning' | 'error' => s >= 90 ? 'success' : s >= 70 ? 'warning' : 'error';
 const hStatus = (s: number) => s >= 90 ? 'Healthy' : s >= 70 ? 'Degraded' : 'Critical';
 
@@ -78,12 +79,12 @@ const hStatus = (s: number) => s >= 90 ? 'Healthy' : s >= 70 ? 'Degraded' : 'Cri
 const StatusBadge: React.FC<{ score: number }> = ({ score }) => {
   const statuses = ['Healthy', 'Degraded', 'Critical'];
   const active = hStatus(score);
-  const colors: Record<string, string> = { Healthy: '#22c55e', Degraded: '#f59e0b', Critical: '#ef4444' };
+  const statusColors: Record<string, string> = { Healthy: colors.success, Degraded: colors.warning, Critical: colors.danger };
   return (
     <Box display="flex" gap={0.5} mt={1}>
       {statuses.map(s => (
         <Box key={s} px={1} py={0.25} borderRadius={1}
-          sx={{ fontSize: 11, fontWeight: 700, bgcolor: s === active ? colors[s] : '#f3f4f6', color: s === active ? '#fff' : '#9ca3af' }}>
+          sx={{ fontSize: 11, fontWeight: 700, bgcolor: s === active ? statusColors[s] : colors.surfaceHover, color: s === active ? '#fff' : colors.textSecondary }}>
           {s.toUpperCase()}
         </Box>
       ))}
@@ -102,7 +103,7 @@ const MetricBar: React.FC<{ label: string; value: number; optimal?: string }> = 
           {value.toFixed(1)}%
         </Typography>
       </Box>
-      <Box sx={{ bgcolor: '#f3f4f6', borderRadius: 1, height: 7, overflow: 'hidden' }}>
+      <Box sx={{ bgcolor: colors.surfaceHover, borderRadius: 1, height: 7, overflow: 'hidden' }}>
         <Box sx={{ width: `${Math.min(value, 100)}%`, height: '100%', bgcolor: color, borderRadius: 1, transition: 'width 0.5s ease' }} />
       </Box>
       {optimal && <Typography variant="caption" color="textSecondary">{optimal}</Typography>}
@@ -111,7 +112,6 @@ const MetricBar: React.FC<{ label: string; value: number; optimal?: string }> = 
 };
 
 const ClusterHealth: React.FC = () => {
-  const navigate = useNavigate();
   const { clusters, loading: clustersLoading, activeClusterId, selectCluster } = useCluster();
   const [healthData, setHealthData] = useState<ClusterHealthData[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,17 +149,7 @@ const ClusterHealth: React.FC = () => {
 
   if (clustersLoading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
   if (!clustersLoading && clusters.length === 0) {
-    return (
-      <Box p={4} display="flex" flexDirection="column" alignItems="center" gap={3}>
-        <Typography variant="h5" color="textSecondary">No clusters attached yet</Typography>
-        <Typography variant="body1" color="textSecondary" textAlign="center" maxWidth={480}>
-          Connect a cluster via Cluster Onboarding — health monitoring will populate automatically.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={() => navigate('/cluster-onboarding')}>
-          Go to Cluster Onboarding
-        </Button>
-      </Box>
-    );
+    return <NoClusterState />;
   }
 
   // Summary stats across all fetched clusters
@@ -198,13 +188,13 @@ const ClusterHealth: React.FC = () => {
         <Grid container spacing={2} mb={3}>
           {[
             { label: 'Platform Health Score', value: `${avgHealthScore.toFixed(0)}`, unit: '/100', color: hColor(avgHealthScore), sub: 'Weighted average' },
-            { label: 'Healthy', value: String(healthyClusters), unit: `/${totalClusters}`, color: '#22c55e', sub: 'clusters ≥ 90' },
-            { label: 'Degraded', value: String(degradedClusters), unit: `/${totalClusters}`, color: '#f59e0b', sub: 'clusters 70–89' },
-            { label: 'Critical', value: String(criticalClusters), unit: `/${totalClusters}`, color: '#ef4444', sub: 'clusters < 70' },
-            { label: 'Open Issues', value: String(healthData.reduce((s, c) => s + c.issues.length, 0)), unit: '', color: '#6366f1', sub: 'across all clusters' },
+            { label: 'Healthy', value: String(healthyClusters), unit: `/${totalClusters}`, color: colors.success, sub: 'clusters ≥ 90' },
+            { label: 'Degraded', value: String(degradedClusters), unit: `/${totalClusters}`, color: colors.warning, sub: 'clusters 70–89' },
+            { label: 'Critical', value: String(criticalClusters), unit: `/${totalClusters}`, color: colors.danger, sub: 'clusters < 70' },
+            { label: 'Open Issues', value: String(healthData.reduce((s, c) => s + c.issues.length, 0)), unit: '', color: colors.purple, sub: 'across all clusters' },
           ].map(({ label, value, unit, color, sub }) => (
             <Grid item xs={12} sm={6} md={2.4} key={label}>
-              <Card elevation={0} sx={{ border: '1px solid #e5e7eb', borderLeft: `4px solid ${color}` }}>
+              <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, borderLeft: `4px solid ${color}` }}>
                 <CardContent sx={{ py: '12px !important', px: 2 }}>
                   <Typography variant="caption" color="textSecondary" fontWeight={600}>{label}</Typography>
                   <Box display="flex" alignItems="baseline" gap={0.5} mt={0.5}>
@@ -241,7 +231,7 @@ const ClusterHealth: React.FC = () => {
             <Grid container spacing={2}>
               {/* Score gauge */}
               <Grid item xs={12} md={3}>
-                <Card elevation={0} sx={{ border: '1px solid #e5e7eb', height: '100%' }}>
+                <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, height: '100%' }}>
                   <CardContent>
                     <Typography variant="subtitle2" color="textSecondary" fontWeight={600} mb={1}>Health Score</Typography>
                     <Box display="flex" alignItems="center" gap={2}>
@@ -260,7 +250,7 @@ const ClusterHealth: React.FC = () => {
 
               {/* Resource efficiency bars */}
               <Grid item xs={12} md={5}>
-                <Card elevation={0} sx={{ border: '1px solid #e5e7eb', height: '100%' }}>
+                <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, height: '100%' }}>
                   <CardContent>
                     <Typography variant="subtitle2" color="textSecondary" fontWeight={600} mb={1.5}>Resource Utilization</Typography>
                     <MetricBar label="CPU Efficiency" value={cluster.cpu_efficiency} optimal="Optimal: 60–80%" />
@@ -273,13 +263,13 @@ const ClusterHealth: React.FC = () => {
 
               {/* Sparklines */}
               <Grid item xs={12} md={4}>
-                <Card elevation={0} sx={{ border: '1px solid #e5e7eb', height: '100%' }}>
+                <Card elevation={0} sx={{ border: `1px solid ${colors.border}`, height: '100%' }}>
                   <CardContent>
                     <Typography variant="subtitle2" color="textSecondary" fontWeight={600} mb={1.5}>Trend (last 12 points)</Typography>
                     {[
-                      { label: 'CPU', value: cluster.cpu_efficiency, color: '#3b82f6' },
-                      { label: 'Memory', value: cluster.memory_efficiency, color: '#8b5cf6' },
-                      { label: 'Node Util.', value: cluster.node_utilization, color: '#10b981' },
+                      { label: 'CPU', value: cluster.cpu_efficiency, color: colors.info },
+                      { label: 'Memory', value: cluster.memory_efficiency, color: colors.purple },
+                      { label: 'Node Util.', value: cluster.node_utilization, color: colors.success },
                     ].map(({ label, value, color }) => (
                       <Box key={label} display="flex" alignItems="center" gap={1} mb={0.5}>
                         <Typography variant="caption" sx={{ width: 60, flexShrink: 0 }}>{label}</Typography>
@@ -294,10 +284,10 @@ const ClusterHealth: React.FC = () => {
               {/* Issues */}
               {cluster.issues.length > 0 && (
                 <Grid item xs={12} md={6}>
-                  <Card elevation={0} sx={{ border: '1px solid #fee2e2', bgcolor: '#fff7f7' }}>
+                  <Card elevation={0} sx={{ border: `1px solid ${colors.danger}`, bgcolor: colors.dangerBg }}>
                     <CardContent>
                       <Box display="flex" alignItems="center" gap={1} mb={1}>
-                        <ErrorIcon sx={{ color: '#ef4444', fontSize: 18 }} />
+                        <ErrorIcon sx={{ color: colors.danger, fontSize: 18 }} />
                         <Typography variant="subtitle2" fontWeight={700} color="error.main">
                           Active Issues ({cluster.issues.length})
                         </Typography>
@@ -305,7 +295,7 @@ const ClusterHealth: React.FC = () => {
                       <List dense disablePadding>
                         {cluster.issues.map((issue, i) => (
                           <ListItem key={i} disableGutters disablePadding sx={{ mb: 0.5 }}>
-                            <ListItemIcon sx={{ minWidth: 28 }}><WarningIcon sx={{ fontSize: 16, color: '#f59e0b' }} /></ListItemIcon>
+                            <ListItemIcon sx={{ minWidth: 28 }}><WarningIcon sx={{ fontSize: 16, color: colors.warning }} /></ListItemIcon>
                             <ListItemText primary={<Typography variant="body2">{issue}</Typography>} />
                           </ListItem>
                         ))}
@@ -318,10 +308,10 @@ const ClusterHealth: React.FC = () => {
               {/* Recommendations */}
               {cluster.recommendations.length > 0 && (
                 <Grid item xs={12} md={6}>
-                  <Card elevation={0} sx={{ border: '1px solid #dbeafe', bgcolor: '#f0f9ff' }}>
+                  <Card elevation={0} sx={{ border: `1px solid ${colors.info}`, bgcolor: colors.infoBg }}>
                     <CardContent>
                       <Box display="flex" alignItems="center" gap={1} mb={1}>
-                        <LightbulbIcon sx={{ color: '#3b82f6', fontSize: 18 }} />
+                        <LightbulbIcon sx={{ color: colors.info, fontSize: 18 }} />
                         <Typography variant="subtitle2" fontWeight={700} color="primary.main">
                           Recommendations ({cluster.recommendations.length})
                         </Typography>
@@ -329,7 +319,7 @@ const ClusterHealth: React.FC = () => {
                       <List dense disablePadding>
                         {cluster.recommendations.map((rec, i) => (
                           <ListItem key={i} disableGutters disablePadding sx={{ mb: 0.5 }}>
-                            <ListItemIcon sx={{ minWidth: 28 }}><TrendingUpIcon sx={{ fontSize: 16, color: '#3b82f6' }} /></ListItemIcon>
+                            <ListItemIcon sx={{ minWidth: 28 }}><TrendingUpIcon sx={{ fontSize: 16, color: colors.info }} /></ListItemIcon>
                             <ListItemText primary={<Typography variant="body2">{rec}</Typography>} />
                           </ListItem>
                         ))}

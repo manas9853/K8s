@@ -90,7 +90,14 @@ class Settings(BaseSettings):
     
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60
-    
+
+    # AWS billing integration (cross-account IAM role assumption — see
+    # api/discovery.py). AWS_PLATFORM_ACCOUNT_ID is OUR account, used to
+    # generate the trust policy customers attach to the role they create.
+    # Credentials for assuming into customer roles come from the standard
+    # boto3 chain (env vars / instance role), never stored in the DB.
+    AWS_PLATFORM_ACCOUNT_ID: str = ""
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box,
   Paper,
@@ -45,6 +47,7 @@ import {
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Mode {
   mode: string;
@@ -91,6 +94,7 @@ interface ModeStats {
 
 const Autonomous: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [modes, setModes] = useState<Mode[]>([]);
   const [currentMode, setCurrentMode] = useState<string>('assisted');
   const [tasks, setTasks] = useState<OptimizationTask[]>([]);
@@ -253,6 +257,8 @@ const Autonomous: React.FC = () => {
     return true;
   });
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
@@ -283,7 +289,7 @@ const Autonomous: React.FC = () => {
       {summary && (
         <Grid container spacing={3} sx={{ mb: 3 }}>
           <Grid item xs={12} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+            <Card sx={{ background: `linear-gradient(135deg, ${colors.gradientStart} 0%, ${colors.gradientEnd} 100%)` }}>
               <CardContent>
                 <Typography variant="h6" color="white" gutterBottom>
                   Current Mode

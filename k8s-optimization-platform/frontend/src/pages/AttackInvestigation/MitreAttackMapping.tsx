@@ -24,6 +24,7 @@ import {
 import { Map as MitreIcon, ExpandMore as ExpandIcon } from '@mui/icons-material';
 import ClusterGuard from '../../components/ClusterGuard';
 import { API_BASE_URL } from '../../config/api';
+import { colors } from '../../theme/colors';
 
 interface MitreTechnique {
   id: string;
@@ -53,10 +54,10 @@ function formatTimestamp(value?: string) {
 }
 
 function severityColor(severity: string) {
-  if (severity === 'critical') return '#ef5350';
-  if (severity === 'high') return '#ffa726';
-  if (severity === 'medium') return '#90caf9';
-  return '#a5d6a7';
+  if (severity === 'critical') return colors.danger;
+  if (severity === 'high') return colors.warning;
+  if (severity === 'medium') return colors.info;
+  return colors.success;
 }
 
 function buildTechniqueReason(technique: MitreTechnique, tacticName: string): string {
@@ -125,7 +126,7 @@ const MitreAttackMappingInner: React.FC = () => {
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -133,7 +134,7 @@ const MitreAttackMappingInner: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -141,28 +142,28 @@ const MitreAttackMappingInner: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load MITRE ATT&CK data</Alert>
       </Box>
     );
   }
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={2} flexWrap="wrap" mb={3}>
         <Box display="flex" alignItems="center" gap={1.5}>
-          <MitreIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+          <MitreIcon sx={{ fontSize: 32, color: colors.info }} />
           <Box>
-            <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               MITRE ATT&CK Mapping
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary }}>
               Real technique detections for {data.cluster_name || 'cluster'} · Last updated {formatTimestamp(data.last_updated)}
             </Typography>
           </Box>
         </Box>
-        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' } }}>
+        <Button variant="contained" onClick={() => fetchData(true)} sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}>
           Refresh
         </Button>
       </Box>
@@ -170,15 +171,15 @@ const MitreAttackMappingInner: React.FC = () => {
       {/* Summary cards */}
       <Grid container spacing={2} mb={3}>
         {[
-          { label: 'Techniques Detected', value: data.total_techniques_detected, color: data.total_techniques_detected > 0 ? '#ef5350' : '#a5d6a7' },
-          { label: 'Total Signal Count', value: data.total_signal_count, color: '#90caf9' },
-          { label: 'Tactics Covered', value: data.tactics.length, color: '#90caf9' },
-          { label: 'Critical Techniques', value: criticalCount, color: criticalCount > 0 ? '#ef5350' : '#a5d6a7' },
+          { label: 'Techniques Detected', value: data.total_techniques_detected, color: data.total_techniques_detected > 0 ? colors.danger : colors.success },
+          { label: 'Total Signal Count', value: data.total_signal_count, color: colors.info },
+          { label: 'Tactics Covered', value: data.tactics.length, color: colors.info },
+          { label: 'Critical Techniques', value: criticalCount, color: criticalCount > 0 ? colors.danger : colors.success },
         ].map((item) => (
           <Grid item xs={6} md={3} key={item.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{item.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{item.label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: item.color }}>{item.value}</Typography>
               </CardContent>
             </Card>
@@ -188,32 +189,32 @@ const MitreAttackMappingInner: React.FC = () => {
 
       {/* Active technique explanations */}
       {activeTechniques.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Why these techniques are detected
           </Typography>
           <Stack spacing={1.5}>
             {data.tactics.flatMap((tactic) =>
               tactic.techniques.filter((t) => t.detected > 0).map((tech) => (
-                <Box key={tech.id} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+                <Box key={tech.id} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                   <Box display="flex" justifyContent="space-between" gap={1} flexWrap="wrap" mb={1}>
                     <Box>
                       <Box display="flex" alignItems="center" gap={1}>
-                        <Chip label={tech.id} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
-                        <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                        <Chip label={tech.id} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontWeight: 'bold', fontSize: 10 }} />
+                        <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                           {tech.name}
                         </Typography>
                       </Box>
-                      <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                      <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                         Tactic: {tactic.name}
                       </Typography>
                     </Box>
                     <Box display="flex" gap={1}>
-                      <Chip label={tech.severity.toUpperCase()} size="small" sx={{ bgcolor: '#2a3245', color: severityColor(tech.severity), fontWeight: 'bold', fontSize: 10 }} />
-                      <Chip label={`${tech.detected} signals`} size="small" sx={{ bgcolor: '#2a3245', color: '#ef5350', fontWeight: 'bold', fontSize: 10 }} />
+                      <Chip label={tech.severity.toUpperCase()} size="small" sx={{ bgcolor: colors.border, color: severityColor(tech.severity), fontWeight: 'bold', fontSize: 10 }} />
+                      <Chip label={`${tech.detected} signals`} size="small" sx={{ bgcolor: colors.border, color: colors.danger, fontWeight: 'bold', fontSize: 10 }} />
                     </Box>
                   </Box>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', lineHeight: 1.75 }}>
+                  <Typography variant="body2" sx={{ color: colors.textMuted, lineHeight: 1.75 }}>
                     {buildTechniqueReason(tech, tactic.name)}
                   </Typography>
                 </Box>
@@ -232,23 +233,23 @@ const MitreAttackMappingInner: React.FC = () => {
               key={tactic.name}
               defaultExpanded
               sx={{
-                bgcolor: '#1e2433',
-                border: '1px solid #2a3245',
+                bgcolor: colors.surface,
+                border: `1px solid ${colors.border}`,
                 boxShadow: 'none',
                 '&:before': { display: 'none' },
-                '& .MuiAccordionSummary-root': { borderBottom: '1px solid #2a3245' },
+                '& .MuiAccordionSummary-root': { borderBottom: `1px solid ${colors.border}` },
               }}
             >
-              <AccordionSummary expandIcon={<ExpandIcon sx={{ color: '#8892a4' }} />}>
+              <AccordionSummary expandIcon={<ExpandIcon sx={{ color: colors.textSecondary }} />}>
                 <Box display="flex" alignItems="center" gap={2} width="100%">
-                  <Typography variant="subtitle1" fontWeight={700} sx={{ color: '#e8eaf0' }}>
+                  <Typography variant="subtitle1" fontWeight={700} sx={{ color: colors.textPrimary }}>
                     {tactic.name}
                   </Typography>
-                  <Chip label={`${tactic.techniques.length} technique${tactic.techniques.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
+                  <Chip label={`${tactic.techniques.length} technique${tactic.techniques.length !== 1 ? 's' : ''}`} size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
                   <Chip
                     label={`${tacticDetections} signal${tacticDetections !== 1 ? 's' : ''}`}
                     size="small"
-                    sx={{ bgcolor: '#2a3245', color: tacticDetections > 0 ? '#ef5350' : '#a5d6a7', fontWeight: 'bold', fontSize: 10 }}
+                    sx={{ bgcolor: colors.border, color: tacticDetections > 0 ? colors.danger : colors.success, fontWeight: 'bold', fontSize: 10 }}
                   />
                 </Box>
               </AccordionSummary>
@@ -257,7 +258,7 @@ const MitreAttackMappingInner: React.FC = () => {
                   <TableHead>
                     <TableRow>
                       {['Technique ID', 'Name', 'Detections', 'Severity', 'Description'].map((header) => (
-                        <TableCell key={header} sx={{ color: '#8892a4', fontWeight: 700, bgcolor: '#131d2e', borderColor: '#2a3245', fontSize: 12 }}>
+                        <TableCell key={header} sx={{ color: colors.textSecondary, fontWeight: 700, bgcolor: colors.surfaceAlt, borderColor: colors.border, fontSize: 12 }}>
                           {header}
                         </TableCell>
                       ))}
@@ -265,24 +266,24 @@ const MitreAttackMappingInner: React.FC = () => {
                   </TableHead>
                   <TableBody>
                     {tactic.techniques.map((tech) => (
-                      <TableRow key={tech.id} hover sx={{ '&:hover': { bgcolor: '#232d3f' }, bgcolor: '#131d2e' }}>
-                        <TableCell sx={{ borderColor: '#2a3245' }}>
-                          <Chip label={tech.id} size="small" sx={{ bgcolor: '#2a3245', color: '#90caf9', fontWeight: 'bold', fontSize: 10 }} />
+                      <TableRow key={tech.id} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover }, bgcolor: colors.surfaceAlt }}>
+                        <TableCell sx={{ borderColor: colors.border }}>
+                          <Chip label={tech.id} size="small" sx={{ bgcolor: colors.border, color: colors.info, fontWeight: 'bold', fontSize: 10 }} />
                         </TableCell>
-                        <TableCell sx={{ color: '#e8eaf0', fontWeight: 700, borderColor: '#2a3245', minWidth: 200 }}>
+                        <TableCell sx={{ color: colors.textPrimary, fontWeight: 700, borderColor: colors.border, minWidth: 200 }}>
                           {tech.name}
                         </TableCell>
-                        <TableCell sx={{ borderColor: '#2a3245' }}>
+                        <TableCell sx={{ borderColor: colors.border }}>
                           <Chip
                             label={String(tech.detected)}
                             size="small"
-                            sx={{ bgcolor: '#2a3245', color: tech.detected > 0 ? '#ef5350' : '#a5d6a7', fontWeight: 'bold', fontSize: 10 }}
+                            sx={{ bgcolor: colors.border, color: tech.detected > 0 ? colors.danger : colors.success, fontWeight: 'bold', fontSize: 10 }}
                           />
                         </TableCell>
-                        <TableCell sx={{ borderColor: '#2a3245' }}>
-                          <Chip label={tech.severity} size="small" sx={{ bgcolor: '#2a3245', color: severityColor(tech.severity), fontWeight: 'bold', fontSize: 10 }} />
+                        <TableCell sx={{ borderColor: colors.border }}>
+                          <Chip label={tech.severity} size="small" sx={{ bgcolor: colors.border, color: severityColor(tech.severity), fontWeight: 'bold', fontSize: 10 }} />
                         </TableCell>
-                        <TableCell sx={{ color: '#8892a4', borderColor: '#2a3245', fontSize: 12, minWidth: 260 }}>
+                        <TableCell sx={{ color: colors.textSecondary, borderColor: colors.border, fontSize: 12, minWidth: 260 }}>
                           {tech.description}
                         </TableCell>
                       </TableRow>

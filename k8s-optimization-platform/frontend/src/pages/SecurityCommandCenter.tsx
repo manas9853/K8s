@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Typography, Grid, Card, CardContent, Chip, CircularProgress as MuiCircularProgress,
   Alert, IconButton, Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
@@ -20,24 +22,25 @@ import {
   Bolt as BoltIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 // ─── Dark theme ───────────────────────────────────────────────────────────────
 const T = {
-  bg:      '#0f1724',
-  card:    '#1e2433',
-  hover:   '#252e42',
-  border:  '#2a3245',
-  text:    '#e8eaf0',
-  muted:   '#8b95a9',
-  body:    '#c8cdd8',
-  red:     '#f87171',
-  redDim:  '#2d1515',
-  yellow:  '#f59e0b',
-  yellowDim:'#2d200a',
-  blue:    '#60a5fa',
-  blueDim: '#0d1f3c',
-  green:   '#4ade80',
-  greenDim:'#0d2d1a',
+  bg:      colors.background,
+  card:    colors.surface,
+  hover:   colors.surfaceHover,
+  border:  colors.border,
+  text:    colors.textPrimary,
+  muted:   colors.textSecondary,
+  body:    colors.textMuted,
+  red:     colors.danger,
+  redDim:  colors.dangerBg,
+  yellow:  colors.warning,
+  yellowDim:colors.warningBg,
+  blue:    colors.info,
+  blueDim: colors.infoBg,
+  green:   colors.success,
+  greenDim:colors.successBg,
 };
 
 // ─── Severity palette (dark) ──────────────────────────────────────────────────
@@ -81,7 +84,7 @@ const ScoreGauge: React.FC<{ score: number; size?: number }> = ({ score, size = 
   const r = (size - 16) / 2;
   const circ = 2 * Math.PI * r;
   const color = score >= 80 ? T.green : score >= 60 ? T.yellow : T.red;
-  const track = '#2a3245';
+  const track = colors.border;
   const dash  = (Math.min(score, 100) / 100) * circ;
   return (
     <Box sx={{ position: 'relative', width: size, height: size, mx: 'auto' }}>
@@ -126,19 +129,20 @@ const SevChip: React.FC<{ sev: string }> = ({ sev }) => {
 
 // ─── Nav tiles ────────────────────────────────────────────────────────────────
 const NAV_TILES = [
-  { label: 'CVE Dashboard',         path: '/cve-dashboard',                       icon: <BugIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Runtime Security',      path: '/runtime-security',                    icon: <ShieldIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Privileged Containers', path: '/privileged-containers',               icon: <SecurityIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Secret Exposure',       path: '/secret-exposure',                     icon: <LockIcon sx={{ fontSize: 16 }}/> },
-  { label: 'RBAC Analysis',         path: '/excessive-permissions',               icon: <LockIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Network Policies',      path: '/network-policies',                    icon: <NetworkIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Drift Alerts',          path: '/drift-alerts',                        icon: <WarningIcon sx={{ fontSize: 16 }}/> },
+  { label: 'CVE Dashboard',         path: '/security/vulnerability-management/cve-dashboard',                       icon: <BugIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Runtime Security',      path: '/security/container-security/runtime-security',                    icon: <ShieldIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Privileged Containers', path: '/security/container-security/privileged-containers',               icon: <SecurityIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Secret Exposure',       path: '/security/secrets-security/secret-exposure',                     icon: <LockIcon sx={{ fontSize: 16 }}/> },
+  { label: 'RBAC Analysis',         path: '/security/rbac-analysis/excessive-permissions',               icon: <LockIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Network Policies',      path: '/operations/network/network-policies',                    icon: <NetworkIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Drift Alerts',          path: '/security/security-drift-detection/drift-alerts',                        icon: <WarningIcon sx={{ fontSize: 16 }}/> },
   { label: 'Attack Investigation',  path: '/attack-investigation/incident-center',icon: <BoltIcon sx={{ fontSize: 16 }}/> },
 ];
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 const SecurityCommandCenter: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const navigate = useNavigate();
   const [data,       setData]      = useState<CommandCenterData | null>(null);
   const [loading,    setLoading]   = useState(true);
@@ -169,6 +173,8 @@ const SecurityCommandCenter: React.FC = () => {
   }, [data, sevFilter]);
 
   // ── loading / error states ────────────────────────────────────────────────
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <MuiCircularProgress sx={{ color: T.green }} />
@@ -185,16 +191,16 @@ const SecurityCommandCenter: React.FC = () => {
   const ss = data.security_score;
 
   const POSTURE_ROWS = [
-    { label: 'Vulnerabilities', score: ss.vulnerability_score,    icon: <BugIcon sx={{ fontSize: 16 }}/>,      path: '/cve-dashboard' },
+    { label: 'Vulnerabilities', score: ss.vulnerability_score,    icon: <BugIcon sx={{ fontSize: 16 }}/>,      path: '/security/vulnerability-management/cve-dashboard' },
     { label: 'Compliance',      score: ss.compliance_score,        icon: <ShieldIcon sx={{ fontSize: 16 }}/>,   path: '/compliance-score' },
-    { label: 'Configuration',   score: ss.configuration_score,     icon: <SecurityIcon sx={{ fontSize: 16 }}/>, path: '/runtime-security' },
-    { label: 'Network',         score: ss.network_security_score,  icon: <NetworkIcon sx={{ fontSize: 16 }}/>,  path: '/network-policies' },
-    { label: 'RBAC',            score: ss.rbac_score,              icon: <LockIcon sx={{ fontSize: 16 }}/>,     path: '/excessive-permissions' },
+    { label: 'Configuration',   score: ss.configuration_score,     icon: <SecurityIcon sx={{ fontSize: 16 }}/>, path: '/security/container-security/runtime-security' },
+    { label: 'Network',         score: ss.network_security_score,  icon: <NetworkIcon sx={{ fontSize: 16 }}/>,  path: '/operations/network/network-policies' },
+    { label: 'RBAC',            score: ss.rbac_score,              icon: <LockIcon sx={{ fontSize: 16 }}/>,     path: '/security/rbac-analysis/excessive-permissions' },
   ];
 
   const cellSx  = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.5 };
   const headSx  = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
-    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: '#161f30' };
+    textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: colors.surfaceAlt };
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>
@@ -307,10 +313,10 @@ const SecurityCommandCenter: React.FC = () => {
       <Grid container spacing={2} sx={{ mb: 2.5 }}>
         {([
           { label: 'High-Risk Pods',      value: ss.high_risk_pods,         bad: ss.high_risk_pods > 0,          icon: <BugIcon sx={{ fontSize: 18 }}/>,      path: '/pods' },
-          { label: 'No Resource Limits',  value: ss.no_resource_requests,   bad: ss.no_resource_requests > 5,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/recommendations' },
-          { label: 'Memory Pressure',     value: ss.high_memory_pressure,   bad: ss.high_memory_pressure > 0,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/memory-analysis' },
-          { label: 'Under-Provisioned',   value: ss.under_provisioned_pods, bad: ss.under_provisioned_pods > 10, icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/cpu-rightsizing' },
-          { label: 'Stale Secrets (High)',value: ss.stale_secrets_high,     bad: ss.stale_secrets_high > 0,      icon: <LockIcon sx={{ fontSize: 18 }}/>,      path: '/stale-secrets' },
+          { label: 'No Resource Limits',  value: ss.no_resource_requests,   bad: ss.no_resource_requests > 5,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/optimization/recommendations' },
+          { label: 'Memory Pressure',     value: ss.high_memory_pressure,   bad: ss.high_memory_pressure > 0,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/operations/pods/memory-analysis' },
+          { label: 'Under-Provisioned',   value: ss.under_provisioned_pods, bad: ss.under_provisioned_pods > 10, icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/optimization/recommendations/cpu-rightsizing' },
+          { label: 'Stale Secrets (High)',value: ss.stale_secrets_high,     bad: ss.stale_secrets_high > 0,      icon: <LockIcon sx={{ fontSize: 18 }}/>,      path: '/optimization/cleanup-center/stale-secrets' },
           { label: 'Total Pods Scanned',  value: ss.total_pods,             bad: false,                          icon: <CheckIcon sx={{ fontSize: 18 }}/>,     path: '/pods' },
         ] as { label: string; value: number; bad: boolean; icon: React.ReactNode; path: string }[]).map(item => (
           <Grid item xs={6} sm={4} md={2} key={item.label}>

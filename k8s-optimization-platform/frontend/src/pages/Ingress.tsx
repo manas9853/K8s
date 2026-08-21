@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import NoClusterState from '../components/NoClusterState';
 import { useCluster } from '../contexts/ClusterContext';
 import {
   Box,
@@ -99,6 +100,8 @@ const Ingress: React.FC = () => {
   const tlsCount  = ingresses.filter(i => i.tls_enabled).length;
   const withClass = ingresses.filter(i => i.ingress_class).length;
   const withAddr  = ingresses.filter(i => i.address).length;
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (clustersLoading) {
     return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;

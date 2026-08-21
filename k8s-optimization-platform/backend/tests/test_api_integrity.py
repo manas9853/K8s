@@ -91,6 +91,18 @@ _trivy_svc.cache_stats = MagicMock(return_value={})         # type: ignore
 
 _real_data_svc = _make_module("services.real_data_helper")
 
+# cost_service has zero external deps (stdlib only) — load the real module so
+# api endpoints get working cost logic instead of a MagicMock.
+import importlib.util as _importlib_util
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_cost_service_spec = _importlib_util.spec_from_file_location(
+    "services.cost_service", os.path.join(_backend_dir, "services", "cost_service.py")
+)
+_cost_service_mod = _importlib_util.module_from_spec(_cost_service_spec)
+sys.modules["services.cost_service"] = _cost_service_mod
+_cost_service_spec.loader.exec_module(_cost_service_mod)
+_svc.cost_service = _cost_service_mod  # type: ignore
+
 # redis / aioredis
 sys.modules.setdefault("redis", MagicMock())
 sys.modules.setdefault("aioredis", MagicMock())
@@ -136,6 +148,8 @@ MOCK_DB.get_clusters_by_org.return_value = []
 MOCK_DB.get_latest_metrics.return_value = None
 MOCK_DB.get_cluster_count.return_value = 0
 MOCK_DB.enqueue_command.return_value = 1
+MOCK_DB.get_cicd_pipeline_cache.return_value = []
+MOCK_DB.get_falco_alerts.return_value = []
 
 # Patch cluster_registry
 sys.modules.setdefault(
@@ -151,6 +165,8 @@ sys.modules.setdefault(
         compute_energy=MagicMock(return_value={}),
         get_billing_cache=MagicMock(return_value={}),
         get_discovery_status=MagicMock(return_value={}),
+        CPU_COST_PER_CORE_HOUR=0.031,
+        MEMORY_COST_PER_GB_HOUR=0.004,
     ),
 )
 

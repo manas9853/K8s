@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import CostAccuracyBanner from '../components/CostAccuracyBanner';
 import {
   Box,
@@ -31,6 +33,7 @@ import {
   Info as InfoIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface HeatmapCell {
   cluster: string;
@@ -71,6 +74,7 @@ interface Summary {
 
 const Heatmap: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters: registeredClusters } = useCluster();
   const [heatmapData, setHeatmapData] = useState<HeatmapCell[]>([]);
   const [resourceWaste, setResourceWaste] = useState<ResourceWaste[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
@@ -118,7 +122,7 @@ const Heatmap: React.FC = () => {
   const getSeverityColor = (severity: string) => {
     switch (severity) {
       case 'critical':
-        return '#d32f2f';
+        return colors.danger;
       case 'high':
         return '#f57c00';
       case 'medium':
@@ -146,7 +150,7 @@ const Heatmap: React.FC = () => {
   };
 
   const getWasteColor = (percentage: number) => {
-    if (percentage >= 60) return '#d32f2f';
+    if (percentage >= 60) return colors.danger;
     if (percentage >= 40) return '#f57c00';
     if (percentage >= 20) return '#fbc02d';
     return '#388e3c';
@@ -165,6 +169,8 @@ const Heatmap: React.FC = () => {
     acc[cell.cluster].push(cell);
     return acc;
   }, {} as Record<string, HeatmapCell[]>);
+
+  if (registeredClusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>
@@ -205,7 +211,7 @@ const Heatmap: React.FC = () => {
       {summary && (
         <Grid container spacing={3} sx={{ mb: 3 }}>
           <Grid item xs={12} md={3}>
-            <Card sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+            <Card sx={{ background: `linear-gradient(135deg, ${colors.gradientStart} 0%, ${colors.gradientEnd} 100%)` }}>
               <CardContent>
                 <Typography variant="h6" color="white" gutterBottom>
                   Total Waste

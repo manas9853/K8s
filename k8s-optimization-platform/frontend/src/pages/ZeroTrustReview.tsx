@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Alert,
   Box,
@@ -24,6 +26,7 @@ import {
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface ZeroTrustGap {
   area: string;
@@ -55,16 +58,16 @@ interface ZeroTrustData {
 }
 
 const PRIORITY_COLOR: Record<string, string> = {
-  high: '#ef5350',
-  medium: '#ffa726',
-  low: '#a5d6a7',
+  high: colors.danger,
+  medium: colors.warning,
+  low: colors.success,
 };
 
 const GRADE_COLOR: Record<string, string> = {
-  A: '#a5d6a7',
-  B: '#90caf9',
-  C: '#ffa726',
-  D: '#ef5350',
+  A: colors.success,
+  B: colors.info,
+  C: colors.warning,
+  D: colors.danger,
 };
 
 const METRIC_LABEL: Record<string, string> = {
@@ -78,6 +81,7 @@ const METRIC_LABEL: Record<string, string> = {
 
 const ZeroTrustReview: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<ZeroTrustData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -112,9 +116,11 @@ const ZeroTrustReview: React.FC = () => {
     };
   }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: '#0f1724' }}>
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
         <CircularProgress />
       </Box>
     );
@@ -122,7 +128,7 @@ const ZeroTrustReview: React.FC = () => {
 
   if (error) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">{error}</Alert>
       </Box>
     );
@@ -130,14 +136,14 @@ const ZeroTrustReview: React.FC = () => {
 
   if (!data) {
     return (
-      <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}>
+      <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>
         <Alert severity="error">Failed to load zero trust data</Alert>
       </Box>
     );
   }
 
   const score = data.zero_trust_score ?? 0;
-  const scoreColor = score >= 80 ? '#a5d6a7' : score >= 60 ? '#ffa726' : '#ef5350';
+  const scoreColor = score >= 80 ? colors.success : score >= 60 ? colors.warning : colors.danger;
   const namespaces = Array.isArray(data.namespace_assessment) ? data.namespace_assessment : [];
   const gaps = Array.isArray(data.gaps) ? data.gaps : [];
   const metrics = data.metrics ?? {};
@@ -148,14 +154,14 @@ const ZeroTrustReview: React.FC = () => {
   const dash = (Math.min(score, 100) / 100) * circumference;
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
       <Box display="flex" alignItems="center" gap={1.5} mb={3}>
-        <SecurityIcon sx={{ fontSize: 32, color: '#90caf9' }} />
+        <SecurityIcon sx={{ fontSize: 32, color: colors.info }} />
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Zero Trust Review
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             Real pod security posture analysis · {namespaces.length} namespaces assessed · Last scan{' '}
             {data.last_scan ? new Date(data.last_scan).toLocaleString() : 'N/A'}
           </Typography>
@@ -165,14 +171,14 @@ const ZeroTrustReview: React.FC = () => {
       {/* SCORE RING + STAT CARDS */}
       <Grid container spacing={2} mb={3}>
         <Grid item xs={12} md={3}>
-          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+          <Card sx={{ height: '100%', textAlign: 'center', bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
             <CardContent>
-              <Typography variant="subtitle2" sx={{ color: '#8892a4' }} gutterBottom>
+              <Typography variant="subtitle2" sx={{ color: colors.textSecondary }} gutterBottom>
                 Zero Trust Score
               </Typography>
               <Box sx={{ position: 'relative', width: 130, height: 130, mx: 'auto' }}>
                 <svg width={130} height={130}>
-                  <circle cx={65} cy={65} r={radius} fill="none" stroke="#2a3245" strokeWidth={11} />
+                  <circle cx={65} cy={65} r={radius} fill="none" stroke={colors.border} strokeWidth={11} />
                   <circle
                     cx={65}
                     cy={65}
@@ -189,7 +195,7 @@ const ZeroTrustReview: React.FC = () => {
                   <Typography variant="h4" fontWeight="bold" sx={{ color: scoreColor }}>
                     {score}
                   </Typography>
-                  <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                     / 100
                   </Typography>
                 </Box>
@@ -197,7 +203,7 @@ const ZeroTrustReview: React.FC = () => {
               <Chip
                 label={`Grade ${data.grade}`}
                 size="small"
-                sx={{ bgcolor: '#2a3245', color: GRADE_COLOR[data.grade] ?? '#90caf9', fontWeight: 'bold', mt: 1 }}
+                sx={{ bgcolor: colors.border, color: GRADE_COLOR[data.grade] ?? colors.info, fontWeight: 'bold', mt: 1 }}
               />
             </CardContent>
           </Card>
@@ -206,15 +212,15 @@ const ZeroTrustReview: React.FC = () => {
         <Grid item xs={12} md={9}>
           <Grid container spacing={2} mb={2}>
             {[
-              { label: 'Namespaces Assessed', count: namespaces.length, color: '#90caf9' },
-              { label: 'Gaps Identified', count: gaps.length, color: '#ffa726' },
-              { label: 'High Priority Gaps', count: highGaps.length, color: '#ef5350' },
-              { label: 'Pillars Scored', count: Object.keys(metrics).length, color: '#a5d6a7' },
+              { label: 'Namespaces Assessed', count: namespaces.length, color: colors.info },
+              { label: 'Gaps Identified', count: gaps.length, color: colors.warning },
+              { label: 'High Priority Gaps', count: highGaps.length, color: colors.danger },
+              { label: 'Pillars Scored', count: Object.keys(metrics).length, color: colors.success },
             ].map(({ label, count, color }) => (
               <Grid item xs={6} md={3} key={label}>
-                <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+                <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
                   <CardContent sx={{ pb: '8px !important' }}>
-                    <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>
                       {label}
                     </Typography>
                     <Typography variant="h4" fontWeight="bold" sx={{ color }}>
@@ -227,8 +233,8 @@ const ZeroTrustReview: React.FC = () => {
           </Grid>
 
           {Array.isArray(data.recommendations) && data.recommendations.length > 0 && (
-            <Paper sx={{ p: 2, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-              <Typography variant="body2" sx={{ color: '#8892a4' }}>
+            <Paper sx={{ p: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+              <Typography variant="body2" sx={{ color: colors.textSecondary }}>
                 {data.recommendations[0]}
               </Typography>
             </Paper>
@@ -238,27 +244,27 @@ const ZeroTrustReview: React.FC = () => {
 
       {/* ZERO TRUST PILLAR METRICS */}
       {Object.keys(metrics).length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
             Zero Trust Pillar Scores
           </Typography>
           <Grid container spacing={2}>
             {Object.entries(metrics).map(([key, value]) => {
               const pillarScore = typeof value === 'number' ? value : 0;
-              const pillarColor = pillarScore >= 80 ? '#a5d6a7' : pillarScore >= 50 ? '#ffa726' : '#ef5350';
+              const pillarColor = pillarScore >= 80 ? colors.success : pillarScore >= 50 ? colors.warning : colors.danger;
               const pillarWidth = Math.min(pillarScore, 100);
               return (
                 <Grid item xs={12} md={6} key={key}>
-                  <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+                  <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                     <Box display="flex" justifyContent="space-between" alignItems="center" mb={0.75}>
-                      <Typography variant="body2" sx={{ color: '#e8eaf0', fontWeight: 500 }}>
+                      <Typography variant="body2" sx={{ color: colors.textPrimary, fontWeight: 500 }}>
                         {METRIC_LABEL[key] ?? key.replace(/_/g, ' ')}
                       </Typography>
                       <Typography variant="body2" fontWeight="bold" sx={{ color: pillarColor }}>
                         {pillarScore}
                       </Typography>
                     </Box>
-                    <Box sx={{ height: 6, bgcolor: '#2a3245', borderRadius: 3, overflow: 'hidden' }}>
+                    <Box sx={{ height: 6, bgcolor: colors.border, borderRadius: 3, overflow: 'hidden' }}>
                       <Box
                         sx={{
                           width: `${pillarWidth}%`,
@@ -279,36 +285,36 @@ const ZeroTrustReview: React.FC = () => {
 
       {/* GAPS SPOTLIGHT */}
       {highGaps.length > 0 && (
-        <Paper sx={{ p: 2.5, mb: 3, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+        <Paper sx={{ p: 2.5, mb: 3, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
           <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-            <WarningIcon sx={{ color: '#ef5350' }} />
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+            <WarningIcon sx={{ color: colors.danger }} />
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
               High Priority Gaps
             </Typography>
-            <Typography variant="caption" sx={{ color: '#8892a4', ml: 'auto' }}>
+            <Typography variant="caption" sx={{ color: colors.textSecondary, ml: 'auto' }}>
               {highGaps.length} area{highGaps.length !== 1 ? 's' : ''} need immediate attention
             </Typography>
           </Box>
           <Stack spacing={1}>
             {highGaps.slice(0, 6).map((gap, index) => (
-              <Box key={index} sx={{ p: 2, borderRadius: 1, bgcolor: '#131d2e', border: '1px solid #2a3245' }}>
+              <Box key={index} sx={{ p: 2, borderRadius: 1, bgcolor: colors.surfaceAlt, border: `1px solid ${colors.border}` }}>
                 <Box display="flex" alignItems="flex-start" justifyContent="space-between" flexWrap="wrap" gap={1} mb={0.5}>
                   <Box>
-                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+                    <Typography variant="subtitle2" fontWeight="bold" sx={{ color: colors.textPrimary }}>
                       {gap.area}
                     </Typography>
-                    <Typography variant="caption" sx={{ color: '#8892a4' }}>
+                    <Typography variant="caption" sx={{ color: colors.textSecondary }}>
                       Score {gap.current_score} → target {gap.target_score} · gap of {gap.gap}
                     </Typography>
                   </Box>
                   <Chip
                     label={gap.priority.toUpperCase()}
                     size="small"
-                    sx={{ bgcolor: '#2a3245', color: PRIORITY_COLOR[gap.priority] ?? '#90caf9', fontWeight: 'bold', fontSize: 10 }}
+                    sx={{ bgcolor: colors.border, color: PRIORITY_COLOR[gap.priority] ?? colors.info, fontWeight: 'bold', fontSize: 10 }}
                   />
                 </Box>
                 {gap.recommendations[0] && (
-                  <Typography variant="body2" sx={{ color: '#8892a4', fontSize: 11, mt: 1 }}>
+                  <Typography variant="body2" sx={{ color: colors.textSecondary, fontSize: 11, mt: 1 }}>
                     ↳ {gap.recommendations[0]}
                   </Typography>
                 )}
@@ -319,15 +325,15 @@ const ZeroTrustReview: React.FC = () => {
       )}
 
       {/* NAMESPACE ASSESSMENT TABLE */}
-      <Paper sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+      <Paper sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
         <Box p={2}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0' }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary }}>
             Namespace Assessment ({namespaces.length})
           </Typography>
         </Box>
         {namespaces.length === 0 ? (
           <Box p={4} textAlign="center">
-            <Typography variant="body1" sx={{ color: '#8892a4' }}>
+            <Typography variant="body1" sx={{ color: colors.textSecondary }}>
               No namespace assessment data available.
             </Typography>
           </Box>
@@ -342,9 +348,9 @@ const ZeroTrustReview: React.FC = () => {
                       sx={{
                         fontWeight: 700,
                         fontSize: 12,
-                        color: '#8892a4',
-                        bgcolor: '#131d2e',
-                        borderColor: '#2a3245',
+                        color: colors.textSecondary,
+                        bgcolor: colors.surfaceAlt,
+                        borderColor: colors.border,
                         whiteSpace: 'nowrap',
                       }}
                     >
@@ -355,55 +361,55 @@ const ZeroTrustReview: React.FC = () => {
               </TableHead>
               <TableBody>
                 {namespaces.slice(0, 60).map((item, index) => {
-                  const nsGradeColor = GRADE_COLOR[item.grade] ?? '#90caf9';
+                  const nsGradeColor = GRADE_COLOR[item.grade] ?? colors.info;
                   const nsScoreColor =
-                    item.zero_trust_score >= 80 ? '#a5d6a7' : item.zero_trust_score >= 60 ? '#ffa726' : '#ef5350';
+                    item.zero_trust_score >= 80 ? colors.success : item.zero_trust_score >= 60 ? colors.warning : colors.danger;
                   return (
-                    <TableRow key={`${item.namespace}-${index}`} hover sx={{ '&:hover': { bgcolor: '#232d3f' } }}>
-                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: '#e8eaf0', borderColor: '#2a3245' }}>
+                    <TableRow key={`${item.namespace}-${index}`} hover sx={{ '&:hover': { bgcolor: colors.surfaceHover } }}>
+                      <TableCell sx={{ fontWeight: 600, fontSize: 12, color: colors.textPrimary, borderColor: colors.border }}>
                         {item.namespace}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 12, fontWeight: 'bold', color: nsScoreColor, borderColor: '#2a3245' }}>
+                      <TableCell sx={{ fontSize: 12, fontWeight: 'bold', color: nsScoreColor, borderColor: colors.border }}>
                         {item.zero_trust_score}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         <Chip
                           label={item.grade}
                           size="small"
-                          sx={{ bgcolor: '#2a3245', color: nsGradeColor, fontWeight: 'bold', fontSize: 11, minWidth: 28 }}
+                          sx={{ bgcolor: colors.border, color: nsGradeColor, fontWeight: 'bold', fontSize: 11, minWidth: 28 }}
                         />
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         {item.has_network_policies ? (
                           <Box display="flex" alignItems="center" gap={0.5}>
-                            <CheckCircleIcon sx={{ fontSize: 15, color: '#a5d6a7' }} />
-                            <Typography variant="caption" sx={{ color: '#a5d6a7' }}>Yes</Typography>
+                            <CheckCircleIcon sx={{ fontSize: 15, color: colors.success }} />
+                            <Typography variant="caption" sx={{ color: colors.success }}>Yes</Typography>
                           </Box>
                         ) : (
-                          <Typography variant="caption" sx={{ color: '#ef5350' }}>None</Typography>
+                          <Typography variant="caption" sx={{ color: colors.danger }}>None</Typography>
                         )}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         {item.has_pod_security_policies ? (
                           <Box display="flex" alignItems="center" gap={0.5}>
-                            <CheckCircleIcon sx={{ fontSize: 15, color: '#a5d6a7' }} />
-                            <Typography variant="caption" sx={{ color: '#a5d6a7' }}>Yes</Typography>
+                            <CheckCircleIcon sx={{ fontSize: 15, color: colors.success }} />
+                            <Typography variant="caption" sx={{ color: colors.success }}>Yes</Typography>
                           </Box>
                         ) : (
-                          <Typography variant="caption" sx={{ color: '#ef5350' }}>None</Typography>
+                          <Typography variant="caption" sx={{ color: colors.danger }}>None</Typography>
                         )}
                       </TableCell>
-                      <TableCell sx={{ borderColor: '#2a3245' }}>
+                      <TableCell sx={{ borderColor: colors.border }}>
                         {item.uses_service_mesh ? (
                           <Box display="flex" alignItems="center" gap={0.5}>
-                            <CheckCircleIcon sx={{ fontSize: 15, color: '#a5d6a7' }} />
-                            <Typography variant="caption" sx={{ color: '#a5d6a7' }}>Yes</Typography>
+                            <CheckCircleIcon sx={{ fontSize: 15, color: colors.success }} />
+                            <Typography variant="caption" sx={{ color: colors.success }}>Yes</Typography>
                           </Box>
                         ) : (
-                          <Typography variant="caption" sx={{ color: '#8892a4' }}>No</Typography>
+                          <Typography variant="caption" sx={{ color: colors.textSecondary }}>No</Typography>
                         )}
                       </TableCell>
-                      <TableCell sx={{ fontSize: 11, color: '#8892a4', borderColor: '#2a3245', maxWidth: 260 }}>
+                      <TableCell sx={{ fontSize: 11, color: colors.textSecondary, borderColor: colors.border, maxWidth: 260 }}>
                         {item.recommendation}
                       </TableCell>
                     </TableRow>
@@ -417,13 +423,13 @@ const ZeroTrustReview: React.FC = () => {
 
       {/* RECOMMENDATIONS */}
       {Array.isArray(data.recommendations) && data.recommendations.length > 0 && (
-        <Paper sx={{ p: 2.5, bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1.5 }}>
+        <Paper sx={{ p: 2.5, bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1.5 }}>
             Recommended Actions
           </Typography>
           <Stack spacing={1}>
             {data.recommendations.map((recommendation, index) => (
-              <Typography key={index} variant="body2" sx={{ color: '#8892a4' }}>
+              <Typography key={index} variant="body2" sx={{ color: colors.textSecondary }}>
                 • {recommendation}
               </Typography>
             ))}

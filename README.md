@@ -32,3 +32,5 @@ Re-run `generate_dashboard.py` anytime to refresh data.
 - **Network & APIs** — dependency flow diagram + connection table
 - **Storage** — PVC chart + delete/keep actions
 - **Cost Actions** — everything flagged DELETE / RIGHTSIZE / SET_REQUESTS
+
+<!-- push access verification test, safe to ignore -->

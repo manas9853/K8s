@@ -12,15 +12,17 @@ import {
 } from '@mui/material';
 import { useCluster } from '../contexts/ClusterContext';
 import type { ClusterInfo } from '../contexts/ClusterContext';
+import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 /* ── Design tokens — matches Login dark K8s theme ── */
 const C = {
-  bg:             '#050d1a',
+  bg:             colors.background,
   bgPanel:        '#071022',
-  bgCard:         '#0b1628',
-  bgSurface:      '#0f1e35',
+  bgCard:         colors.surfaceAlt,
+  bgSurface:      colors.surfaceAlt,
   borderDim:      '#1a2e4a',
-  border:         '#1e3a5f',
+  border:         colors.info,
   borderBright:   '#2a5080',
   cyan:           '#00d4ff',
   cyanDim:        '#00a8cc',
@@ -29,14 +31,14 @@ const C = {
   green:          '#39ff14',
   greenDim:       '#22cc00',
   greenGlow:      'rgba(57,255,20,0.12)',
-  amber:          '#f59e0b',
+  amber:          colors.warning,
   amberGlow:      'rgba(245,158,11,0.15)',
-  red:            '#ef4444',
+  red:            colors.danger,
   redGlow:        'rgba(239,68,68,0.15)',
-  primary:        '#2563eb',
-  textPrimary:    '#e2f0ff',
-  textSecondary:  '#7ca5cc',
-  textMuted:      '#3d6080',
+  primary:        colors.info,
+  textPrimary:    colors.infoBg,
+  textSecondary:  colors.info,
+  textMuted:      colors.info,
 };
 
 /* ── Hex grid background (identical to Login) ── */
@@ -417,6 +419,8 @@ const Clusters: React.FC = () => {
   const avgHealth = clusters.length ? Math.round(clusters.reduce((s, c) => s + c.health_score, 0) / clusters.length) : 0;
   const healthyClusters = clusters.filter(c => c.status === 'healthy').length;
 
+  if (!loading && clusters.length === 0) return <NoClusterState />;
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -567,23 +571,6 @@ const Clusters: React.FC = () => {
             <span style={{ fontSize: 11, color: C.textMuted, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.1em' }}>
               CONNECTING TO CLUSTER FLEET…
             </span>
-          </div>
-        )}
-
-        {/* ── Empty state ── */}
-        {!loading && clusters.length === 0 && (
-          <div style={{
-            textAlign: 'center', padding: '80px 0',
-            background: `linear-gradient(145deg, ${C.bgCard}, #080f20)`,
-            border: `1px solid ${C.borderDim}`, borderRadius: 12,
-          }}>
-            <K8sWheel size={48} color={C.borderBright} />
-            <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 16, fontWeight: 600 }}>
-              No clusters registered
-            </div>
-            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, fontFamily: "'JetBrains Mono',monospace" }}>
-              kubectl apply -f cluster-onboarding.yaml
-            </div>
           </div>
         )}
 

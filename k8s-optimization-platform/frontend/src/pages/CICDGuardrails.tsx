@@ -8,6 +8,7 @@ import {
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface CICDGuardrail {
   name: string;
@@ -92,7 +93,7 @@ const CICDGuardrailsInner: React.FC = () => {
                       <Chip label={g.enabled ? 'Active' : 'Disabled'} size="small" color={g.enabled ? 'success' : 'default'} />
                     </TableCell>
                     <TableCell sx={{ color: 'text.secondary', fontSize: '0.8rem' }}>{g.threshold}</TableCell>
-                    <TableCell align="right" sx={{ fontWeight: 700, color: g.violations > 10 ? '#c62828' : g.violations > 0 ? '#e65100' : 'inherit' }}>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: g.violations > 10 ? colors.danger : g.violations > 0 ? colors.warning : 'inherit' }}>
                       {g.violations}
                     </TableCell>
                     <TableCell sx={{ whiteSpace: 'nowrap' }}>{new Date(g.last_violation).toLocaleString()}</TableCell>

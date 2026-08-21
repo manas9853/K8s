@@ -8,6 +8,7 @@ import {
 import ClusterGuard from '../components/ClusterGuard';
 import NoDataState from '../components/NoDataState';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface Capacity {
   cpu_total: number; cpu_used: number;
@@ -43,7 +44,7 @@ interface CapacityForecastingData {
 }
 
 const usagePct = (used: number, total: number) => Math.round((used / total) * 100);
-const barColor = (pct: number) => pct >= 80 ? '#c62828' : pct >= 60 ? '#e65100' : '#2e7d32';
+const barColor = (pct: number) => pct >= 80 ? colors.danger : pct >= 60 ? colors.warning : colors.success;
 const urgencyColor = (months: number): 'error' | 'warning' | 'success' =>
   months <= 6 ? 'error' : months <= 12 ? 'warning' : 'success';
 

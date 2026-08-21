@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Card, CardContent, Typography, Grid, Chip, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Paper, LinearProgress, Alert
@@ -29,6 +31,7 @@ const riskColor = (level: string): 'error' | 'warning' | 'info' | 'default' => {
 
 const ExternalExposure: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [services, setServices] = useState<ExposedService[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -45,6 +48,8 @@ const ExternalExposure: React.FC = () => {
     const interval = setInterval(fetchData, 120000);
     return () => clearInterval(interval);
   }, [clusterParam]);
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) return <Box sx={{ width: '100%', mt: 2 }}><LinearProgress /></Box>;
   if (error) return <Alert severity="error">Failed to load data</Alert>;

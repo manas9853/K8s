@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button, Tabs, Tab, Collapse,
@@ -11,28 +13,29 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const FW_COLOR: Record<string, string> = {
-  'CIS Benchmark': '#3b82f6',
-  'PCI DSS':       '#d29922',
-  'ISO 27001':     '#a371f7',
-  'GDPR':          '#3fb950',
-  'HIPAA':         '#f8927a',
+  'CIS Benchmark': colors.info,
+  'PCI DSS':       colors.warning,
+  'ISO 27001':     colors.purple,
+  'GDPR':          colors.success,
+  'HIPAA':         colors.danger,
 };
 const PRIORITY_COLOR: Record<string, string> = {
-  high:   '#f85149',
-  medium: '#d29922',
-  low:    '#3fb950',
+  high:   colors.danger,
+  medium: colors.warning,
+  low:    colors.success,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -103,7 +106,7 @@ const RecCard: React.FC<{
   onApply: () => void;
 }> = ({ rec, expanded, applying, done, onExpand, onApply }) => {
   const color = PRIORITY_COLOR[rec.priority] ?? DK.muted;
-  const fwColor = FW_COLOR[rec.framework] ?? '#58a6ff';
+  const fwColor = FW_COLOR[rec.framework] ?? colors.info;
   return (
     <Box sx={{
       bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderLeft: `3px solid ${fwColor}`,
@@ -123,7 +126,7 @@ const RecCard: React.FC<{
         <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
           {done ? (
             <Chip icon={<CheckCircleOutlineIcon />} label="Applied" size="small"
-              sx={{ bgcolor: '#0d1117', color: '#3fb950', border: '1px solid #3fb950', fontSize: '0.68rem' }} />
+              sx={{ bgcolor: colors.background, color: colors.success, border: `1px solid ${colors.success}`, fontSize: '0.68rem' }} />
           ) : (
             <Button size="small" variant="outlined"
               startIcon={applying ? <CircularProgress size={12} /> : <PlayArrowIcon />}
@@ -141,7 +144,7 @@ const RecCard: React.FC<{
       <Collapse in={expanded}>
         <Box sx={{ borderTop: `1px solid ${DK.border}`, p: 2, bgcolor: DK.surface2, borderRadius: '0 0 8px 8px' }}>
           <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mb: 1.25 }}>{rec.description}</Typography>
-          <Box sx={{ bgcolor: '#1a1230', border: `1px solid ${fwColor}33`, borderRadius: 1, p: 1.25, mb: 1 }}>
+          <Box sx={{ bgcolor: colors.purpleBg, border: `1px solid ${fwColor}33`, borderRadius: 1, p: 1.25, mb: 1 }}>
             <Typography sx={{ color: fwColor, fontSize: '0.72rem', fontWeight: 600, mb: 0.25 }}>Compliance Gap</Typography>
             <Typography sx={{ color: DK.muted, fontSize: '0.75rem' }}>{rec.compliance_gap}</Typography>
           </Box>
@@ -158,6 +161,7 @@ const RecCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const ComplianceRecommendations: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<CompliancePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -218,6 +222,8 @@ const ComplianceRecommendations: React.FC = () => {
     return Math.max(0, Math.min(100, 100 - total * 15));
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
       {/* Audit Readiness Header */}
@@ -233,7 +239,7 @@ const ComplianceRecommendations: React.FC = () => {
         </Tooltip>
       </Box>
 
-      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: '#3b82f6' }} /></Box>}
+      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: colors.info }} /></Box>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {!loading && data && (
@@ -246,7 +252,7 @@ const ComplianceRecommendations: React.FC = () => {
               </Typography>
               <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 {frameworks.map(fw => (
-                  <FwScoreRing key={fw} score={fwScore(fw)} label={fw} color={FW_COLOR[fw] ?? '#58a6ff'} />
+                  <FwScoreRing key={fw} score={fwScore(fw)} label={fw} color={FW_COLOR[fw] ?? colors.info} />
                 ))}
                 <Box sx={{ ml: 'auto', textAlign: 'right' }}>
                   <Typography sx={{ color: DK.text, fontSize: '1.25rem', fontWeight: 700 }}>{data.total_recommendations}</Typography>
@@ -263,7 +269,7 @@ const ComplianceRecommendations: React.FC = () => {
                 variant="scrollable" scrollButtons="auto"
                 sx={{ '& .MuiTab-root': { color: DK.muted, textTransform: 'none', fontWeight: 600, minWidth: 120 },
                       '& .Mui-selected': { color: DK.text },
-                      '& .MuiTabs-indicator': { bgcolor: FW_COLOR[activeFramework] ?? '#58a6ff' },
+                      '& .MuiTabs-indicator': { bgcolor: FW_COLOR[activeFramework] ?? colors.info },
                       borderBottom: `1px solid ${DK.border}` }}>
                 {frameworks.map((fw, i) => (
                   <Tab key={fw} label={`${fw} (${data.frameworks[fw] ?? 0})`} />

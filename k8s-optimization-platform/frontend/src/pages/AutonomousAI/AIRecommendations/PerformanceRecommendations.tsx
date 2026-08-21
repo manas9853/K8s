@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useActiveCluster } from '../../../hooks/useActiveCluster';
+import { useCluster } from '../../../contexts/ClusterContext';
+import NoClusterState from '../../../components/NoClusterState';
 import {
   Box, Typography, Chip, CircularProgress,
   IconButton, Tooltip, Snackbar, Alert, Button,
@@ -11,15 +13,16 @@ import StorageIcon from '@mui/icons-material/Storage';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { API_BASE_URL } from '../../../config/api';
+import { colors } from '../../../theme/colors';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const DK = {
-  bg:       '#0d1117',
-  surface:  '#161b22',
-  surface2: '#1c2128',
-  border:   '#30363d',
-  text:     '#e6edf3',
-  muted:    '#8b949e',
+  bg:       colors.background,
+  surface:  colors.surface,
+  surface2: colors.surfaceHover,
+  border:   colors.border,
+  text:     colors.textPrimary,
+  muted:    colors.textSecondary,
 };
 
 const CAT_ICON: Record<string, React.ElementType> = {
@@ -28,16 +31,16 @@ const CAT_ICON: Record<string, React.ElementType> = {
   CAPACITY:   StorageIcon,
 };
 const CAT_COLOR: Record<string, string> = {
-  THROTTLING: '#d29922',
-  STABILITY:  '#f85149',
-  CAPACITY:   '#3b82f6',
+  THROTTLING: colors.warning,
+  STABILITY:  colors.danger,
+  CAPACITY:   colors.info,
 };
 
 const URGENCY_COLOR: Record<string, string> = {
-  critical: '#f85149',
-  high:     '#d29922',
-  medium:   '#3b82f6',
-  low:      '#3fb950',
+  critical: colors.danger,
+  high:     colors.warning,
+  medium:   colors.info,
+  low:      colors.success,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -86,7 +89,7 @@ async function pollCommand(cmdId: number): Promise<{ ok: boolean; errMsg?: strin
 const ScoreRing: React.FC<{ score: number }> = ({ score }) => {
   const r = 42; const c = 2 * Math.PI * r;
   const fill = c - (c * score) / 100;
-  const color = score >= 80 ? '#3fb950' : score >= 60 ? '#d29922' : '#f85149';
+  const color = score >= 80 ? colors.success : score >= 60 ? colors.warning : colors.danger;
   return (
     <svg width={112} height={112} viewBox="0 0 112 112">
       <circle cx={56} cy={56} r={r} fill="none" stroke={DK.border} strokeWidth={8} />
@@ -113,7 +116,7 @@ const RecCard: React.FC<{
       bgcolor: DK.surface, border: `1px solid ${DK.border}`, borderLeft: `3px solid ${catColor}`,
       borderRadius: 2, p: 2, mb: 1.5, display: 'flex', gap: 1.5,
       opacity: done ? 0.45 : 1, transition: 'opacity 0.3s',
-      '&:hover': { borderColor: '#58a6ff66', borderLeftColor: catColor },
+      '&:hover': { borderColor: `${colors.info}66`, borderLeftColor: catColor },
     }}>
       <CatIcon sx={{ fontSize: 18, color: catColor, flexShrink: 0, mt: 0.25 }} />
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -127,7 +130,7 @@ const RecCard: React.FC<{
         <Typography sx={{ color: DK.muted, fontSize: '0.78rem', mb: 0.75 }}>{rec.description}</Typography>
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
           {rec.affected_pod && (
-            <Chip label={rec.affected_pod} size="small" sx={{ bgcolor: DK.surface2, color: '#3b82f6', fontSize: '0.68rem', height: 18, fontFamily: 'monospace' }} />
+            <Chip label={rec.affected_pod} size="small" sx={{ bgcolor: DK.surface2, color: colors.info, fontSize: '0.68rem', height: 18, fontFamily: 'monospace' }} />
           )}
           {rec.namespace && (
             <Chip label={rec.namespace} size="small" sx={{ bgcolor: DK.surface2, color: DK.muted, fontSize: '0.68rem', height: 18 }} />
@@ -137,7 +140,7 @@ const RecCard: React.FC<{
       <Box sx={{ flexShrink: 0, display: 'flex', alignItems: 'flex-start' }}>
         {done ? (
           <Chip icon={<CheckCircleOutlineIcon />} label="Applied" size="small"
-            sx={{ bgcolor: '#0d1117', color: '#3fb950', border: '1px solid #3fb950', fontSize: '0.68rem' }} />
+            sx={{ bgcolor: colors.background, color: colors.success, border: `1px solid ${colors.success}`, fontSize: '0.68rem' }} />
         ) : (
           <Button size="small" variant="outlined"
             startIcon={applying ? <CircularProgress size={12} /> : <PlayArrowIcon />}
@@ -155,6 +158,7 @@ const RecCard: React.FC<{
 // ─── Main component ───────────────────────────────────────────────────────────
 const PerformanceRecommendations: React.FC = () => {
   const { clusterParam, activeClusterName } = useActiveCluster();
+  const { clusters } = useCluster();
   const [data, setData] = useState<PerfPayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -206,6 +210,8 @@ const PerformanceRecommendations: React.FC = () => {
   const recs = data?.recommendations ?? [];
   const categories = [...new Set(recs.map(r => r.category))];
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
       {/* Header */}
@@ -219,7 +225,7 @@ const PerformanceRecommendations: React.FC = () => {
         </Tooltip>
       </Box>
 
-      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: '#3b82f6' }} /></Box>}
+      {loading && <Box sx={{ display: 'flex', justifyContent: 'center', mt: 6 }}><CircularProgress sx={{ color: colors.info }} /></Box>}
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {!loading && data && (
@@ -236,9 +242,9 @@ const PerformanceRecommendations: React.FC = () => {
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, flex: 1 }}>
               {[
                 { label: 'Total Pods', v: data.summary.total_pods },
-                { label: 'OOM Pods', v: data.summary.oom_pods, accent: '#f85149' },
-                { label: 'No CPU Limit', v: data.summary.no_cpu_limit_pods, accent: '#d29922' },
-                { label: 'No Probe', v: data.summary.no_probe_pods, accent: '#d29922' },
+                { label: 'OOM Pods', v: data.summary.oom_pods, accent: colors.danger },
+                { label: 'No CPU Limit', v: data.summary.no_cpu_limit_pods, accent: colors.warning },
+                { label: 'No Probe', v: data.summary.no_probe_pods, accent: colors.warning },
               ].map(({ label, v, accent }) => (
                 <Box key={label} sx={{ bgcolor: DK.surface, border: `1px solid ${accent ? accent + '33' : DK.border}`, borderRadius: 1.5, p: 1.5 }}>
                   <Typography sx={{ color: DK.muted, fontSize: '0.68rem' }}>{label}</Typography>

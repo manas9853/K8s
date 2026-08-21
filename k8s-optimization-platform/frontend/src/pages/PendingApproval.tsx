@@ -3,6 +3,7 @@ import { Box, Typography, Paper, Chip, Button, LinearProgress, Divider } from '@
 import { HourglassTop as HourglassIcon, Block as BlockIcon, CheckCircle as CheckIcon } from '@mui/icons-material';
 import { UserButton, useUser } from '@clerk/clerk-react';
 import { PlatformStatus } from '../hooks/useUserStore';
+import { colors } from '../theme/colors';
 
 interface Props {
   status: PlatformStatus;
@@ -40,7 +41,7 @@ const PendingApproval: React.FC<Props> = ({ status, onRefresh, loading }) => {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f7f8fa',
+        background: colors.surfaceHover,
         p: 2,
       }}
     >
@@ -57,7 +58,7 @@ const PendingApproval: React.FC<Props> = ({ status, onRefresh, loading }) => {
         {/* K8s logo */}
         <Box sx={{ mb: 3 }}>
           <svg width="48" height="48" viewBox="0 0 56 56" style={{ display: 'inline-block' }}>
-            <rect width="56" height="56" rx="12" fill="#3b6fe8" />
+            <rect width="56" height="56" rx="12" fill={colors.info} />
             {[0, 60, 120, 180, 240, 300].map((deg) => {
               const rad = (deg * Math.PI) / 180;
               return (
@@ -101,7 +102,7 @@ const PendingApproval: React.FC<Props> = ({ status, onRefresh, loading }) => {
 
         {/* What happens next */}
         {!isRejected && !isSuspended && (
-          <Paper variant="outlined" sx={{ p: 2, mb: 3, textAlign: 'left', bgcolor: '#fffde7', borderColor: 'warning.light' }}>
+          <Paper variant="outlined" sx={{ p: 2, mb: 3, textAlign: 'left', bgcolor: colors.warningBg, borderColor: 'warning.light' }}>
             <Typography variant="subtitle2" gutterBottom fontWeight={700}>
               What happens next?
             </Typography>

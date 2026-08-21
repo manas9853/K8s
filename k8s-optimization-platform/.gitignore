@@ -25,6 +25,10 @@ frontend/build/
 frontend/.env
 frontend/.env.local
 frontend/.env.production
+/public/
+
+# ── Generated reports ─────────────────────────────────────────────────────────
+/reports/
 
 # ── Logs & runtime ────────────────────────────────────────────────────────────
 *.log

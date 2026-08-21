@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import {
   Container, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Chip, Box, Grid, FormControl, InputLabel, Select,
@@ -52,6 +54,7 @@ interface Summary {
 
 const Pods: React.FC = () => {
   const { clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
   const [pods, setPods] = useState<Pod[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -140,6 +143,8 @@ const Pods: React.FC = () => {
 
   const uniqueClusters = Array.from(new Set(pods.map(p => p.cluster_id)));
   const uniqueNamespaces = Array.from(new Set(pods.map(p => p.namespace)));
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
   if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;

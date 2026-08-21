@@ -10,6 +10,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import ClusterGuard from '../components/ClusterGuard';
 import { API_BASE_URL } from '../config/api';
+import { colors } from '../theme/colors';
 
 interface PolicyException {
   id: number;
@@ -52,23 +53,23 @@ interface PolicyEngineData {
 
 // ── Visual constants ──────────────────────────────────────────────────────────
 const RISK: Record<string, { bg: string; text: string; border: string }> = {
-  critical: { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  high:     { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
-  medium:   { bg: '#0d1f3c', text: '#60a5fa', border: '#1e3a5f' },
-  low:      { bg: '#0d2d1a', text: '#4ade80', border: '#1a4a2a' },
+  critical: { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  high:     { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
+  medium:   { bg: colors.infoBg, text: colors.info, border: colors.info },
+  low:      { bg: colors.successBg, text: colors.success, border: colors.successBg },
 };
 
 const ENF: Record<string, { bg: string; text: string; border: string }> = {
-  enforce: { bg: '#2d1515', text: '#f87171', border: '#4a2020' },
-  audit:   { bg: '#0d1f3c', text: '#60a5fa', border: '#1e3a5f' },
-  warn:    { bg: '#2d200a', text: '#f59e0b', border: '#4a3510' },
+  enforce: { bg: colors.dangerBg, text: colors.danger, border: colors.dangerBg },
+  audit:   { bg: colors.infoBg, text: colors.info, border: colors.info },
+  warn:    { bg: colors.warningBg, text: colors.warning, border: colors.warningBg },
 };
 
 const TYPE_COLOR: Record<string, string> = {
-  Security:   '#f87171',
-  Network:    '#60a5fa',
-  Resource:   '#f59e0b',
-  Compliance: '#4ade80',
+  Security:   colors.danger,
+  Network:    colors.info,
+  Resource:   colors.warning,
+  Compliance: colors.success,
 };
 
 // ── Per-row expanded detail ───────────────────────────────────────────────────
@@ -81,53 +82,53 @@ const PolicyRow: React.FC<{
   const [open, setOpen] = useState(false);
   const risk = RISK[p.risk] || RISK.medium;
   const enf  = ENF[p.enforcement]  || ENF.audit;
-  const typeColor = TYPE_COLOR[p.type] ?? '#8892a4';
+  const typeColor = TYPE_COLOR[p.type] ?? colors.textSecondary;
   const busy = submittingId === p.id;
 
   return (
     <>
       <TableRow
         hover
-        sx={{ '&:hover': { bgcolor: '#232d3f' }, cursor: 'pointer', bgcolor: open ? '#1a2540' : undefined }}
+        sx={{ '&:hover': { bgcolor: colors.surfaceHover }, cursor: 'pointer', bgcolor: open ? colors.infoBg : undefined }}
         onClick={() => setOpen(o => !o)}
       >
-        <TableCell sx={{ borderColor: '#2a3245', pr: 0.5, width: 32 }}>
-          <IconButton size="small" sx={{ color: '#8892a4', p: 0 }}>
+        <TableCell sx={{ borderColor: colors.border, pr: 0.5, width: 32 }}>
+          <IconButton size="small" sx={{ color: colors.textSecondary, p: 0 }}>
             {open ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
           </IconButton>
         </TableCell>
-        <TableCell sx={{ color: '#e8eaf0', fontWeight: 600, fontSize: 13, borderColor: '#2a3245' }}>{p.name}</TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
-          <Chip label={p.type} size="small" sx={{ bgcolor: '#1e2433', color: typeColor, border: `1px solid ${typeColor}33`, fontSize: 10, fontWeight: 700 }} />
+        <TableCell sx={{ color: colors.textPrimary, fontWeight: 600, fontSize: 13, borderColor: colors.border }}>{p.name}</TableCell>
+        <TableCell sx={{ borderColor: colors.border }}>
+          <Chip label={p.type} size="small" sx={{ bgcolor: colors.surface, color: typeColor, border: `1px solid ${typeColor}33`, fontSize: 10, fontWeight: 700 }} />
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={p.enabled ? 'Enabled' : 'Disabled'} size="small"
-            sx={{ bgcolor: p.enabled ? '#0d2d1a' : '#1e2433', color: p.enabled ? '#4ade80' : '#8892a4',
-                  border: `1px solid ${p.enabled ? '#1a4a2a' : '#2a3245'}`, fontSize: 10 }} />
+            sx={{ bgcolor: p.enabled ? colors.successBg : colors.surface, color: p.enabled ? colors.success : colors.textSecondary,
+                  border: `1px solid ${p.enabled ? colors.successBg : colors.border}`, fontSize: 10 }} />
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={p.enforcement.toUpperCase()} size="small"
             sx={{ bgcolor: enf.bg, color: enf.text, border: `1px solid ${enf.border}`, fontSize: 10, fontWeight: 700 }} />
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Chip label={(p.risk || 'medium').toUpperCase()} size="small"
             sx={{ bgcolor: risk.bg, color: risk.text, border: `1px solid ${risk.border}`, fontSize: 10, fontWeight: 700 }} />
         </TableCell>
-        <TableCell align="right" sx={{ color: p.violations > 0 ? '#f87171' : '#4ade80', fontWeight: 700, fontSize: 14, borderColor: '#2a3245' }}>
+        <TableCell align="right" sx={{ color: p.violations > 0 ? colors.danger : colors.success, fontWeight: 700, fontSize: 14, borderColor: colors.border }}>
           {p.violations}
         </TableCell>
-        <TableCell sx={{ borderColor: '#2a3245' }}>
+        <TableCell sx={{ borderColor: colors.border }}>
           <Box display="flex" gap={0.75} onClick={e => e.stopPropagation()}>
             {p.auto_fix_supported && p.violations > 0 ? (
               <Button size="small" variant="contained" disabled={busy} onClick={() => onFix(p)}
-                sx={{ bgcolor: '#1976d2', '&:hover': { bgcolor: '#1565c0' }, fontSize: 10, py: 0.25, minWidth: 48 }}>
+                sx={{ bgcolor: colors.info, '&:hover': { bgcolor: colors.info }, fontSize: 10, py: 0.25, minWidth: 48 }}>
                 {busy ? '…' : 'Fix'}
               </Button>
             ) : (
-              <Chip label="Manual" size="small" sx={{ bgcolor: '#2a3245', color: '#8892a4', fontSize: 10 }} />
+              <Chip label="Manual" size="small" sx={{ bgcolor: colors.border, color: colors.textSecondary, fontSize: 10 }} />
             )}
             <Button size="small" variant="outlined" disabled={busy} onClick={() => onException(p)}
-              sx={{ borderColor: '#7c5cd8', color: '#c084fc', fontSize: 10, py: 0.25 }}>
+              sx={{ borderColor: colors.purple, color: colors.purple, fontSize: 10, py: 0.25 }}>
               {p.exception ? 'Exception ✓' : 'Except'}
             </Button>
           </Box>
@@ -135,34 +136,34 @@ const PolicyRow: React.FC<{
       </TableRow>
 
       {/* Expanded detail row */}
-      <TableRow sx={{ bgcolor: '#131d2e' }}>
+      <TableRow sx={{ bgcolor: colors.surfaceAlt }}>
         <TableCell colSpan={8} sx={{ p: 0, border: 0 }}>
           <Collapse in={open} timeout="auto" unmountOnExit>
             <Box px={3} py={1.5} display="grid" gap={1}>
               <Box display="flex" gap={4} flexWrap="wrap">
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#60a5fa', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.info, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     WHY THIS MATTERS
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 12 }}>{p.why}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 12 }}>{p.why}</Typography>
                 </Box>
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#4ade80', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.success, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     REMEDIATION
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#a5d6a7', fontSize: 12 }}>{p.remediation}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.success, fontSize: 12 }}>{p.remediation}</Typography>
                 </Box>
                 <Box flex={1} minWidth={200}>
-                  <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 700, display: 'block', mb: 0.25 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 700, display: 'block', mb: 0.25 }}>
                     CURRENT STATE
                   </Typography>
-                  <Typography variant="body2" sx={{ color: '#c8d0dc', fontSize: 12 }}>{p.description}</Typography>
+                  <Typography variant="body2" sx={{ color: colors.textMuted, fontSize: 12 }}>{p.description}</Typography>
                   {p.exception && (
-                    <Typography variant="caption" sx={{ color: '#c084fc', display: 'block', mt: 0.5 }}>
+                    <Typography variant="caption" sx={{ color: colors.purple, display: 'block', mt: 0.5 }}>
                       Exception by {p.exception.owner} until {new Date(p.exception.review_date).toLocaleDateString()}
                     </Typography>
                   )}
-                  <Typography variant="caption" sx={{ color: '#57606a', display: 'block', mt: 0.5 }}>
+                  <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mt: 0.5 }}>
                     Last evaluated: {new Date(p.last_evaluated).toLocaleString()}
                   </Typography>
                 </Box>
@@ -266,8 +267,8 @@ const PolicyEngineInner: React.FC = () => {
   };
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
-  if (error)   return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
-  if (!data)   return <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
+  if (error)   return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="error">{error}</Alert></Box>;
+  if (!data)   return <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}><Alert severity="info">No data available</Alert></Box>;
 
   const policies = data.policies || [];
   const violating = policies.filter(p => p.violations > 0 && p.enabled);
@@ -280,16 +281,16 @@ const PolicyEngineInner: React.FC = () => {
   }, {});
 
   return (
-    <Box p={3} sx={{ bgcolor: '#0f1724', minHeight: '100vh', color: '#e8eaf0' }}>
+    <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>
 
       {/* Header */}
       <Box display="flex" alignItems="center" gap={1.5} mb={1}>
-        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: '#1e2433', border: '1px solid #2a3245', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+        <Box sx={{ width: 40, height: 40, borderRadius: 2, bgcolor: colors.surface, border: `1px solid ${colors.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
           ⚙️
         </Box>
         <Box>
-          <Typography variant="h4" fontWeight="bold" sx={{ color: '#e8eaf0' }}>Policy Engine</Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4' }}>
+          <Typography variant="h4" fontWeight="bold" sx={{ color: colors.textPrimary }}>Policy Engine</Typography>
+          <Typography variant="caption" sx={{ color: colors.textSecondary }}>
             v{data.policy_engine_version} · {data.cluster_name || 'Cluster'} · {data.total_pods_scanned || 0} pods, {data.total_containers_scanned || 0} containers · Last sync: {new Date(data.last_sync).toLocaleString()}
           </Typography>
         </Box>
@@ -298,7 +299,7 @@ const PolicyEngineInner: React.FC = () => {
       {actionMessage && (
         <Alert
           severity={actionMessage.toLowerCase().includes('failed') ? 'error' : 'success'}
-          sx={{ mb: 3, mt: 2, bgcolor: '#131d2e', color: '#e8eaf0', border: '1px solid #2a3245' }}
+          sx={{ mb: 3, mt: 2, bgcolor: colors.surfaceAlt, color: colors.textPrimary, border: `1px solid ${colors.border}` }}
           onClose={() => setActionMessage(null)}
         >
           {actionMessage}
@@ -308,17 +309,17 @@ const PolicyEngineInner: React.FC = () => {
       {/* KPI cards */}
       <Grid container spacing={2} sx={{ mb: 3, mt: 2 }}>
         {[
-          { label: 'Total Policies',      value: data.total_policies,       color: '#60a5fa' },
-          { label: 'Enabled',             value: data.enabled_policies,      color: '#4ade80' },
-          { label: 'Disabled',            value: data.disabled_policies,     color: '#8892a4' },
-          { label: 'Policies Violating',  value: violating.length,           color: violating.length > 0 ? '#f87171' : '#4ade80' },
-          { label: 'Total Violations',    value: data.total_violations,      color: data.total_violations > 0 ? '#f87171' : '#4ade80' },
-          { label: 'Auto-fixable',        value: policies.filter(p => p.auto_fix_supported && p.violations > 0).length, color: '#f59e0b' },
+          { label: 'Total Policies',      value: data.total_policies,       color: colors.info },
+          { label: 'Enabled',             value: data.enabled_policies,      color: colors.success },
+          { label: 'Disabled',            value: data.disabled_policies,     color: colors.textSecondary },
+          { label: 'Policies Violating',  value: violating.length,           color: violating.length > 0 ? colors.danger : colors.success },
+          { label: 'Total Violations',    value: data.total_violations,      color: data.total_violations > 0 ? colors.danger : colors.success },
+          { label: 'Auto-fixable',        value: policies.filter(p => p.auto_fix_supported && p.violations > 0).length, color: colors.warning },
         ].map((k) => (
           <Grid item xs={6} sm={4} md={2} key={k.label}>
-            <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+            <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
               <CardContent sx={{ pb: '8px !important' }}>
-                <Typography variant="caption" sx={{ color: '#8892a4', fontWeight: 600 }}>{k.label}</Typography>
+                <Typography variant="caption" sx={{ color: colors.textSecondary, fontWeight: 600 }}>{k.label}</Typography>
                 <Typography variant="h4" fontWeight="bold" sx={{ color: k.color }}>{k.value}</Typography>
               </CardContent>
             </Card>
@@ -327,20 +328,20 @@ const PolicyEngineInner: React.FC = () => {
       </Grid>
 
       {/* Violations by type */}
-      <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mb: 3 }}>
+      <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mb: 3 }}>
         <CardContent>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>Violations by Policy Type</Typography>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>Violations by Policy Type</Typography>
           <Grid container spacing={2}>
             {Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([type, count]) => (
               <Grid item xs={12} sm={6} md={3} key={type}>
                 <Box mb={0.5} display="flex" justifyContent="space-between">
-                  <Typography variant="caption" sx={{ color: TYPE_COLOR[type] ?? '#8892a4', fontWeight: 700 }}>{type}</Typography>
-                  <Typography variant="caption" sx={{ color: count > 0 ? '#f87171' : '#4ade80', fontWeight: 700 }}>{count}</Typography>
+                  <Typography variant="caption" sx={{ color: TYPE_COLOR[type] ?? colors.textSecondary, fontWeight: 700 }}>{type}</Typography>
+                  <Typography variant="caption" sx={{ color: count > 0 ? colors.danger : colors.success, fontWeight: 700 }}>{count}</Typography>
                 </Box>
                 <LinearProgress
                   variant="determinate"
                   value={Math.min((count / Math.max(...Object.values(byType))) * 100, 100)}
-                  sx={{ height: 6, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: TYPE_COLOR[type] ?? '#60a5fa' } }}
+                  sx={{ height: 6, borderRadius: 3, bgcolor: colors.border, '& .MuiLinearProgress-bar': { bgcolor: TYPE_COLOR[type] ?? colors.info } }}
                 />
               </Grid>
             ))}
@@ -349,18 +350,18 @@ const PolicyEngineInner: React.FC = () => {
       </Card>
 
       {/* Policy table */}
-      <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245' }}>
+      <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}` }}>
         <CardContent>
-          <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 1 }}>
+          <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 1 }}>
             All Policies ({data.total_policies})
           </Typography>
-          <Typography variant="caption" sx={{ color: '#8892a4', display: 'block', mb: 2 }}>
+          <Typography variant="caption" sx={{ color: colors.textSecondary, display: 'block', mb: 2 }}>
             Click any row to expand the reason this policy exists, the remediation step, and its current cluster state. Fix queues a direct spec patch through the agent. Exception records why the violation is intentionally accepted.
           </Typography>
           <TableContainer>
             <Table size="small">
               <TableHead>
-                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: '#131d2e', color: '#8892a4', borderColor: '#2a3245', fontSize: 12 } }}>
+                <TableRow sx={{ '& th': { fontWeight: 700, bgcolor: colors.surfaceAlt, color: colors.textSecondary, borderColor: colors.border, fontSize: 12 } }}>
                   <TableCell sx={{ width: 32 }} />
                   <TableCell>Policy</TableCell>
                   <TableCell>Type</TableCell>
@@ -389,22 +390,22 @@ const PolicyEngineInner: React.FC = () => {
 
       {/* Top violations mini-bar */}
       {violating.length > 0 && (
-        <Card sx={{ bgcolor: '#1e2433', border: '1px solid #2a3245', mt: 3 }}>
+        <Card sx={{ bgcolor: colors.surface, border: `1px solid ${colors.border}`, mt: 3 }}>
           <CardContent>
-            <Typography variant="h6" fontWeight="bold" sx={{ color: '#e8eaf0', mb: 2 }}>
+            <Typography variant="h6" fontWeight="bold" sx={{ color: colors.textPrimary, mb: 2 }}>
               Violation Breakdown — Policies with Active Violations
             </Typography>
             <Box display="flex" flexDirection="column" gap={1.25}>
               {[...violating].sort((a, b) => b.violations - a.violations).map(p => (
                 <Box key={p.id}>
                   <Box display="flex" justifyContent="space-between" mb={0.25}>
-                    <Typography variant="caption" sx={{ color: '#c8d0dc', fontWeight: 600, fontSize: 12 }}>{p.name}</Typography>
-                    <Typography variant="caption" sx={{ color: '#f87171', fontWeight: 700, fontSize: 12 }}>{p.violations}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.textMuted, fontWeight: 600, fontSize: 12 }}>{p.name}</Typography>
+                    <Typography variant="caption" sx={{ color: colors.danger, fontWeight: 700, fontSize: 12 }}>{p.violations}</Typography>
                   </Box>
                   <LinearProgress
                     variant="determinate"
                     value={(p.violations / maxViolations) * 100}
-                    sx={{ height: 5, borderRadius: 3, bgcolor: '#2a3245', '& .MuiLinearProgress-bar': { bgcolor: TYPE_COLOR[p.type] ?? '#60a5fa' } }}
+                    sx={{ height: 5, borderRadius: 3, bgcolor: colors.border, '& .MuiLinearProgress-bar': { bgcolor: TYPE_COLOR[p.type] ?? colors.info } }}
                   />
                 </Box>
               ))}
@@ -419,35 +420,35 @@ const PolicyEngineInner: React.FC = () => {
         onClose={() => setExceptionDialogOpen(false)}
         maxWidth="sm"
         fullWidth
-        sx={{ '& .MuiDialog-paper': { bgcolor: '#1e2433', color: '#e8eaf0', border: '1px solid #2a3245', borderRadius: 2 } }}
+        sx={{ '& .MuiDialog-paper': { bgcolor: colors.surface, color: colors.textPrimary, border: `1px solid ${colors.border}`, borderRadius: 2 } }}
       >
-        <DialogTitle sx={{ borderBottom: '1px solid #2a3245' }}>Accept Policy Exception</DialogTitle>
+        <DialogTitle sx={{ borderBottom: `1px solid ${colors.border}` }}>Accept Policy Exception</DialogTitle>
         <DialogContent sx={{ pt: 2, display: 'grid', gap: 2 }}>
-          <Typography variant="body2" sx={{ color: '#8892a4' }}>
+          <Typography variant="body2" sx={{ color: colors.textSecondary }}>
             Record why this policy violation is intentionally accepted and will not be remediated now.
           </Typography>
           <TextField
             label="Policy"
             value={selectedPolicy?.name ?? ''}
             fullWidth disabled
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }}
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }}
           />
           <TextField
             label="Business justification"
             value={exceptionForm.justification}
             onChange={(e) => setExceptionForm(v => ({ ...v, justification: e.target.value }))}
             fullWidth required multiline minRows={3}
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }}
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }}
           />
           <TextField
             label="Owner"
             value={exceptionForm.owner}
             onChange={(e) => setExceptionForm(v => ({ ...v, owner: e.target.value }))}
             fullWidth required
-            InputLabelProps={{ sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }}
+            InputLabelProps={{ sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }}
           />
           <TextField
             label="Review date"
@@ -455,17 +456,17 @@ const PolicyEngineInner: React.FC = () => {
             value={exceptionForm.review_date}
             onChange={(e) => setExceptionForm(v => ({ ...v, review_date: e.target.value }))}
             fullWidth required
-            InputLabelProps={{ shrink: true, sx: { color: '#8892a4' } }}
-            sx={{ '& .MuiOutlinedInput-root': { color: '#e8eaf0', '& fieldset': { borderColor: '#2a3245' } } }}
+            InputLabelProps={{ shrink: true, sx: { color: colors.textSecondary } }}
+            sx={{ '& .MuiOutlinedInput-root': { color: colors.textPrimary, '& fieldset': { borderColor: colors.border } } }}
           />
         </DialogContent>
-        <DialogActions sx={{ borderTop: '1px solid #2a3245', px: 3, py: 2 }}>
-          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: '#8892a4' }}>Cancel</Button>
+        <DialogActions sx={{ borderTop: `1px solid ${colors.border}`, px: 3, py: 2 }}>
+          <Button onClick={() => setExceptionDialogOpen(false)} sx={{ color: colors.textSecondary }}>Cancel</Button>
           <Button
             variant="contained"
             disabled={!exceptionForm.justification || !exceptionForm.owner || !exceptionForm.review_date || !selectedPolicy || submittingId === selectedPolicy?.id}
             onClick={handleSaveException}
-            sx={{ bgcolor: '#7c5cd8', '&:hover': { bgcolor: '#6d4ec7' } }}
+            sx={{ bgcolor: colors.purple, '&:hover': { bgcolor: colors.purple } }}
           >
             Save Exception
           </Button>
