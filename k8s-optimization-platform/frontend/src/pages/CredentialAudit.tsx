@@ -96,6 +96,8 @@ export default function CredentialAudit() {
   }), [creds, search, filterRisk, filterNs]);
 
   // ── Loading ──────────────────────────────────────────────────────────────
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: T.muted, fontSize: 15 }}>Loading credential audit data…</div>
@@ -111,8 +113,6 @@ export default function CredentialAudit() {
   const sc           = scoreColor(score);
   const circumference = 251.3;
   const dash         = (score / 100) * circumference;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', padding: '24px', fontFamily: '-apple-system,"Segoe UI",system-ui,sans-serif', color: T.text, fontSize: 14 }}>

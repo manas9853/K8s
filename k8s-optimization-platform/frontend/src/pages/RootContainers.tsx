@@ -86,6 +86,8 @@ const RootContainers: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return <Box sx={{ width: '100%', mt: 2 }}><LinearProgress /></Box>;
   }
@@ -93,8 +95,6 @@ const RootContainers: React.FC = () => {
   if (!data) {
     return <Alert severity="error">Failed to load root containers data</Alert>;
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>

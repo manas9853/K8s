@@ -238,6 +238,8 @@ const ClusterWaste: React.FC = () => {
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
     textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <CircularProgress sx={{ color: T.green }} />
@@ -253,8 +255,6 @@ const ClusterWaste: React.FC = () => {
   const ov = data?.overview;
   const cpuBreak = ov?.cost_breakdown?.find(b => b.category.includes('CPU'));
   const memBreak = ov?.cost_breakdown?.find(b => b.category.includes('Memory'));
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

@@ -49,6 +49,8 @@ const ExternalExposure: React.FC = () => {
     return () => clearInterval(interval);
   }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Box sx={{ width: '100%', mt: 2 }}><LinearProgress /></Box>;
   if (error) return <Alert severity="error">Failed to load data</Alert>;
 
@@ -57,8 +59,6 @@ const ExternalExposure: React.FC = () => {
   const loadBalancers = services.filter(s => s.type === 'LoadBalancer').length;
   const nodePorts = services.filter(s => s.type === 'NodePort').length;
   const critical = services.filter(s => s.risk_level === 'Critical').length;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ flexGrow: 1, p: 3 }}>

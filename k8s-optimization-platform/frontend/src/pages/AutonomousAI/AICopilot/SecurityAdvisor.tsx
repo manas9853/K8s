@@ -330,6 +330,8 @@ const SecurityAdvisor: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.danger }} />
@@ -348,8 +350,6 @@ const SecurityAdvisor: React.FC = () => {
     const group = issues.filter(i => i.severity === sev);
     if (group.length > 0) grouped[sev] = group;
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

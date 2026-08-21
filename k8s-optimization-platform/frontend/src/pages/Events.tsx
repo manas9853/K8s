@@ -294,6 +294,8 @@ const Events: React.FC = () => {
     bgcolor: T.card,
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <CircularProgress sx={{ color: T.green }} />
@@ -305,8 +307,6 @@ const Events: React.FC = () => {
       <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

@@ -566,6 +566,8 @@ const Services: React.FC = () => {
     );
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -581,8 +583,6 @@ const Services: React.FC = () => {
       </Box>
     );
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>

@@ -148,6 +148,8 @@ const StaleSecrets: React.FC = () => {
   const cellSx = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1 };
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5 };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <CircularProgress sx={{ color: T.green }} />
@@ -159,8 +161,6 @@ const StaleSecrets: React.FC = () => {
       <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

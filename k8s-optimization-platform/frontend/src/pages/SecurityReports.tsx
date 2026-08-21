@@ -1,12 +1,12 @@
 /**
  * Security Reports
  * Pulls real data from /api/v1/security/score and /api/v1/security/alerts.
- * Shows NoClusterBanner when no cluster is attached.
+ * Shows NoClusterState when no cluster is attached.
  */
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
-import NoClusterBanner from '../components/NoClusterBanner';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -87,7 +87,7 @@ const SecurityReports: React.FC = () => {
   };
 
   if (clustersLoading) return <LinearProgress />;
-  if (clusters.length === 0) return <NoClusterBanner dataDescription="security scan and vulnerability data" />;
+  if (clusters.length === 0) return <NoClusterState />;
 
   const sevColor = (s: string): 'error' | 'warning' | 'info' | 'default' =>
     s === 'critical' ? 'error' : s === 'high' ? 'warning' : s === 'medium' ? 'info' : 'default';

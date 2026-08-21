@@ -114,6 +114,8 @@ export default function SecretRotation() {
   }, [secrets]);
 
   // ── Loading / Error ──────────────────────────────────────────────────────────
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: T.muted, fontSize: 15 }}>Loading secret rotation data…</div>
@@ -127,8 +129,6 @@ export default function SecretRotation() {
 
   const score = data.rotation_score ?? 0;
   const col   = scoreColor(score);
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', padding: '24px', fontFamily: '-apple-system,"Segoe UI",system-ui,sans-serif', color: T.text, fontSize: 14 }}>

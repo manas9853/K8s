@@ -14,6 +14,8 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useActiveCluster } from '../hooks/useActiveCluster';
+import { useCluster } from '../contexts/ClusterContext';
+import NoClusterState from '../components/NoClusterState';
 import { API_BASE_URL } from '../config/api';
 import { colors } from '../theme/colors';
 
@@ -100,6 +102,7 @@ interface DiscoveryStatus {
 // ── Main component ─────────────────────────────────────────────────────────────
 const CloudDiscovery: React.FC = () => {
   const { activeClusterId, activeClusterName, clusterParam } = useActiveCluster();
+  const { clusters } = useCluster();
 
   // Current connection state
   const [status,       setStatus]       = useState<DiscoveryStatus | null>(null);
@@ -227,6 +230,8 @@ const CloudDiscovery: React.FC = () => {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
+
+  if (clusters.length === 0) return <NoClusterState />;
 
   // ── No cluster selected ─────────────────────────────────────────────────────
   if (!activeClusterId || activeClusterId === 'all') {

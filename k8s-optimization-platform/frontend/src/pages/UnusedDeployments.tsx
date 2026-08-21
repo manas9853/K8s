@@ -349,6 +349,8 @@ const UnusedDeployments: React.FC = () => {
       return matchSearch && matchNs && matchRisk;
     }), [deployments, search, nsFilter, riskFilter]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center',
@@ -357,8 +359,6 @@ const UnusedDeployments: React.FC = () => {
       </Box>
     );
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3, bgcolor: T.bg, minHeight: '100vh' }}>

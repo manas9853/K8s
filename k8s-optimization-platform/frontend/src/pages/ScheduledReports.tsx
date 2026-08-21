@@ -2,12 +2,12 @@
  * Scheduled Reports
  * Pulls real scheduled report configs from /api/v1/reports/list.
  * Shows schedule metadata derived from real report history.
- * Shows NoClusterBanner when no cluster is attached.
+ * Shows NoClusterState when no cluster is attached.
  */
 import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../hooks/useActiveCluster';
 import { useCluster } from '../contexts/ClusterContext';
-import NoClusterBanner from '../components/NoClusterBanner';
+import NoClusterState from '../components/NoClusterState';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -86,7 +86,7 @@ const ScheduledReports: React.FC = () => {
   };
 
   if (clustersLoading) return <LinearProgress />;
-  if (clusters.length === 0) return <NoClusterBanner dataDescription="scheduled report history" />;
+  if (clusters.length === 0) return <NoClusterState />;
 
   const activeCount = schedules.filter((s) => s.status === 'Active').length;
   const weeklyCount = schedules.filter((s) => s.frequency === 'Weekly').length;

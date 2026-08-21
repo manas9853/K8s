@@ -122,6 +122,8 @@ const AssistedMode: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.info }} />
@@ -135,8 +137,6 @@ const AssistedMode: React.FC = () => {
   // Group rules by category
   const grouped: Record<string, Rule[]> = {};
   rules.forEach(r => { (grouped[r.category] ??= []).push(r); });
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

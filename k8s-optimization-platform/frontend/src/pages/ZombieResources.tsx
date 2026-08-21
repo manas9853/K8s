@@ -136,6 +136,8 @@ const ZombieResources: React.FC = () => {
     { label: 'High Risk',         value: summary.high_risk,         color: T.red },
   ] : [];
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400, bgcolor: T.bg }}>
@@ -151,8 +153,6 @@ const ZombieResources: React.FC = () => {
       </Box>
     );
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3, bgcolor: T.bg, minHeight: '100vh' }}>

@@ -333,6 +333,8 @@ const IncidentInvestigator: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.danger }} />
@@ -341,8 +343,6 @@ const IncidentInvestigator: React.FC = () => {
 
   const incidents = payload?.incidents ?? [];
   const sev       = payload?.severity_breakdown ?? {};
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

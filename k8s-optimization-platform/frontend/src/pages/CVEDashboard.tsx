@@ -129,6 +129,8 @@ const CVEDashboard: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: T.bg }}>
       <CircularProgress size={48} sx={{ color: T.accent }} />
@@ -156,8 +158,6 @@ const CVEDashboard: React.FC = () => {
   const topFindings = [...data.cves]
     .filter(c => c.severity === 'high' || c.severity === 'critical')
     .slice(0, 4);
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3, color: T.text }}>

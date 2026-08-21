@@ -119,6 +119,8 @@ const ResourceAllocation: React.FC = () => {
     }).format(amount);
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -128,8 +130,6 @@ const ResourceAllocation: React.FC = () => {
   }
 
   const metrics = calculateMetrics();
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box>

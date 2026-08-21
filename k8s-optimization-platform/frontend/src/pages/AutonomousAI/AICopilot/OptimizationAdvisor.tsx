@@ -198,13 +198,13 @@ const OptimizationAdvisor: React.FC = () => {
     .reduce((s, r) => s + r.savings, 0);
 
   // ── Loading ───────────────────────────────────────────────────────────────
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.info }} />
     </Box>
   );
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

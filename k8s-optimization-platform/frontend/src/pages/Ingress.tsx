@@ -101,11 +101,11 @@ const Ingress: React.FC = () => {
   const withClass = ingresses.filter(i => i.ingress_class).length;
   const withAddr  = ingresses.filter(i => i.address).length;
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (clustersLoading) {
     return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

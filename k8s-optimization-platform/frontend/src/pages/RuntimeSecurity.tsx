@@ -62,6 +62,8 @@ const RuntimeSecurity: React.FC = () => {
     finally { setLoading(false); }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
       <CircularProgress size={48} sx={{ color: colors.info }} />
@@ -90,8 +92,6 @@ const RuntimeSecurity: React.FC = () => {
   });
 
   const criticalThreats = threats.filter(t => t.severity === 'critical');
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

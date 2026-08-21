@@ -106,6 +106,8 @@ const Traces: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
       <CircularProgress />
@@ -136,8 +138,6 @@ const Traces: React.FC = () => {
   const totalRestarts = data.services.reduce((a, s) => a + s.total_restarts, 0);
 
   const topLatency = Math.max(...services.slice(0, 8).map(s => s.p99_latency_ms), 1);
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3}>

@@ -79,6 +79,8 @@ const AutoRemediation: React.FC = () => {
     return () => { mounted = false; clearInterval(id); };
   }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
       <CircularProgress />
@@ -93,8 +95,6 @@ const AutoRemediation: React.FC = () => {
   const successRate = data.success_rate ?? 0;
   const successColor = successRate >= 80 ? colors.success : successRate >= 50 ? colors.warning : colors.danger;
   const r = 54, circ = 2 * Math.PI * r, dash = (Math.min(successRate, 100) / 100) * circ;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

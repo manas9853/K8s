@@ -257,6 +257,8 @@ const AutoFix: React.FC = () => {
   const uniqueNamespaces = Array.from(new Set(actions.map(a => a.namespace)));
   const uniqueTypes = Array.from(new Set(actions.map(a => a.fix_type)));
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading && actions.length === 0) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -264,8 +266,6 @@ const AutoFix: React.FC = () => {
       </Box>
     );
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box>

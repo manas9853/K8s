@@ -280,6 +280,8 @@ const PatchRecommendations: React.FC = () => {
     fetch();
   }, [clusterParam]); // eslint-disable-line
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center"
       minHeight="60vh" gap={2} sx={{ bgcolor:T.bg }}>
@@ -303,8 +305,6 @@ const PatchRecommendations: React.FC = () => {
     const matchSev = !sevFilter || r.severity === sevFilter;
     return matchText && matchSev;
   });
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor:T.bg, minHeight:'100vh', p:3, color:T.text }}>

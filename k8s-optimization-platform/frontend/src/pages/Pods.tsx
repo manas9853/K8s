@@ -144,10 +144,10 @@ const Pods: React.FC = () => {
   const uniqueClusters = Array.from(new Set(pods.map(p => p.cluster_id)));
   const uniqueNamespaces = Array.from(new Set(pods.map(p => p.namespace)));
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
   if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>

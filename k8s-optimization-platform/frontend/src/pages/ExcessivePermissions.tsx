@@ -66,6 +66,8 @@ const ExcessivePermissions: React.FC = () => {
     return () => { mounted = false; clearInterval(id); };
   }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
       <CircularProgress />
@@ -86,8 +88,6 @@ const ExcessivePermissions: React.FC = () => {
     { label: 'High Risk',     count: data.high_risk    ?? 0, color: colors.warning },
     { label: 'Medium Risk',   count: data.medium_risk  ?? 0, color: colors.info },
   ];
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

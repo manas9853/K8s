@@ -102,6 +102,8 @@ export default function ImageTrust() {
     [images]
   );
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: T.muted, fontSize: 15 }}>Loading image trust data…</div>
@@ -121,8 +123,6 @@ export default function ImageTrust() {
   const unknownCount   = data.unknown_trust      ?? images.filter((i: any) => i.trust_level === 'unknown').length;
 
   const scoreDeg = (score / 100) * 251;  // arc length for SVG ring (r=40, circumference≈251)
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', padding: '24px', fontFamily: '-apple-system,"Segoe UI",system-ui,sans-serif', color: T.text, fontSize: 14 }}>

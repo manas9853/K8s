@@ -132,6 +132,8 @@ const CPURightsizing: React.FC = () => {
     }).format(amount);
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -141,8 +143,6 @@ const CPURightsizing: React.FC = () => {
   }
 
   const totals = calculateTotals();
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box>

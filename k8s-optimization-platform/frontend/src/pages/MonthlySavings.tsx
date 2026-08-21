@@ -77,14 +77,14 @@ const MonthlySavings: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
   if (error)   return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
   if (!data)   return null;
 
   // Build top opportunities from savings_by_application (already sorted by savings)
   const topOpps = data.savings_by_application.slice(0, 10);
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>

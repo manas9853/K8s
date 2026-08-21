@@ -48,14 +48,14 @@ const CostManagement: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px"><CircularProgress /></Box>;
   if (error) return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
   if (!data) return null;
 
   const bs = data.budget_status;
   const budgetPct = bs ? Math.min(Math.round(bs.utilization_percentage), 100) : 0;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

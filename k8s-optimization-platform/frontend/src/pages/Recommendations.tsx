@@ -371,10 +371,10 @@ const Recommendations: React.FC = () => {
   const totalSavings = filteredRecommendations.reduce((sum, r) => sum + r.estimated_monthly_savings, 0);
   const savingsOpportunities = filteredRecommendations.filter(r => r.estimated_monthly_savings > 0).length;
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
   if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>

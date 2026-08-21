@@ -126,6 +126,8 @@ const AutonomousMode: React.FC = () => {
     }
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.info }} />
@@ -135,8 +137,6 @@ const AutonomousMode: React.FC = () => {
   const cs = payload?.cluster_summary;
   const glowColor = enabled ? colors.success : DK.border;
   const activities = payload?.recent_activities ?? [];
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

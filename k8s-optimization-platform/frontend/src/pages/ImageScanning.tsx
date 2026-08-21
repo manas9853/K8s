@@ -342,6 +342,8 @@ const ImageScanning: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [clusterParam]); // eslint-disable-line
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" flexDirection="column" justifyContent="center" alignItems="center"
       minHeight="60vh" gap={2} sx={{ bgcolor:T.bg }}>
@@ -375,8 +377,6 @@ const ImageScanning: React.FC = () => {
   const bandCounts = images.reduce((acc, img) => {
     acc[img.risk_level] = (acc[img.risk_level] ?? 0) + 1; return acc;
   }, {} as Record<string,number>);
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor:T.bg, minHeight:'100vh', p:3, color:T.text }}>

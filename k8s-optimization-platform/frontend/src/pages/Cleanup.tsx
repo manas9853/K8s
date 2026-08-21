@@ -121,14 +121,14 @@ const Cleanup: React.FC = () => {
     return colors[type] || 'default';
   };
 
+  if (registeredClusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4, display: 'flex', justifyContent: 'center', minHeight: '400px', alignItems: 'center' }}><CircularProgress /></Container>;
   if (error) return <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}><Alert severity="error">{error}</Alert></Container>;
   if (!data) return null;
 
   const clusters = Object.keys(data.summary.resources_by_cluster);
   const resourceTypes = Object.keys(data.summary.resources_by_type);
-
-  if (registeredClusters.length === 0) return <NoClusterState />;
 
   return (
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>

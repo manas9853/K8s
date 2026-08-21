@@ -139,6 +139,8 @@ export default function CertificateManagement() {
       .sort((a, b) => b.count - a.count);
   }, [certs]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <div style={{ background: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ color: T.muted, fontSize: 15 }}>Loading certificate data…</div>
@@ -152,8 +154,6 @@ export default function CertificateManagement() {
 
   const score     = data.certificate_score ?? 0;
   const scoreDeg  = (score / 100) * 251.3;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <div style={{ background: T.bg, minHeight: '100vh', padding: '24px', fontFamily: '-apple-system,"Segoe UI",system-ui,sans-serif', color: T.text, fontSize: 14 }}>

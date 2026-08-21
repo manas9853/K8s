@@ -94,6 +94,8 @@ const EastWestTraffic: React.FC = () => {
     };
   }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
@@ -125,8 +127,6 @@ const EastWestTraffic: React.FC = () => {
   const radius = 54;
   const circumference = 2 * Math.PI * radius;
   const dash = (Math.min(score, 100) / 100) * circumference;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

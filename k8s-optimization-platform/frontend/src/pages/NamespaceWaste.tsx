@@ -123,6 +123,8 @@ const NamespaceWaste: React.FC = () => {
   const headSx = { color: T.muted, borderBottom: `1px solid ${T.border}`, fontSize: 11,
     textTransform: 'uppercase' as const, letterSpacing: 0.8, fontWeight: 600, py: 1.5, bgcolor: colors.surfaceAlt };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <CircularProgress sx={{ color: T.green }} />
@@ -133,8 +135,6 @@ const NamespaceWaste: React.FC = () => {
       <Alert severity="error" sx={{ bgcolor: colors.dangerBg, color: T.red, border: `1px solid ${T.red}` }}>{error}</Alert>
     </Box>
   );
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: T.bg, minHeight: '100vh', p: 3 }}>

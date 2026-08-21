@@ -211,6 +211,8 @@ const ResourceFixes: React.FC = () => {
 
   const toggleSelect = (id: string) => setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.info }} />
@@ -221,8 +223,6 @@ const ResourceFixes: React.FC = () => {
   const CATS    = ['CPU_WASTE', 'MEMORY_WASTE', 'STORAGE_WASTE'];
   const grouped = CATS.reduce((acc, cat) => ({ ...acc, [cat]: fixes.filter(f => f.category === cat) }), {} as Record<string, Fix[]>);
   const selSavings = fixes.filter(f => selected.has(f.fix_id)).reduce((s, f) => s + f.savings, 0);
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

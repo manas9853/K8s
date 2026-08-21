@@ -75,6 +75,8 @@ const SavingsTrends: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
   if (error)   return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
   if (!data)   return null;
@@ -100,8 +102,6 @@ const SavingsTrends: React.FC = () => {
 
   const trendColor = direction === 'increasing' ? colors.success : direction === 'decreasing' ? colors.danger : colors.textPrimary;
   const TrendIcon  = direction === 'increasing' ? TrendingUp : direction === 'decreasing' ? TrendingDown : ShowChart;
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>

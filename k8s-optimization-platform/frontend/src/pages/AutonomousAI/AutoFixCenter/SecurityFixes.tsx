@@ -186,6 +186,8 @@ const SecurityFixes: React.FC = () => {
     for (const fix of payload.fixes.filter(f => f.severity === 'critical' && !fixedIds.has(f.fix_id))) await applyFix(fix);
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.danger }} />
@@ -196,8 +198,6 @@ const SecurityFixes: React.FC = () => {
   const grouped: Record<string, SecFix[]> = {};
   ['critical', 'high', 'medium'].forEach(s => { const g = fixes.filter(f => f.severity === s); if (g.length) grouped[s] = g; });
   const criticalUnfixed = fixes.filter(f => f.severity === 'critical' && !fixedIds.has(f.fix_id));
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

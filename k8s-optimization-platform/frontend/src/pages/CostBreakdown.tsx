@@ -97,14 +97,14 @@ const CostBreakdown: React.FC = () => {
 
   useEffect(() => { fetchData(); }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh"><CircularProgress /></Box>;
   if (error)   return <Box p={3}><Alert severity="error">{error}</Alert></Box>;
   if (!data)   return null;
 
   const pieData = data.cost_breakdown.map(b => ({ name: b.category, value: Math.max(b.current_cost, 0) }));
   const tooltipStyle = { backgroundColor: colors.surface, border: `1px solid ${colors.border}`, color: colors.textPrimary };
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh' }}>

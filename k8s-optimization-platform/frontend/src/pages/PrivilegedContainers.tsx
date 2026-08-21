@@ -50,6 +50,8 @@ const PrivilegedContainers: React.FC = () => {
     return () => clearInterval(i);
   }, [clusterParam]);
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box display="flex" justifyContent="center" alignItems="center" minHeight="60vh" sx={{ bgcolor: colors.background }}>
       <CircularProgress size={48} sx={{ color: colors.info }} />
@@ -93,8 +95,6 @@ const PrivilegedContainers: React.FC = () => {
     { label: 'With Host PID/Net', count: allContainers.filter(c => c.host_network || c.host_pid || c.host_ipc).length, color: colors.warning, bg: colors.warningBg },
     { label: 'Total Containers',  count: data.total_containers ?? 0,                     color: colors.info, bg: colors.infoBg },
   ];
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box p={3} sx={{ bgcolor: colors.background, minHeight: '100vh', color: colors.textPrimary }}>

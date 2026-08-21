@@ -273,6 +273,8 @@ const Rollback: React.FC = () => {
   const uniqueNamespaces = Array.from(new Set(changes.map(c => c.namespace)));
   const uniqueUsers = Array.from(new Set(changes.map(c => c.user)));
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
@@ -280,8 +282,6 @@ const Rollback: React.FC = () => {
       </Box>
     );
   }
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ p: 3 }}>

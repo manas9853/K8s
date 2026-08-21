@@ -158,6 +158,8 @@ const BulkFixes: React.FC = () => {
     setRunning(false);
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.info }} />
@@ -169,8 +171,6 @@ const BulkFixes: React.FC = () => {
   const selOps = ops.filter(o => selected.has(o.operation_id));
   const selSavings = selOps.reduce((s, o) => s + o.total_savings, 0);
   const selResources = selOps.reduce((s, o) => s + o.affected_resources, 0);
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>

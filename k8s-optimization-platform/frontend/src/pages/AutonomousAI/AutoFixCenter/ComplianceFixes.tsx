@@ -137,6 +137,8 @@ const ComplianceFixes: React.FC = () => {
     for (const fix of fixes) await applyFix(fix);
   };
 
+  if (clusters.length === 0) return <NoClusterState />;
+
   if (loading) return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
       <CircularProgress sx={{ color: colors.info }} />
@@ -151,8 +153,6 @@ const ComplianceFixes: React.FC = () => {
   const fwScore  = fwFixes.length > 0 ? Math.round((fwFixed / fwFixes.length) * 100) : 100;
   const fwColor  = FW_COLOR[activeFw] ?? colors.info;
   const fwUnfixed = fwFixes.filter(f => !fixedIds.has(f.fix_id));
-
-  if (clusters.length === 0) return <NoClusterState />;
 
   return (
     <Box sx={{ bgcolor: DK.bg, minHeight: '100vh', p: 3 }}>
