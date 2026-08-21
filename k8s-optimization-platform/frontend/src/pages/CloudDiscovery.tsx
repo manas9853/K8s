@@ -47,6 +47,7 @@ const PROVIDERS = [
   {
     id: 'AWS',
     label: 'AWS',
+    comingSoon: true,
     logo: '🟡',
     placeholder_key: 'AKIAIOSFODNN7EXAMPLE',
     placeholder_account: '123456789012',
@@ -59,6 +60,7 @@ const PROVIDERS = [
   {
     id: 'GCP',
     label: 'GCP',
+    comingSoon: true,
     logo: '🔴',
     placeholder_key: '{"type":"service_account","project_id":"..."}',
     placeholder_account: 'my-gcp-project-id',
@@ -71,6 +73,7 @@ const PROVIDERS = [
   {
     id: 'Azure',
     label: 'Azure',
+    comingSoon: true,
     logo: '🔷',
     placeholder_key: 'client_secret_xxxxxxxxxxxxxxxx',
     placeholder_account: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
@@ -419,13 +422,16 @@ const CloudDiscovery: React.FC = () => {
                       {PROVIDERS.map(p => (
                         <Grid item xs={6} key={p.id}>
                           <Paper
-                            onClick={() => setProvider(p.id)}
+                            onClick={() => !p.comingSoon && setProvider(p.id)}
                             sx={{
-                              p: 1.75, cursor: 'pointer', textAlign: 'center',
+                              position: 'relative',
+                              p: 1.75, textAlign: 'center',
+                              cursor: p.comingSoon ? 'not-allowed' : 'pointer',
+                              opacity: p.comingSoon ? 0.5 : 1,
                               bgcolor: provider === p.id ? `${ACCENT}15` : DK.surface2,
                               border: `1px solid ${provider === p.id ? ACCENT : DK.border}`,
                               borderRadius: 1.5,
-                              '&:hover': { borderColor: ACCENT, bgcolor: `${ACCENT}08` },
+                              '&:hover': p.comingSoon ? {} : { borderColor: ACCENT, bgcolor: `${ACCENT}08` },
                               transition: 'all 0.15s',
                             }}
                           >
@@ -433,6 +439,11 @@ const CloudDiscovery: React.FC = () => {
                             <Typography sx={{ color: provider === p.id ? ACCENT : DK.text, fontSize: '0.82rem', fontWeight: 600 }}>
                               {p.label}
                             </Typography>
+                            {p.comingSoon && (
+                              <Typography sx={{ color: DK.muted, fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', mt: 0.25 }}>
+                                Coming soon
+                              </Typography>
+                            )}
                           </Paper>
                         </Grid>
                       ))}

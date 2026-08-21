@@ -35,6 +35,8 @@ from typing import Any, Dict, List, Optional, Tuple
 import requests
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from cryptography import x509
+from cryptography.hazmat.backends import default_backend
 
 # ── silence noisy SSL warnings when verify=False is used ──────────────────────
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -152,6 +154,27 @@ def _ts(obj) -> Optional[str]:
         return str(obj)
     except Exception:
         return None
+
+
+def _parse_tls_cert(cert_b64: Optional[str]) -> Optional[Dict[str, Any]]:
+    """
+    Parse the PUBLIC certificate (tls.crt) of a kubernetes.io/tls secret to get
+    its real expiry/issuer/subject — never touches tls.key (the private key).
+    tls.crt is not sensitive: it's broadcast in every TLS handshake anyway.
+    """
+    if not cert_b64:
+        return None
+    try:
+        import base64
+        cert = x509.load_pem_x509_certificate(base64.b64decode(cert_b64), default_backend())
+        return {
+            "real_expiry":  cert.not_valid_after_utc.isoformat(),
+            "real_issued":  cert.not_valid_before_utc.isoformat(),
+            "real_issuer":  cert.issuer.rfc4514_string(),
+            "real_subject": cert.subject.rfc4514_string(),
+        }
+    except Exception as e:
+        return {"parse_error": str(e)}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1805,6 +1828,10 @@ class ClusterAgent:
                 "is_referenced": is_referenced,
                 "is_system":     is_system,
             }
+            if stype == "kubernetes.io/tls" and s.data:
+                cert_info = _parse_tls_cert(s.data.get("tls.crt"))
+                if cert_info:
+                    rec.update(cert_info)
             items.append(rec)
             if not is_referenced and not is_system:
                 stale.append(rec)

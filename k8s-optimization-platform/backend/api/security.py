@@ -2225,7 +2225,14 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
             data_keys = s.get("data_keys") or []
             is_ref    = s.get("is_referenced", False)
 
-            # Parse issuance date
+            # Agent >= this change parses the real cert (tls.crt) and ships
+            # real_expiry/real_issued/real_issuer/real_subject. Older agents
+            # (or unparseable certs) don't have these — fall back to the
+            # heuristic estimate from secret name + creation date.
+            real_expiry = s.get("real_expiry")
+            real_issued = s.get("real_issued")
+            is_real     = bool(real_expiry)
+
             issued_dt = None
             age_days  = 0
             if created:
@@ -2235,10 +2242,16 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
                 except Exception:
                     pass
 
-            validity_days     = _cert_validity(name)
-            days_until_expiry = validity_days - age_days
-            issued_iso  = issued_dt.isoformat() if issued_dt else now.isoformat()
-            expiry_iso  = (issued_dt + timedelta(days=validity_days)).isoformat() if issued_dt else (now + timedelta(days=validity_days)).isoformat()
+            if is_real:
+                expiry_dt          = datetime.fromisoformat(real_expiry.replace("Z", "+00:00"))
+                days_until_expiry  = (expiry_dt - now).days
+                issued_iso         = real_issued or (issued_dt.isoformat() if issued_dt else now.isoformat())
+                expiry_iso         = real_expiry
+            else:
+                validity_days      = _cert_validity(name)
+                days_until_expiry  = validity_days - age_days
+                issued_iso         = issued_dt.isoformat() if issued_dt else now.isoformat()
+                expiry_iso         = (issued_dt + timedelta(days=validity_days)).isoformat() if issued_dt else (now + timedelta(days=validity_days)).isoformat()
 
             if days_until_expiry < 0:
                 status   = "expired"
@@ -2266,14 +2279,15 @@ async def get_certificate_management(cluster_id: Optional[str] = None):
                 "name":              name,
                 "namespace":         ns,
                 "type":              _cert_type(name, data_keys),
-                "issuer":            _infer_issuer(name, ns, data_keys),
-                "subject":           f"*.{ns}.svc.cluster.local",
+                "issuer":            s.get("real_issuer") or _infer_issuer(name, ns, data_keys),
+                "subject":           s.get("real_subject") or f"*.{ns}.svc.cluster.local",
                 "issued_date":       issued_iso,
                 "expiry_date":       expiry_iso,
                 "days_until_expiry": days_until_expiry,
                 "age_days":          age_days,
                 "status":            status,
                 "severity":          severity,
+                "accuracy":          "real" if is_real else "estimated",
                 "auto_renewal":      "packageserver" in name or "rabbitmq.com" in name,
                 "is_referenced":     is_ref,
                 "data_keys":         data_keys,

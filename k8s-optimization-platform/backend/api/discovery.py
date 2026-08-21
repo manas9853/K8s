@@ -296,18 +296,14 @@ async def _validate_credentials(provider: str, api_key: str, account_id: str) ->
                     return False, f"IBM account lookup failed (HTTP {acct_resp.status_code})"
             return True, ""
 
-        elif provider == "AWS":
-            # Minimal STS call — no extra permissions required
-            import hmac, hashlib, urllib.parse
-            # Stubbed: real implementation requires SigV4 signing
-            # TODO: call sts:GetCallerIdentity via boto3 or hand-rolled SigV4
-            logger.info("AWS credential validation stubbed — returning True")
-            return True, ""
-
-        elif provider in ("GCP", "Azure"):
-            # Stubbed until SDK integration is added
-            logger.info(f"{provider} credential validation stubbed — returning True")
-            return True, ""
+        elif provider in ("AWS", "GCP", "Azure"):
+            # Not implemented yet — tell the truth instead of returning True and
+            # silently syncing zero-cost data that looks like a valid empty result.
+            return False, (
+                f"{provider} billing integration isn't available yet — "
+                "IBM Cloud is the only provider live today. Contact us if you'd "
+                "like to be notified when it ships."
+            )
 
         else:
             return False, f"Unsupported provider '{provider}'"
@@ -337,18 +333,10 @@ async def _sync_billing(
 
     if provider == "IBM Cloud":
         data = await _sync_ibm_billing(api_key_enc, account_id, cluster_tag, billing_month)
-    elif provider == "AWS":
-        # TODO: implement via boto3 Cost Explorer
-        logger.info(f"AWS billing sync stubbed for {cluster_name}")
-        data = {"total_cost": 0, "compute_cost": 0, "storage_cost": 0, "control_plane": 0, "line_items": []}
-    elif provider == "GCP":
-        # TODO: implement via BigQuery billing export
-        logger.info(f"GCP billing sync stubbed for {cluster_name}")
-        data = {"total_cost": 0, "compute_cost": 0, "storage_cost": 0, "control_plane": 0, "line_items": []}
-    elif provider == "Azure":
-        # TODO: implement via Azure Cost Management REST API
-        logger.info(f"Azure billing sync stubbed for {cluster_name}")
-        data = {"total_cost": 0, "compute_cost": 0, "storage_cost": 0, "control_plane": 0, "line_items": []}
+    elif provider in ("AWS", "GCP", "Azure"):
+        # Should be unreachable — _validate_credentials rejects these providers
+        # before a config row can ever be created. Fail loudly if that changes.
+        raise ValueError(f"{provider} billing sync is not implemented yet")
     else:
         raise ValueError(f"Unsupported provider '{provider}'")
 
