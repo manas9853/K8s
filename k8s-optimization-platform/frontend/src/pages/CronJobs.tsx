@@ -528,7 +528,7 @@ const CronJobs: React.FC = () => {
   };
 
   const handleAutoFix = (cronJob: CronJob, issue: string) => {
-    navigate(`/recommendations?resource=${encodeURIComponent(cronJob.name)}&namespace=${encodeURIComponent(cronJob.namespace)}&issue=${encodeURIComponent(issue)}`);
+    navigate(`/optimization/recommendations?resource=${encodeURIComponent(cronJob.name)}&namespace=${encodeURIComponent(cronJob.namespace)}&issue=${encodeURIComponent(issue)}`);
   };
 
   const filteredCronJobs = cronJobs.filter(cronJob =>

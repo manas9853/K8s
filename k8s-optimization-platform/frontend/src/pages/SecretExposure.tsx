@@ -334,7 +334,7 @@ const SecretExposureInner: React.FC = () => {
                     size="small"
                     variant="contained"
                     startIcon={<RotateIcon />}
-                    onClick={() => navigate('/secret-rotation')}
+                    onClick={() => navigate('/security/secrets-security/secret-rotation')}
                     sx={{ fontSize: 11, bgcolor: colors.info, '&:hover': { bgcolor: colors.info } }}
                   >
                     Rotate Secrets
@@ -356,7 +356,7 @@ const SecretExposureInner: React.FC = () => {
               Expand a row to see the real detection reason, backend recommendation, and remediation steps generated from the live scan.
             </Typography>
           </Box>
-          <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/secret-rotation')} sx={{ color: colors.info }}>
+          <Button size="small" endIcon={<ArrowIcon />} onClick={() => navigate('/security/secrets-security/secret-rotation')} sx={{ color: colors.info }}>
             Rotation Schedule
           </Button>
         </Box>

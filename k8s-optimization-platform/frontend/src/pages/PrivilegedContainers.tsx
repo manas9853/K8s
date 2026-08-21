@@ -163,7 +163,7 @@ const PrivilegedContainers: React.FC = () => {
             ))}
           </Grid>
           <Box mt={2} display="flex" gap={1}>
-            <Button variant="contained" onClick={() => navigate('/auto-remediation-security')}
+            <Button variant="contained" onClick={() => navigate('/security/security-drift-detection/auto-remediation-security')}
               sx={{ bgcolor: colors.danger, '&:hover': { bgcolor: colors.danger } }}>
               Remediate Critical ({criticals.length})
             </Button>
@@ -322,7 +322,7 @@ const PrivilegedContainers: React.FC = () => {
                     })}
                     <TableCell sx={{ borderColor: colors.border }}>
                       <Button size="small" variant="contained"
-                        onClick={() => navigate('/auto-remediation-security')}
+                        onClick={() => navigate('/security/security-drift-detection/auto-remediation-security')}
                         sx={{ fontSize: 10, py: 0.5, bgcolor: risk === 'critical' ? colors.danger : colors.warning,
                           '&:hover': { bgcolor: risk === 'critical' ? colors.danger : colors.warning } }}>
                         Fix
@@ -343,15 +343,15 @@ const PrivilegedContainers: React.FC = () => {
 
       {/* Footer actions */}
       <Box display="flex" gap={1} mt={3}>
-        <Button variant="contained" onClick={() => navigate('/auto-remediation-security')}
+        <Button variant="contained" onClick={() => navigate('/security/security-drift-detection/auto-remediation-security')}
           sx={{ bgcolor: colors.danger, '&:hover': { bgcolor: colors.danger } }}>
           Fix All ({allContainers.length})
         </Button>
-        <Button variant="outlined" onClick={() => navigate('/root-containers')}
+        <Button variant="outlined" onClick={() => navigate('/security/container-security/root-containers')}
           sx={{ borderColor: colors.info, color: colors.info }}>
           View Root Containers
         </Button>
-        <Button variant="outlined" onClick={() => navigate('/runtime-security')}
+        <Button variant="outlined" onClick={() => navigate('/security/container-security/runtime-security')}
           sx={{ borderColor: colors.textSecondary, color: colors.textSecondary }}>
           Runtime Security
         </Button>

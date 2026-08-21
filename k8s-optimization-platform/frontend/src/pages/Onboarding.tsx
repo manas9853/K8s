@@ -75,7 +75,7 @@ const Onboarding: React.FC = () => {
         org_id,
       });
       // Org founder → auto-approved admin → go straight to cluster onboarding
-      navigate('/cluster-onboarding', { replace: true });
+      navigate('/admin/cluster-onboarding', { replace: true });
     } catch (err: any) {
       setError(err?.response?.data?.detail ?? err?.message ?? 'Registration failed.');
       setBusy(false);

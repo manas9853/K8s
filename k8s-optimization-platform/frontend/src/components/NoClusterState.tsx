@@ -50,7 +50,7 @@ const NoClusterState: React.FC = () => {
           variant="contained"
           size="large"
           startIcon={<AddIcon />}
-          onClick={() => navigate('/cluster-onboarding')}
+          onClick={() => navigate('/admin/cluster-onboarding')}
         >
           Go to Cluster Onboarding
         </Button>

@@ -409,7 +409,7 @@ const Jobs: React.FC = () => {
   };
 
   const handleAutoFix = (job: Job, issue: string) => {
-    navigate(`/recommendations?resource=${encodeURIComponent(job.name)}&namespace=${encodeURIComponent(job.namespace)}&issue=${encodeURIComponent(issue)}`);
+    navigate(`/optimization/recommendations?resource=${encodeURIComponent(job.name)}&namespace=${encodeURIComponent(job.namespace)}&issue=${encodeURIComponent(issue)}`);
   };
 
   const filteredJobs = jobs.filter(job =>

@@ -511,28 +511,28 @@ const ClusterWaste: React.FC = () => {
               value: data?.pvcs?.total_resources ?? 0,
               desc:  'Unattached volumes consuming storage',
               icon:  <StorageIcon sx={{ fontSize: 20 }} />,
-              href:  '/unattached-pvcs',
+              href:  '/optimization/cleanup-center/unattached-pvcs',
             },
             {
               label: 'Old ReplicaSets',
               value: data?.replicasets?.total_resources ?? 0,
               desc:  'Superseded RS with 0 replicas',
               icon:  <LayersIcon sx={{ fontSize: 20 }} />,
-              href:  '/old-replicasets',
+              href:  '/optimization/cleanup-center/old-replicasets',
             },
             {
               label: 'Idle Namespaces',
               value: data?.idleNs?.total_resources ?? 0,
               desc:  'Empty namespaces with no active workloads',
               icon:  <FolderIcon sx={{ fontSize: 20 }} />,
-              href:  '/idle-namespaces',
+              href:  '/optimization/cleanup-center/idle-namespaces',
             },
             {
               label: 'Unused Deployments',
               value: data?.unusedDeps ?? 0,
               desc:  '0 ready replicas despite desired > 0',
               icon:  <WarningIcon sx={{ fontSize: 20 }} />,
-              href:  '/unused-deployments',
+              href:  '/optimization/cleanup-center/unused-deployments',
             },
           ].map(item => (
             <Grid item xs={6} sm={3} key={item.label}>

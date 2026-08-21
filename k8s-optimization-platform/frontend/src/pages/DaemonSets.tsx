@@ -384,7 +384,7 @@ const DaemonSets: React.FC = () => {
   };
 
   const handleAutoFix = (ds: DaemonSet, issue: string) => {
-    navigate(`/recommendations?resource=${encodeURIComponent(ds.name)}&namespace=${encodeURIComponent(ds.namespace)}&issue=${encodeURIComponent(issue)}`);
+    navigate(`/optimization/recommendations?resource=${encodeURIComponent(ds.name)}&namespace=${encodeURIComponent(ds.namespace)}&issue=${encodeURIComponent(issue)}`);
   };
 
   const filteredDaemonSets = daemonsets.filter(ds =>

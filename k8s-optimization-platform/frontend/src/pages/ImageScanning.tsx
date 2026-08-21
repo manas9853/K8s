@@ -457,7 +457,7 @@ const ImageScanning: React.FC = () => {
                     </Typography>
                   </Box>
                 </Box>
-                <Box onClick={() => navigate('/patch-recommendations')}
+                <Box onClick={() => navigate('/security/vulnerability-management/patch-recommendations')}
                   sx={{ px:1.5, py:0.5, borderRadius:1, bgcolor:`${T.high.fg}18`, border:`1px solid ${T.high.fg}50`,
                     cursor:'pointer', '&:hover':{ bgcolor:`${T.high.fg}28` }, flexShrink:0 }}>
                   <Typography sx={{ color:T.high.fg, fontSize:11, fontWeight:700 }}>View Patches</Typography>

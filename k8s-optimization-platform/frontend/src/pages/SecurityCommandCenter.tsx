@@ -129,13 +129,13 @@ const SevChip: React.FC<{ sev: string }> = ({ sev }) => {
 
 // ─── Nav tiles ────────────────────────────────────────────────────────────────
 const NAV_TILES = [
-  { label: 'CVE Dashboard',         path: '/cve-dashboard',                       icon: <BugIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Runtime Security',      path: '/runtime-security',                    icon: <ShieldIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Privileged Containers', path: '/privileged-containers',               icon: <SecurityIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Secret Exposure',       path: '/secret-exposure',                     icon: <LockIcon sx={{ fontSize: 16 }}/> },
-  { label: 'RBAC Analysis',         path: '/excessive-permissions',               icon: <LockIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Network Policies',      path: '/network-policies',                    icon: <NetworkIcon sx={{ fontSize: 16 }}/> },
-  { label: 'Drift Alerts',          path: '/drift-alerts',                        icon: <WarningIcon sx={{ fontSize: 16 }}/> },
+  { label: 'CVE Dashboard',         path: '/security/vulnerability-management/cve-dashboard',                       icon: <BugIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Runtime Security',      path: '/security/container-security/runtime-security',                    icon: <ShieldIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Privileged Containers', path: '/security/container-security/privileged-containers',               icon: <SecurityIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Secret Exposure',       path: '/security/secrets-security/secret-exposure',                     icon: <LockIcon sx={{ fontSize: 16 }}/> },
+  { label: 'RBAC Analysis',         path: '/security/rbac-analysis/excessive-permissions',               icon: <LockIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Network Policies',      path: '/operations/network/network-policies',                    icon: <NetworkIcon sx={{ fontSize: 16 }}/> },
+  { label: 'Drift Alerts',          path: '/security/security-drift-detection/drift-alerts',                        icon: <WarningIcon sx={{ fontSize: 16 }}/> },
   { label: 'Attack Investigation',  path: '/attack-investigation/incident-center',icon: <BoltIcon sx={{ fontSize: 16 }}/> },
 ];
 
@@ -191,11 +191,11 @@ const SecurityCommandCenter: React.FC = () => {
   const ss = data.security_score;
 
   const POSTURE_ROWS = [
-    { label: 'Vulnerabilities', score: ss.vulnerability_score,    icon: <BugIcon sx={{ fontSize: 16 }}/>,      path: '/cve-dashboard' },
+    { label: 'Vulnerabilities', score: ss.vulnerability_score,    icon: <BugIcon sx={{ fontSize: 16 }}/>,      path: '/security/vulnerability-management/cve-dashboard' },
     { label: 'Compliance',      score: ss.compliance_score,        icon: <ShieldIcon sx={{ fontSize: 16 }}/>,   path: '/compliance-score' },
-    { label: 'Configuration',   score: ss.configuration_score,     icon: <SecurityIcon sx={{ fontSize: 16 }}/>, path: '/runtime-security' },
-    { label: 'Network',         score: ss.network_security_score,  icon: <NetworkIcon sx={{ fontSize: 16 }}/>,  path: '/network-policies' },
-    { label: 'RBAC',            score: ss.rbac_score,              icon: <LockIcon sx={{ fontSize: 16 }}/>,     path: '/excessive-permissions' },
+    { label: 'Configuration',   score: ss.configuration_score,     icon: <SecurityIcon sx={{ fontSize: 16 }}/>, path: '/security/container-security/runtime-security' },
+    { label: 'Network',         score: ss.network_security_score,  icon: <NetworkIcon sx={{ fontSize: 16 }}/>,  path: '/operations/network/network-policies' },
+    { label: 'RBAC',            score: ss.rbac_score,              icon: <LockIcon sx={{ fontSize: 16 }}/>,     path: '/security/rbac-analysis/excessive-permissions' },
   ];
 
   const cellSx  = { color: T.body, borderBottom: `1px solid ${T.border}`, fontSize: 12, py: 1.5 };
@@ -313,10 +313,10 @@ const SecurityCommandCenter: React.FC = () => {
       <Grid container spacing={2} sx={{ mb: 2.5 }}>
         {([
           { label: 'High-Risk Pods',      value: ss.high_risk_pods,         bad: ss.high_risk_pods > 0,          icon: <BugIcon sx={{ fontSize: 18 }}/>,      path: '/pods' },
-          { label: 'No Resource Limits',  value: ss.no_resource_requests,   bad: ss.no_resource_requests > 5,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/recommendations' },
-          { label: 'Memory Pressure',     value: ss.high_memory_pressure,   bad: ss.high_memory_pressure > 0,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/memory-analysis' },
-          { label: 'Under-Provisioned',   value: ss.under_provisioned_pods, bad: ss.under_provisioned_pods > 10, icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/cpu-rightsizing' },
-          { label: 'Stale Secrets (High)',value: ss.stale_secrets_high,     bad: ss.stale_secrets_high > 0,      icon: <LockIcon sx={{ fontSize: 18 }}/>,      path: '/stale-secrets' },
+          { label: 'No Resource Limits',  value: ss.no_resource_requests,   bad: ss.no_resource_requests > 5,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/optimization/recommendations' },
+          { label: 'Memory Pressure',     value: ss.high_memory_pressure,   bad: ss.high_memory_pressure > 0,    icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/operations/pods/memory-analysis' },
+          { label: 'Under-Provisioned',   value: ss.under_provisioned_pods, bad: ss.under_provisioned_pods > 10, icon: <WarningIcon sx={{ fontSize: 18 }}/>,   path: '/optimization/recommendations/cpu-rightsizing' },
+          { label: 'Stale Secrets (High)',value: ss.stale_secrets_high,     bad: ss.stale_secrets_high > 0,      icon: <LockIcon sx={{ fontSize: 18 }}/>,      path: '/optimization/cleanup-center/stale-secrets' },
           { label: 'Total Pods Scanned',  value: ss.total_pods,             bad: false,                          icon: <CheckIcon sx={{ fontSize: 18 }}/>,     path: '/pods' },
         ] as { label: string; value: number; bad: boolean; icon: React.ReactNode; path: string }[]).map(item => (
           <Grid item xs={6} sm={4} md={2} key={item.label}>

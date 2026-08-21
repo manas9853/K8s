@@ -285,7 +285,7 @@ const CommandCenter: React.FC = () => {
               </Box>
               <Button variant="outlined" fullWidth sx={{ mb: 1 }} onClick={() => navigate('/autofix')}>Run Full Optimization</Button>
               <Button variant="outlined" fullWidth sx={{ mb: 1 }} onClick={() => navigate('/reports/pdf-export')}>Generate Executive Report</Button>
-              <Button variant="outlined" fullWidth onClick={() => navigate('/recommendations')}>View All Recommendations</Button>
+              <Button variant="outlined" fullWidth onClick={() => navigate('/optimization/recommendations')}>View All Recommendations</Button>
             </CardContent>
           </Card>
         </Grid>

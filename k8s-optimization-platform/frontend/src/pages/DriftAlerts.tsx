@@ -155,7 +155,7 @@ const DriftAlertsInner: React.FC = () => {
             <Typography
               variant="caption"
               sx={{ color: colors.info, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-              onClick={() => navigate('/baseline-comparison')}
+              onClick={() => navigate('/security/security-drift-detection/baseline-comparison')}
             >
               Compare with Baseline →
             </Typography>
@@ -172,7 +172,7 @@ const DriftAlertsInner: React.FC = () => {
           <Typography
             variant="caption"
             sx={{ color: colors.info, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-            onClick={() => navigate('/baseline-comparison')}
+            onClick={() => navigate('/security/security-drift-detection/baseline-comparison')}
           >
             Baseline Comparison →
           </Typography>

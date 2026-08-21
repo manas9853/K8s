@@ -406,7 +406,7 @@ const Executive: React.FC = () => {
                         color="primary"
                         size="small"
                         sx={{ ml: 2 }}
-                        onClick={() => navigate(insight.action_url || '/recommendations')}
+                        onClick={() => navigate(insight.action_url || '/optimization/recommendations')}
                       >
                         Take Action
                       </Button>

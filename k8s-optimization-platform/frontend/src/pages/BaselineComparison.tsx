@@ -210,7 +210,7 @@ const BaselineComparisonInner: React.FC = () => {
           <Typography
             variant="caption"
             sx={{ color: colors.info, cursor: 'pointer', '&:hover': { textDecoration: 'underline' } }}
-            onClick={() => navigate('/drift-alerts')}
+            onClick={() => navigate('/security/security-drift-detection/drift-alerts')}
           >
             View Drift Alerts →
           </Typography>

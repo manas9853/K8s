@@ -144,11 +144,11 @@ const SecurityScore: React.FC = () => {
   const monthUp = tr.current_score >= tr.last_month;
 
   const SCORE_AREAS = [
-    { key: 'vulnerability_score',    label: 'Vulnerabilities',  path: '/cve-dashboard',              color: T.critical.fg },
-    { key: 'compliance_score',       label: 'Compliance',       path: '/compliance/dashboard',        color: colors.purple },
-    { key: 'configuration_score',    label: 'Configuration',    path: '/runtime-security',            color: T.medium.fg },
-    { key: 'network_security_score', label: 'Network Security', path: '/network-policies-security',  color: colors.success },
-    { key: 'rbac_score',             label: 'RBAC',             path: '/excessive-permissions',       color: T.high.fg },
+    { key: 'vulnerability_score',    label: 'Vulnerabilities',  path: '/security/vulnerability-management/cve-dashboard',              color: T.critical.fg },
+    { key: 'compliance_score',       label: 'Compliance',       path: '/compliance/overview/dashboard',        color: colors.purple },
+    { key: 'configuration_score',    label: 'Configuration',    path: '/security/container-security/runtime-security',            color: T.medium.fg },
+    { key: 'network_security_score', label: 'Network Security', path: '/security/network-security/network-policies-security',  color: colors.success },
+    { key: 'rbac_score',             label: 'RBAC',             path: '/security/rbac-analysis/excessive-permissions',       color: T.high.fg },
   ];
 
   /* large ring */
@@ -247,7 +247,7 @@ const SecurityScore: React.FC = () => {
             ] as Array<{label:string;count:number;fg:string;bg:string}>).map(({ label, count, fg, bg }) => (
               <Box key={label} sx={{ p: 1.5, borderRadius: 1.5, bgcolor: bg, border:`1px solid ${fg}30`,
                 textAlign:'center', cursor:'pointer', '&:hover':{ opacity:0.85 } }}
-                onClick={() => navigate('/cve-dashboard')}>
+                onClick={() => navigate('/security/vulnerability-management/cve-dashboard')}>
                 <Typography sx={{ fontSize: 28, fontWeight: 800, color: fg, lineHeight: 1 }}>{count}</Typography>
                 <Typography sx={{ fontSize: 11, color: fg, mt: 0.3 }}>{label}</Typography>
               </Box>

@@ -223,11 +223,11 @@ const RuntimeSecurity: React.FC = () => {
           )}
           <Box mt={2} display="flex" gap={1}>
             <Button variant="contained" startIcon={<BlockIcon />}
-              onClick={() => navigate('/auto-remediation-security')}
+              onClick={() => navigate('/security/security-drift-detection/auto-remediation-security')}
               sx={{ bgcolor: colors.danger, '&:hover': { bgcolor: colors.danger } }}>
               Remediate All ({criticalThreats.length})
             </Button>
-            <Button variant="outlined" onClick={() => navigate('/privileged-containers')}
+            <Button variant="outlined" onClick={() => navigate('/security/container-security/privileged-containers')}
               sx={{ borderColor: colors.danger, color: colors.danger }}>
               View Privileged Containers
             </Button>

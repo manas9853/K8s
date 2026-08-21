@@ -918,13 +918,13 @@ const StatefulSets: React.FC = () => {
                           <Typography variant="subtitle2" gutterBottom>Troubleshooting</Typography>
                           <Button
                             variant="outlined" fullWidth sx={{ mb: 1 }}
-                            onClick={() => navigate(`/logs?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
+                            onClick={() => navigate(`/operations/observability/logs?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
                           >
                             View Pod Logs
                           </Button>
                           <Button
                             variant="outlined" fullWidth sx={{ mb: 1 }}
-                            onClick={() => navigate(`/events?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
+                            onClick={() => navigate(`/operations/observability/events?namespace=${selectedStatefulSet.namespace}&workload=${selectedStatefulSet.name}`)}
                           >
                             View Events
                           </Button>
