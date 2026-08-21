@@ -13,6 +13,7 @@ import {
 import { useCluster } from '../contexts/ClusterContext';
 import type { ClusterInfo } from '../contexts/ClusterContext';
 import { colors } from '../theme/colors';
+import NoClusterState from '../components/NoClusterState';
 
 /* ── Design tokens — matches Login dark K8s theme ── */
 const C = {
@@ -418,6 +419,8 @@ const Clusters: React.FC = () => {
   const avgHealth = clusters.length ? Math.round(clusters.reduce((s, c) => s + c.health_score, 0) / clusters.length) : 0;
   const healthyClusters = clusters.filter(c => c.status === 'healthy').length;
 
+  if (!loading && clusters.length === 0) return <NoClusterState />;
+
   return (
     <div style={{
       minHeight: '100vh',
@@ -568,23 +571,6 @@ const Clusters: React.FC = () => {
             <span style={{ fontSize: 11, color: C.textMuted, fontFamily: "'JetBrains Mono',monospace", letterSpacing: '0.1em' }}>
               CONNECTING TO CLUSTER FLEET…
             </span>
-          </div>
-        )}
-
-        {/* ── Empty state ── */}
-        {!loading && clusters.length === 0 && (
-          <div style={{
-            textAlign: 'center', padding: '80px 0',
-            background: `linear-gradient(145deg, ${C.bgCard}, #080f20)`,
-            border: `1px solid ${C.borderDim}`, borderRadius: 12,
-          }}>
-            <K8sWheel size={48} color={C.borderBright} />
-            <div style={{ fontSize: 15, color: C.textSecondary, marginTop: 16, fontWeight: 600 }}>
-              No clusters registered
-            </div>
-            <div style={{ fontSize: 11, color: C.textMuted, marginTop: 6, fontFamily: "'JetBrains Mono',monospace" }}>
-              kubectl apply -f cluster-onboarding.yaml
-            </div>
           </div>
         )}
 
