@@ -1,0 +1,28 @@
+# Node Image Scanner — DaemonSet variant of the agent, one per node.
+# Separate (heavier) image from Dockerfile so the always-on main agent
+# stays lean; only scanner pods carry trivy + its vulnerability DB cache.
+FROM python:3.11-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh \
+       | sh -s -- -b /usr/local/bin v0.55.2 \
+    && apt-get purge -y curl \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY node_scanner.py .
+RUN chmod +x node_scanner.py
+
+# Runs as root: reading the containerd socket (mounted read-only by the
+# DaemonSet) requires it on most node images — same tradeoff every
+# node-level scanner (Trivy Operator's node-collector, kube-bench, etc.)
+# makes. No cluster mutations: read-only Kubernetes API + read-only
+# socket mount, same as the main agent.
+
+CMD ["python", "-u", "node_scanner.py"]

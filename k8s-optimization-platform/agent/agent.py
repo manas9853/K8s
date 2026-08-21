@@ -15,6 +15,13 @@ Environment Variables (all required unless marked optional):
   LOG_LEVEL             DEBUG | INFO | WARNING               (default: INFO)
   METRICS_SERVER_ENABLED  true | false — query metrics-server for live CPU/RAM
                           usage (default: false; requests-based estimates used)
+  OPENCOST_URL            Optional — in-cluster OpenCost service URL for real
+                          per-namespace cost attribution (default: unset,
+                          feature off). See docs/opencost-setup.md.
+  HUBBLE_METRICS_URL      Optional — Cilium Hubble metrics service URL for
+                          real observed network flows (default: unset,
+                          feature off; only relevant if the CNI is Cilium).
+                          See docs/hubble-setup.md.
 
 Supported cloud providers (auto-detected from node labels):
   AWS (EKS), GCP (GKE), Azure (AKS), IBM Cloud (IKS),
@@ -26,6 +33,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sys
 import time
 import urllib3
@@ -154,6 +162,206 @@ def _ts(obj) -> Optional[str]:
         return str(obj)
     except Exception:
         return None
+
+
+def _parse_opencost_allocation(raw: Dict) -> List[Dict[str, Any]]:
+    """
+    Parse OpenCost's /allocation/compute response (aggregate=namespace) into
+    a flat per-namespace cost-SHARE list. We only trust the shares (fraction
+    of cluster spend), never OpenCost's own absolute dollar figures — those
+    come from OpenCost's own pricing source (list price by default), while
+    our real billing sync (Phase 2/3) already has the verified real total.
+    Blending happens backend-side: real total x OpenCost's real allocation
+    shape, the best of both instead of trusting either alone.
+    """
+    windows = raw.get("data") or []
+    if not windows:
+        return []
+    by_namespace = windows[0]  # aggregate=namespace -> one dict, keyed by namespace
+
+    entries = []
+    total_cost = 0.0
+    for ns_name, alloc in by_namespace.items():
+        if ns_name in ("__idle__", "__unallocated__"):
+            continue  # OpenCost's synthetic buckets for idle/unattributed capacity
+        cost = float(alloc.get("totalCost") or 0)
+        total_cost += cost
+        entries.append({
+            "namespace":  ns_name,
+            "cpu_cost":   round(float(alloc.get("cpuCost") or 0), 4),
+            "ram_cost":   round(float(alloc.get("ramCost") or 0), 4),
+            "pv_cost":    round(float(alloc.get("pvCost") or 0), 4),
+            "total_cost": round(cost, 4),
+        })
+
+    for e in entries:
+        e["share"] = round(e["total_cost"] / total_cost, 6) if total_cost > 0 else 0.0
+
+    entries.sort(key=lambda e: e["total_cost"], reverse=True)
+    return entries
+
+
+_HUBBLE_METRIC_LINE = re.compile(r'^hubble_flows_processed_total\{(.*)\}\s+([0-9.eE+-]+)')
+_HUBBLE_LABEL = re.compile(r'(\w+)="((?:[^"\\]|\\.)*)"')
+
+
+def _parse_hubble_endpoint(raw: str) -> Tuple[Optional[str], Optional[str]]:
+    """Hubble labels source/destination as 'namespace/pod-name', or a bare
+    'reserved:world' / 'reserved:host' identity for non-pod endpoints."""
+    if not raw or raw.startswith("reserved:"):
+        return None, (raw or None)
+    if "/" in raw:
+        ns, pod = raw.split("/", 1)
+        return ns, pod
+    return raw, None
+
+
+def _parse_hubble_metrics(text: str) -> List[Dict[str, Any]]:
+    """
+    Parse Hubble's Prometheus flow metrics (hubble_flows_processed_total —
+    see docs/hubble-setup.md) into aggregated source/destination pair flow
+    counts. This is REAL observed network traffic, unlike the host_network-
+    boolean inference East-West Traffic/Network Evidence fall back to when
+    Hubble isn't deployed.
+    """
+    buckets: Dict[Tuple, Dict[str, Any]] = {}
+    for line in text.splitlines():
+        m = _HUBBLE_METRIC_LINE.match(line)
+        if not m:
+            continue
+        labels_raw, value_raw = m.groups()
+        try:
+            count = float(value_raw)
+        except ValueError:
+            continue
+        labels = dict(_HUBBLE_LABEL.findall(labels_raw))
+        src_ns, src_pod = _parse_hubble_endpoint(labels.get("source", ""))
+        dst_ns, dst_pod = _parse_hubble_endpoint(labels.get("destination", ""))
+        verdict = labels.get("verdict", "")
+        protocol = labels.get("protocol", "")
+        key = (src_ns, src_pod, dst_ns, dst_pod, verdict, protocol)
+        if key not in buckets:
+            buckets[key] = {
+                "source_namespace": src_ns, "source_pod": src_pod,
+                "dest_namespace":   dst_ns, "dest_pod":   dst_pod,
+                "verdict":          verdict, "protocol":  protocol,
+                "count": 0.0,
+            }
+        buckets[key]["count"] += count
+
+    entries = list(buckets.values())
+    for e in entries:
+        e["count"] = int(e["count"])
+    entries.sort(key=lambda e: e["count"], reverse=True)
+    return entries
+
+
+def _parse_argocd_apps(raw: List[Dict]) -> List[Dict[str, Any]]:
+    apps = []
+    for a in raw:
+        meta   = a.get("metadata", {})
+        spec   = a.get("spec", {})
+        status = a.get("status", {})
+        sync   = status.get("sync", {})
+        health = status.get("health", {})
+        apps.append({
+            "name":            meta.get("name"),
+            "namespace":       meta.get("namespace"),
+            "repo":            spec.get("source", {}).get("repoURL"),
+            "target_revision": spec.get("source", {}).get("targetRevision"),
+            "destination_ns":  spec.get("destination", {}).get("namespace"),
+            "sync_status":     sync.get("status", "Unknown"),
+            "health_status":   health.get("status", "Unknown"),
+            "last_sync_at":    status.get("operationState", {}).get("finishedAt"),
+        })
+    return apps
+
+
+def _parse_flux_kustomizations(raw: List[Dict]) -> List[Dict[str, Any]]:
+    kustomizations = []
+    for k in raw:
+        meta       = k.get("metadata", {})
+        spec       = k.get("spec", {})
+        conditions = k.get("status", {}).get("conditions", [])
+        ready_cond = next((c for c in conditions if c.get("type") == "Ready"), {})
+        kustomizations.append({
+            "name":                    meta.get("name"),
+            "namespace":               meta.get("namespace"),
+            "source":                  spec.get("sourceRef", {}).get("name"),
+            "path":                    spec.get("path"),
+            "ready":                   ready_cond.get("status") == "True",
+            "message":                 ready_cond.get("message"),
+            "revision":                k.get("status", {}).get("lastAppliedRevision"),
+            "suspended":               bool(spec.get("suspend", False)),
+            "last_attempted_revision": k.get("status", {}).get("lastAttemptedRevision"),
+            "created":                 meta.get("creationTimestamp"),
+        })
+    return kustomizations
+
+
+def _parse_tekton_pipelineruns(raw: List[Dict]) -> List[Dict[str, Any]]:
+    pipelines = []
+    for p in raw:
+        meta       = p.get("metadata", {})
+        spec       = p.get("spec", {})
+        status     = p.get("status", {})
+        conditions = status.get("conditions", [])
+        succeeded  = next((c for c in conditions if c.get("type") == "Succeeded"), {})
+        pipelines.append({
+            "name":            meta.get("name"),
+            "namespace":       meta.get("namespace"),
+            "pipeline_ref":    spec.get("pipelineRef", {}).get("name"),
+            "status":          succeeded.get("reason", "Unknown"),
+            "start_time":      status.get("startTime"),
+            "completion_time": status.get("completionTime"),
+            # Real TaskRun count from Tekton's own status, not guessed
+            "task_count":      len(status.get("childReferences", [])),
+        })
+    return pipelines
+
+
+def _parse_kyverno_policies(raw: List[Dict]) -> List[Dict[str, Any]]:
+    standards = []
+    for p in raw:
+        meta = p.get("metadata", {})
+        spec = p.get("spec", {})
+        standards.append({
+            "engine":                    "kyverno",
+            "name":                      meta.get("name"),
+            "validation_failure_action": spec.get("validationFailureAction"),
+            "background":                spec.get("background", True),
+            "rule_count":                len(spec.get("rules", [])),
+        })
+    return standards
+
+
+def _parse_gatekeeper_templates(raw: List[Dict]) -> List[Dict[str, Any]]:
+    return [{"engine": "gatekeeper", "name": t.get("metadata", {}).get("name")} for t in raw]
+
+
+def _parse_policy_report_violations(raw: List[Dict]) -> List[Dict[str, Any]]:
+    violations = []
+    for r in raw:
+        meta = r.get("metadata", {})
+        # PolicyReport results don't carry a per-violation timestamp — the
+        # report's own creationTimestamp (it's replaced on every scan) is
+        # the closest real "detected at" available.
+        detected_at = meta.get("creationTimestamp")
+        for result in r.get("results", []):
+            if result.get("result") in ("fail", "error"):
+                resource = (result.get("resources") or [{}])[0]
+                violations.append({
+                    "namespace":   meta.get("namespace"),
+                    "policy":      result.get("policy"),
+                    "rule":        result.get("rule"),
+                    "kind":        resource.get("kind"),
+                    "resource":    resource.get("name"),
+                    "result":      result.get("result"),
+                    "message":     result.get("message"),
+                    "severity":    result.get("severity", "medium"),
+                    "detected_at": detected_at,
+                })
+    return violations
 
 
 def _parse_tls_cert(cert_b64: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -1266,7 +1474,30 @@ class ClusterAgent:
                 "items": netpol_list,
                 "namespaces_without_policy": ns_without_netpol,
             },
+            "hubble_flows": self._hubble_flows(),
         }
+
+    def _hubble_flows(self) -> Optional[List[Dict[str, Any]]]:
+        """
+        Real observed network flows from Cilium Hubble, if the customer's
+        CNI is Cilium with Hubble metrics enabled — see docs/hubble-setup.md.
+        Optional: HUBBLE_METRICS_URL unset means Hubble isn't available,
+        and this cleanly returns None (not an error) so East-West Traffic
+        and Network Evidence fall back to their existing config-posture
+        heuristics rather than fabricating flow data.
+        """
+        hubble_url = os.environ.get("HUBBLE_METRICS_URL", "").rstrip("/")
+        if not hubble_url:
+            return None
+        try:
+            resp = self._session.get(f"{hubble_url}/metrics", timeout=15)
+            if resp.status_code != 200:
+                logger.debug(f"Hubble metrics query failed: HTTP {resp.status_code}")
+                return None
+            return _parse_hubble_metrics(resp.text)
+        except Exception as e:
+            logger.debug(f"Hubble metrics query failed: {e}")
+            return None
 
     # ── domain: security ─────────────────────────────────────────────────────
 
@@ -1604,9 +1835,84 @@ class ClusterAgent:
             "node_specs":           node_specs,
             "provider":             self._provider,
             "region":               self._region,
+            "opencost_allocation":  self._opencost_allocation(),
         }
 
+    def _opencost_allocation(self) -> Optional[List[Dict[str, Any]]]:
+        """
+        Real per-namespace cost ALLOCATION (not total $) from OpenCost, if
+        the customer has it deployed in-cluster — see
+        docs/opencost-setup.md. Optional: OPENCOST_URL unset means the
+        add-on isn't installed, and this cleanly returns None (not an
+        error) so the backend falls back to resource-weighted estimation.
+        """
+        opencost_url = os.environ.get("OPENCOST_URL", "").rstrip("/")
+        if not opencost_url:
+            return None
+        try:
+            resp = self._session.get(
+                f"{opencost_url}/allocation/compute",
+                params={"window": "1d", "aggregate": "namespace"},
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                logger.debug(f"OpenCost query failed: HTTP {resp.status_code}")
+                return None
+            return _parse_opencost_allocation(resp.json())
+        except Exception as e:
+            logger.debug(f"OpenCost query failed: {e}")
+            return None
+
     # ── domain: platform ─────────────────────────────────────────────────────
+
+    def _query_crd(self, group: str, version: str, plural: str) -> Optional[List[Dict]]:
+        """
+        List a custom resource cluster-wide. Returns None if the CRD isn't
+        installed (404) so callers can tell "not installed" apart from
+        "installed but empty" — None vs []. Any other error also degrades
+        to None; this must never take the whole collection cycle down just
+        because one optional GitOps/policy tool isn't present.
+        """
+        try:
+            resp = self.custom.list_cluster_custom_object(group, version, plural)
+            return resp.get("items", [])
+        except ApiException as e:
+            if e.status != 404:
+                logger.debug(f"CRD query {group}/{version}/{plural} failed: {e.status}")
+            return None
+        except Exception as e:
+            logger.debug(f"CRD query {group}/{version}/{plural} failed: {e}")
+            return None
+
+    def _argocd(self) -> Optional[Dict[str, Any]]:
+        raw = self._query_crd("argoproj.io", "v1alpha1", "applications")
+        return None if raw is None else {"apps": _parse_argocd_apps(raw)}
+
+    def _fluxcd(self) -> Optional[Dict[str, Any]]:
+        raw = self._query_crd("kustomize.toolkit.fluxcd.io", "v1", "kustomizations")
+        return None if raw is None else {"kustomizations": _parse_flux_kustomizations(raw)}
+
+    def _tekton(self) -> Optional[Dict[str, Any]]:
+        raw = self._query_crd("tekton.dev", "v1", "pipelineruns")
+        return None if raw is None else {"pipelines": _parse_tekton_pipelineruns(raw)}
+
+    def _policy_engines(self) -> Dict[str, Any]:
+        """Kyverno + OPA Gatekeeper — policy_standards (defined policies) and
+        policy_as_code (real violations from policy reports)."""
+        standards: List[Dict[str, Any]] = []
+        kyverno_policies = self._query_crd("kyverno.io", "v1", "clusterpolicies")
+        if kyverno_policies is not None:
+            standards.extend(_parse_kyverno_policies(kyverno_policies))
+        gatekeeper_templates = self._query_crd("templates.gatekeeper.sh", "v1", "constrainttemplates")
+        if gatekeeper_templates is not None:
+            standards.extend(_parse_gatekeeper_templates(gatekeeper_templates))
+
+        violations: List[Dict[str, Any]] = []
+        policy_reports = self._query_crd("wgpolicyk8s.io", "v1alpha2", "policyreports")
+        if policy_reports is not None:
+            violations = _parse_policy_report_violations(policy_reports)
+
+        return {"policy_standards": standards, "policy_as_code": violations}
 
     def _platform(self) -> Dict[str, Any]:
         nspaces = self.core.list_namespace().items
@@ -1633,11 +1939,39 @@ class ClusterAgent:
             "keda":              any("keda"               in n for n in ns_names),
         }
 
-        return {
-            "gitops_tools": gitops,
-            "addon_tools":  addons,
-            "namespaces":   ns_names,
+        argocd = self._argocd()
+        fluxcd = self._fluxcd()
+        tekton = self._tekton()
+        policy = self._policy_engines()
+
+        # Drift = ArgoCD apps whose live state has diverged from git (OutOfSync)
+        gitops_drift = []
+        if argocd:
+            gitops_drift = [
+                {
+                    "name":          a["name"],
+                    "namespace":     a["namespace"],
+                    "sync_status":   a["sync_status"],
+                    "health_status": a["health_status"],
+                }
+                for a in argocd["apps"] if a["sync_status"] == "OutOfSync"
+            ]
+
+        result = {
+            "gitops_tools":    gitops,
+            "addon_tools":     addons,
+            "namespaces":      ns_names,
+            "gitops_drift":    gitops_drift,
+            "policy_standards": policy["policy_standards"],
+            "policy_as_code":   policy["policy_as_code"],
         }
+        if argocd is not None:
+            result["argocd"] = argocd
+        if fluxcd is not None:
+            result["fluxcd"] = fluxcd
+        if tekton is not None:
+            result["tekton"] = tekton
+        return result
 
     # ── domain: teams ────────────────────────────────────────────────────────
 

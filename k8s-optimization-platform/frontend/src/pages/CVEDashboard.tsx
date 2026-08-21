@@ -51,6 +51,7 @@ const SIGNAL_META: Record<string, { label: string; icon: string }> = {
   allow_priv_esc: { label: 'Priv Escalation',      icon: '🚨' },
   risk_high:      { label: 'High Risk Pod',        icon: '🛑' },
   risk_medium:    { label: 'Medium Risk Pod',      icon: '⚠️' },
+  cve:            { label: 'Package Vulnerability (Trivy)', icon: '🐛' },
 };
 
 /* ── Interfaces ─────────────────────────────────────────────────────── */

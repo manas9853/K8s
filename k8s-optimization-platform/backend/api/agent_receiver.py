@@ -100,6 +100,21 @@ class NetworkFlowRecord(BaseModel):
     connection_count: int
 
 
+class NodeImageScanResult(BaseModel):
+    image: str
+    scan_status: str  # "scanned" | "error"
+    raw_report: Optional[Dict[str, Any]] = None
+    error_message: Optional[str] = None
+
+
+class NodeImageScanBatch(BaseModel):
+    """One node_scanner.py DaemonSet pod's report for one node, one cycle."""
+    cluster_name: str
+    node_name: str
+    scanned_at: float
+    results: List[NodeImageScanResult] = []
+
+
 class NetworkFlowBatch(BaseModel):
     """One flow_collector.py DaemonSet pod's report for one node, one cycle."""
     cluster_name: str
@@ -276,6 +291,99 @@ async def receive_network_flows(
         raise
     except Exception as e:
         logger.error(f"Error receiving network flows: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── /node-image-scans ───────────────────────────────────────────────────────
+# Receives per-node batches from agent/node_scanner.py (a separate, opt-in
+# DaemonSet — see node-scanner-daemonset.yaml). Scans the node's local
+# containerd image store, so it needs zero registry credentials and works
+# for private registries — unlike services/trivy_scanner.py's network pull,
+# which is skipped/fails for any private image. See that file's docstring.
+
+@router.post("/node-image-scans")
+async def receive_node_image_scans(
+    batch: NodeImageScanBatch,
+    token: str = Depends(verify_token),
+):
+    try:
+        cluster = db_manager.get_cluster(batch.cluster_name)
+        if not cluster:
+            raise HTTPException(status_code=404, detail=f"Cluster {batch.cluster_name} not registered")
+
+        from services.trivy_scanner import _parse_trivy_json
+
+        results = []
+        for r in batch.results:
+            if r.scan_status == "scanned" and r.raw_report:
+                try:
+                    parsed = _parse_trivy_json(r.raw_report, r.image)
+                except Exception as e:
+                    results.append({"image": r.image, "scan_status": "error",
+                                     "error_message": f"parse failed: {e}"})
+                    continue
+                results.append({"image": r.image, "scan_status": "scanned", "parsed_report": parsed})
+            else:
+                results.append({"image": r.image, "scan_status": "error",
+                                 "error_message": r.error_message or "unknown error"})
+
+        if not db_manager.upsert_node_image_scans(
+            batch.cluster_name, batch.node_name, batch.scanned_at, results
+        ):
+            raise HTTPException(status_code=500, detail="Failed to store node image scans")
+
+        logger.info(
+            f"Node image scans received from {batch.cluster_name}/{batch.node_name} "
+            f"({len(results)} images)"
+        )
+        return {"status": "success", "message": "Node image scans received"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error receiving node image scans: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── /falco-alerts/{cluster_name}/{token} ────────────────────────────────────
+# Pushed directly by Falco's own http_output (see docs/falco-setup.md) —
+# unlike every other agent-> backend path, this isn't posted by our own
+# agent code: Falco natively supports POSTing each alert as JSON to a URL,
+# so we point it straight at this endpoint instead of writing a poller.
+# Falco's http_output has no custom-header support in any shipped version,
+# so the auth token travels in the URL path (same trick Slack/GitHub
+# webhooks use) rather than an Authorization header like every other route
+# here.
+
+class FalcoAlert(BaseModel):
+    """Falco's standard JSON output shape (json_output: true)."""
+    rule: str
+    priority: str
+    output: str
+    time: Optional[str] = None
+    output_fields: Dict[str, Any] = {}
+
+
+@router.post("/falco-alerts/{cluster_name}/{token}")
+async def receive_falco_alert(cluster_name: str, token: str, alert: FalcoAlert):
+    if not token:
+        raise HTTPException(status_code=401, detail="Missing token")
+    try:
+        cluster = db_manager.get_cluster(cluster_name)
+        if not cluster:
+            raise HTTPException(status_code=404, detail=f"Cluster {cluster_name} not registered")
+
+        alert_time = alert.time or datetime.utcnow().isoformat() + "Z"
+        if not db_manager.insert_falco_alert(
+            cluster_name, alert.rule, alert.priority, alert.output,
+            alert.output_fields, alert_time,
+        ):
+            raise HTTPException(status_code=500, detail="Failed to store falco alert")
+        return {"status": "success"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error receiving falco alert: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

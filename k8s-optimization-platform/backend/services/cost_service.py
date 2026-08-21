@@ -155,6 +155,92 @@ def _build_namespace_costs(
     return out
 
 
+def _namespace_costs_for_real_total(
+    real_total: float,
+    finops: Dict,
+) -> List[Dict]:
+    """
+    Split a REAL (invoice-accurate) total across namespaces. Two sources,
+    best available wins:
+
+    1. OpenCost allocation (finops.opencost_allocation, from the optional
+       in-cluster add-on — see docs/opencost-setup.md): real per-namespace
+       cost SHAPE from actual bin-packed resource allocation. We trust its
+       shares, not its own dollar figures (those come from OpenCost's own
+       pricing source, usually list price) — multiplying by our verified
+       real total gives real $ with real attribution shape, better than
+       either alone.
+    2. Resource-request-weighted fallback (same 70% CPU / 30% memory model
+       Phase 1 estimation uses in utils/cost_engine.py) when OpenCost isn't
+       deployed — applied to the real total instead of an estimated one.
+       ponytail: this duplicates cost_engine.py's blended-share formula
+       rather than extracting a shared helper, to avoid touching a
+       load-bearing Phase-1 function under this task's scope; worth
+       unifying if the two formulas ever need to change together.
+
+    Either way this replaces the empty namespace_costs list Phase 2 shipped
+    before — connecting real billing used to make per-namespace attribution
+    disappear entirely; now it degrades to "resource-weighted real $" at
+    worst, "OpenCost-accurate real $" at best.
+    """
+    opencost = finops.get("opencost_allocation")
+    ns_resources: Dict[str, Dict] = finops.get("namespace_resources") or {}
+
+    if opencost:
+        raw = []
+        for entry in opencost:
+            ns = entry["namespace"]
+            res = ns_resources.get(ns, {})
+            cpu_cost = float(entry.get("cpu_cost") or 0)
+            total_ns_cost = float(entry.get("total_cost") or 0)
+            raw.append({
+                "namespace":         ns,
+                "monthly_cost":      round(real_total * entry["share"], 2),
+                "cpu_share_pct":     round((cpu_cost / total_ns_cost) * 100, 1) if total_ns_cost > 0 else 0.0,
+                "cpu_request":       res.get("cpu_request", 0),
+                "memory_request_gb": res.get("memory_request_gb", 0),
+                "pod_count":         res.get("pod_count", 0),
+            })
+        return raw
+
+    if not ns_resources:
+        return []
+
+    total_cpu = sum(float(r.get("cpu_request") or 0) for r in ns_resources.values())
+    total_mem = sum(float(r.get("memory_request_gb") or 0) for r in ns_resources.values())
+
+    raw = []
+    for ns, res in ns_resources.items():
+        cpu_req = float(res.get("cpu_request") or 0)
+        mem_req = float(res.get("memory_request_gb") or 0)
+        cpu_share = (cpu_req / total_cpu) if total_cpu > 0 else 0
+        mem_share = (mem_req / total_mem) if total_mem > 0 else 0
+        blended_share = cpu_share * 0.70 + mem_share * 0.30
+        raw.append({
+            "namespace":         ns,
+            "monthly_cost":      round(real_total * blended_share, 2),
+            "cpu_share_pct":     round(cpu_share * 100, 1),
+            "cpu_request":       round(cpu_req, 3),
+            "memory_request_gb": round(mem_req, 3),
+            "pod_count":         res.get("pod_count", 0),
+        })
+    return raw
+
+
+def _namespace_team_map(ctx: Dict) -> Dict[str, str]:
+    ns_team_map: Dict[str, str] = {}
+    for ns_obj in (ctx.get("namespaces") or []):
+        name = ns_obj.get("name") or ns_obj.get("namespace") or ""
+        labels = ns_obj.get("labels") or {}
+        team = (labels.get("app.kubernetes.io/part-of")
+                or labels.get("team")
+                or labels.get("owner")
+                or name or "unknown")
+        if name:
+            ns_team_map[name] = team
+    return ns_team_map
+
+
 def _build_node_costs(raw_node_costs: List[Dict]) -> List[NodeCost]:
     out = []
     for n in raw_node_costs:
@@ -314,6 +400,15 @@ async def _build_snapshot(cluster_name: str) -> CostSnapshot:
         compute = round(total * float(billing.get("compute_pct") or 0.80), 2)
         storage = round(total * float(billing.get("storage_pct") or 0.10), 2)
         cp      = round(total * float(billing.get("cp_pct") or 0.10), 2)
+
+        # Real total needs a real per-namespace split too — see
+        # _namespace_costs_for_real_total's docstring for the OpenCost vs
+        # resource-weighted-fallback logic. ctx fetch is cheap (cached
+        # agent_metrics read), worth it to stop shipping an empty list.
+        ctx = await _fetch_cluster_context(cluster_name)
+        raw_ns_costs = _namespace_costs_for_real_total(compute + cp, ctx.get("finops") or {})
+        namespace_costs = _build_namespace_costs(raw_ns_costs, _namespace_team_map(ctx))
+
         return CostSnapshot(
             cluster_name            = cluster_name,
             source                  = "phase2_billing_api",
@@ -325,7 +420,7 @@ async def _build_snapshot(cluster_name: str) -> CostSnapshot:
             compute_monthly         = compute,
             storage_monthly         = storage,
             control_plane_monthly   = cp,
-            namespace_costs         = [],   # Phase 2: use billing namespace breakdown if available
+            namespace_costs         = namespace_costs,
             node_costs              = [],
             pvc_costs               = [],
             savings_potential       = 0.0,
@@ -342,18 +437,7 @@ async def _build_snapshot(cluster_name: str) -> CostSnapshot:
     compute = cost["compute_monthly"]
     storage = cost["storage_monthly"]
     cp      = cost["control_plane_monthly"]
-
-    # namespace → team map
-    ns_team_map: Dict[str, str] = {}
-    for ns_obj in (ctx.get("namespaces") or []):
-        name = ns_obj.get("name") or ns_obj.get("namespace") or ""
-        labels = ns_obj.get("labels") or {}
-        team = (labels.get("app.kubernetes.io/part-of")
-                or labels.get("team")
-                or labels.get("owner")
-                or name or "unknown")
-        if name:
-            ns_team_map[name] = team
+    ns_team_map = _namespace_team_map(ctx)
 
     namespace_costs = _build_namespace_costs(
         cost.get("namespace_costs") or [], ns_team_map

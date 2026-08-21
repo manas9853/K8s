@@ -91,6 +91,7 @@ services:
       --concurrency=2
       --queues=celery
       --hostname=worker@%h
+      -B
     env_file:
       - ./backend/.env.local
     depends_on:

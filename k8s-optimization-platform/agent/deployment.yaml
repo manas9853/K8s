@@ -135,6 +135,34 @@ rules:
       - customresourcedefinitions
     verbs: ["get", "list"]
 
+  # GitOps / policy-engine CRDs — read-only, only used if the tool is
+  # installed. Missing CRDs 404 harmlessly; missing RBAC here would 403
+  # silently instead, so keep this in sync with agent.py's _query_crd calls.
+  - apiGroups: ["argoproj.io"]
+    resources:
+      - applications
+    verbs: ["get", "list"]
+  - apiGroups: ["kustomize.toolkit.fluxcd.io"]
+    resources:
+      - kustomizations
+    verbs: ["get", "list"]
+  - apiGroups: ["tekton.dev"]
+    resources:
+      - pipelineruns
+    verbs: ["get", "list"]
+  - apiGroups: ["kyverno.io"]
+    resources:
+      - clusterpolicies
+    verbs: ["get", "list"]
+  - apiGroups: ["templates.gatekeeper.sh"]
+    resources:
+      - constrainttemplates
+    verbs: ["get", "list"]
+  - apiGroups: ["wgpolicyk8s.io"]
+    resources:
+      - policyreports
+    verbs: ["get", "list"]
+
   # Node metrics endpoint (non-resource URL)
   - nonResourceURLs:
       - "/metrics"
@@ -190,6 +218,17 @@ data:
   LOG_LEVEL: "INFO"
   # Set to "true" if the cluster has metrics-server installed
   METRICS_SERVER_ENABLED: "false"
+  # Optional — only set this if OpenCost is deployed in-cluster (see
+  # docs/opencost-setup.md). Empty/unset means "not installed"; the agent
+  # skips the query cleanly rather than erroring, and cost attribution
+  # falls back to resource-weighted estimation. Standard OpenCost Helm
+  # chart service DNS name shown below.
+  OPENCOST_URL: ""   # e.g. "http://opencost.opencost.svc.cluster.local:9003"
+  # Optional — only set this if the CNI is Cilium with Hubble metrics
+  # enabled (see docs/hubble-setup.md). Empty/unset means "not available";
+  # East-West Traffic/Network Evidence fall back to their existing
+  # config-posture heuristics rather than fabricating flow data.
+  HUBBLE_METRICS_URL: ""   # e.g. "http://hubble-metrics.kube-system.svc.cluster.local:9965"
 
 ---
 # ── NetworkPolicy: agent egress only to platform URL ─────────────────────────
@@ -309,6 +348,16 @@ spec:
                 configMapKeyRef:
                   name: agent-config
                   key: METRICS_SERVER_ENABLED
+            - name: OPENCOST_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: OPENCOST_URL
+            - name: HUBBLE_METRICS_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: agent-config
+                  key: HUBBLE_METRICS_URL
 
           resources:
             requests:

@@ -25,6 +25,35 @@ def _resolve_cluster(cluster: Optional[str]) -> str:
     return clusters[0]["cluster_name"]
 
 
+def _hubble_flows_for(cluster: Optional[str], pod_name: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Real observed network flows from Cilium Hubble (see docs/hubble-setup.md),
+    as reported by the agent's network domain. [] when Hubble isn't deployed
+    for this cluster — the config-posture host_network entry stays the only
+    signal in that case, same as before this integration existed."""
+    cluster_name = _resolve_cluster(cluster)
+    metrics = db_manager.get_latest_metrics(cluster_name)
+    if not metrics:
+        return []
+    network = metrics.get("network") or {}
+    if isinstance(network, str):
+        import json
+        network = json.loads(network) if network else {}
+    flows = network.get("hubble_flows") or []
+    if pod_name:
+        flows = [f for f in flows if f.get("source_pod") == pod_name or f.get("dest_pod") == pod_name]
+    return flows
+
+
+def _falco_alerts_for(cluster: Optional[str], pod_name: Optional[str] = None, hours: int = 24) -> List[Dict[str, Any]]:
+    """Real behavioral events pushed by Falco (see docs/falco-setup.md).
+    Returns [] — not fabricated data — when Falco isn't deployed for this cluster."""
+    cluster_name = _resolve_cluster(cluster)
+    alerts = db_manager.get_falco_alerts(cluster_name, hours=hours)
+    if pod_name:
+        alerts = [a for a in alerts if (a.get("fields") or {}).get("k8s.pod.name") == pod_name]
+    return alerts
+
+
 def _enqueue(cluster: Optional[str], command: str, params: Dict[str, Any]) -> Dict[str, Any]:
     cluster_name = _resolve_cluster(cluster)
     cmd_id = db_manager.enqueue_command(cluster_name, command, params)
@@ -998,22 +1027,29 @@ async def get_process_history(pod_name: str, cluster: Optional[str] = Query(None
         pod = next((p for p in pods if p.get("name") == pod_name), None)
 
         ns = pod.get("namespace", "unknown") if pod else "unknown"
-        ts = datetime.utcnow()
+
+        alerts = _falco_alerts_for(cluster, pod_name)
+        process_history = [
+            {
+                "timestamp": a.get("alert_time"),
+                "pid": (a.get("fields") or {}).get("proc.pid"),
+                "ppid": (a.get("fields") or {}).get("proc.ppid"),
+                "command": (a.get("fields") or {}).get("proc.cmdline") or (a.get("fields") or {}).get("proc.name"),
+                "user": (a.get("fields") or {}).get("user.name"),
+                "rule": a.get("rule"),
+                "exit_code": None,
+                "duration": "n/a",
+            }
+            for a in alerts
+            if (a.get("fields") or {}).get("proc.name")
+        ]
 
         return {
             "pod_name": pod_name,
             "namespace": ns,
-            "process_history": [
-                {
-                    "timestamp": (ts - timedelta(hours=3)).isoformat() + "Z",
-                    "pid": 1,
-                    "ppid": 0,
-                    "command": "/bin/sh",
-                    "user": "root" if pod and any(c.get("run_as_root") for c in (pod.get("containers") or [])) else "1000",
-                    "exit_code": None,
-                    "duration": "ongoing",
-                },
-            ],
+            "process_history": process_history,
+            "source": "falco" if process_history else "none",
+            "note": None if process_history else "No Falco alerts for this pod — deploy Falco to see real process activity (docs/falco-setup.md).",
             "cluster_name": ctx.get("cluster_name", "unknown"),
         }
 
@@ -1056,6 +1092,39 @@ async def get_network_evidence(pod_name: str, cluster: Optional[str] = Query(Non
                 "duration": "ongoing",
                 "risk": "high",
                 "reason": "Pod using host network namespace — unrestricted node access",
+                "source_kind": "config_posture",
+            })
+
+        for a in _falco_alerts_for(cluster, pod_name):
+            f = a.get("fields") or {}
+            if not f.get("fd.name"):
+                continue
+            connections.append({
+                "timestamp": a.get("alert_time"),
+                "protocol": f.get("fd.l4proto", "TCP").upper(),
+                "source": f"{f.get('fd.lip', 'pod')}:{f.get('fd.lport', '')}",
+                "destination": f.get("fd.name"),
+                "bytes_sent": None,
+                "bytes_received": None,
+                "duration": "n/a",
+                "risk": "high",
+                "reason": a.get("rule"),
+                "source_kind": "falco",
+            })
+
+        for f in _hubble_flows_for(cluster, pod_name):
+            connections.append({
+                "timestamp": None,
+                "protocol": f.get("protocol", "TCP"),
+                "source": f"{f.get('source_namespace')}/{f.get('source_pod')}",
+                "destination": f"{f.get('dest_namespace')}/{f.get('dest_pod')}",
+                "bytes_sent": None,
+                "bytes_received": None,
+                "duration": "n/a",
+                "connection_count": f.get("count", 0),
+                "risk": "high" if (f.get("verdict") or "").upper() == "DROPPED" else "low",
+                "reason": f"Observed {f.get('verdict', 'flow')} ({f.get('count', 0)} flows)",
+                "source_kind": "hubble",
             })
 
         return {
@@ -1143,28 +1212,59 @@ async def get_crypto_miner_detection(cluster: Optional[str] = Query(None)):
 
         ts = datetime.utcnow()
         miners = []
-        for i, pod in enumerate(high_risk[:5]):
+
+        # Real detections first — Falco's default ruleset flags Stratum
+        # mining-pool protocol traffic and known miner binaries by name.
+        miner_alerts = [
+            a for a in _falco_alerts_for(cluster)
+            if "miner" in (a.get("rule") or "").lower() or "stratum" in (a.get("rule") or "").lower()
+        ]
+        for i, a in enumerate(miner_alerts[:5]):
+            f = a.get("fields") or {}
             miners.append({
-                "id": f"MINER-{str(i+1).zfill(3)}",
-                "pod": pod["pod_name"],
-                "namespace": pod["namespace"],
-                "node_ip": pod.get("node_ip", "unknown"),
-                "miner_type": "Potential (privileged access)",
-                "cpu_usage": None,  # No real CPU metrics at threat level
-                "detection_time": (ts - timedelta(hours=i+1)).isoformat() + "Z",
-                "suspicious_indicators": [
-                    "Privileged container (full host access)",
-                    "Root execution enabled",
-                    "Can execute arbitrary processes on node",
-                ],
-                "risk_score": pod["risk_score"],
+                "id": f"MINER-FALCO-{str(i+1).zfill(3)}",
+                "pod": f.get("k8s.pod.name", "unknown"),
+                "namespace": f.get("k8s.ns.name", "unknown"),
+                "node_ip": "unknown",
+                "miner_type": "Confirmed (Falco runtime detection)",
+                "cpu_usage": None,
+                "detection_time": a.get("alert_time"),
+                "suspicious_indicators": [a.get("rule"), a.get("output")],
+                "risk_score": 100,
+                "source": "falco",
             })
+
+        # Heuristic fallback (privileged+root posture) — only surfaced
+        # when Falco hasn't already confirmed anything, so we don't drown
+        # a real detection in guesses.
+        if not miners:
+            for i, pod in enumerate(high_risk[:5]):
+                miners.append({
+                    "id": f"MINER-{str(i+1).zfill(3)}",
+                    "pod": pod["pod_name"],
+                    "namespace": pod["namespace"],
+                    "node_ip": pod.get("node_ip", "unknown"),
+                    "miner_type": "Potential (privileged access)",
+                    "cpu_usage": None,  # No real CPU metrics at threat level
+                    "detection_time": (ts - timedelta(hours=i+1)).isoformat() + "Z",
+                    "suspicious_indicators": [
+                        "Privileged container (full host access)",
+                        "Root execution enabled",
+                        "Can execute arbitrary processes on node",
+                    ],
+                    "risk_score": pod["risk_score"],
+                    "source": "config_posture",
+                })
+
+        note = ("Confirmed via Falco runtime detection." if miner_alerts else
+                "No Falco alerts matched miner rules; showing container-privilege heuristic instead. "
+                "Deploy Falco for real runtime detection (docs/falco-setup.md).")
 
         return {
             "active_miners": len(miners),
-            "total_detected": len(high_risk),
+            "total_detected": len(miner_alerts) if miner_alerts else len(high_risk),
             "miners": miners,
-            "note": "Risk assessment based on container privilege signals. Runtime process inspection not available.",
+            "note": note,
             "cluster_name": ctx["cluster_name"],
             "last_updated": ts.isoformat() + "Z",
         }

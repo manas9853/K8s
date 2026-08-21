@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useActiveCluster } from '../../hooks/useActiveCluster';
 import { useCluster } from '../../contexts/ClusterContext';
 import NoClusterState from '../../components/NoClusterState';
+import CicdConnectForm from '../../components/CicdConnectForm';
 import {
   Box, Paper, Typography, Grid, Card, CardContent,
   Table, TableBody, TableCell, TableContainer,
@@ -28,14 +29,16 @@ const GitLabCI: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchData = () => {
     setLoading(true);
     setError(null);
     axios.get(`${API_BASE}/api/v1/platform/pipelines/gitlab-ci`, { params: { cluster_id: clusterParam } })
       .then((r) => setData(r.data))
       .catch((e) => setError(axios.isAxiosError(e) ? e.response?.data?.detail ?? e.message : String(e)))
       .finally(() => setLoading(false));
-  }, [clusterParam]);
+  };
+
+  useEffect(fetchData, [clusterParam]);
 
   const passedCount = data.filter((r) => r.status === 'success' || r.status === 'passed').length;
   const failedCount = data.filter((r) => r.status === 'failed').length;
@@ -54,7 +57,7 @@ const GitLabCI: React.FC = () => {
         <Grid item xs={12} md={4}><Card><CardContent><Typography color="text.secondary">Projects</Typography><Typography variant="h5">{projectCount}</Typography></CardContent></Card></Grid>
       </Grid>
       {data.length === 0 && !loading && !error && (
-        <Paper sx={{ p: 3 }}><Typography color="text.secondary" textAlign="center">No GitLab CI data yet. Configure the GitLab integration in Settings → Integrations.</Typography></Paper>
+        <CicdConnectForm provider="GitLab CI" onConnected={fetchData} />
       )}
       {data.length > 0 && (
         <Paper>

@@ -164,6 +164,8 @@ MOCK_DB.get_clusters_by_org.return_value = []
 MOCK_DB.get_latest_metrics.return_value = None
 MOCK_DB.get_cluster_count.return_value = 0
 MOCK_DB.enqueue_command.return_value = 1
+MOCK_DB.get_cicd_pipeline_cache.return_value = []
+MOCK_DB.get_falco_alerts.return_value = []
 
 sys.modules.setdefault(
     "utils.cluster_registry",

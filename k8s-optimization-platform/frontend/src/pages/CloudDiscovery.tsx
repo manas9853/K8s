@@ -31,7 +31,27 @@ const RED    = colors.danger;
 const PURPLE = colors.purple;
 
 // ── Provider metadata ──────────────────────────────────────────────────────────
-const PROVIDERS = [
+interface ProviderMeta {
+  id: string;
+  label: string;
+  logo: string;
+  placeholder_key?: string;
+  placeholder_account: string;
+  placeholder_tag: string;
+  placeholder_billing_table?: string;
+  placeholder_tenant?: string;
+  placeholder_client?: string;
+  setup_cmd?: string;
+  permissions: string[];
+  scope: string;
+  note: string;
+  comingSoon?: boolean;
+  usesRole?: boolean;
+  usesServiceAccount?: boolean;
+  usesServicePrincipal?: boolean;
+}
+
+const PROVIDERS: ProviderMeta[] = [
   {
     id: 'IBM Cloud',
     label: 'IBM Cloud',
@@ -47,40 +67,41 @@ const PROVIDERS = [
   {
     id: 'AWS',
     label: 'AWS',
-    comingSoon: true,
+    usesRole: true,
     logo: '🟡',
-    placeholder_key: 'AKIAIOSFODNN7EXAMPLE',
     placeholder_account: '123456789012',
     placeholder_tag: 'eks-cluster-name',
-    setup_cmd: '# Attach AWSBillingReadOnlyAccess policy to an IAM user',
     permissions: ['ce:GetCostAndUsage', 'ce:GetDimensionValues'],
     scope: 'EKS costs filtered by cluster tag',
-    note: 'AWS Cost Explorer read-only. No EC2/S3/RDS access.',
+    note: 'AWS Cost Explorer, amortized (RI/Savings-Plan-aware) cost, read-only. No API keys — cross-account IAM role only.',
   },
   {
     id: 'GCP',
     label: 'GCP',
-    comingSoon: true,
+    usesServiceAccount: true,
     logo: '🔴',
-    placeholder_key: '{"type":"service_account","project_id":"..."}',
+    placeholder_key: '{"type":"service_account","client_email":"...","private_key":"...","private_key_id":"..."}',
     placeholder_account: 'my-gcp-project-id',
     placeholder_tag: 'gke-cluster-name',
+    placeholder_billing_table: 'my-project.billing_export.gcp_billing_export_v1_XXXXXX_XXXXXX_XXXXXX',
     setup_cmd: 'gcloud iam service-accounts create k8s-billing-reader --display-name "K8s Billing Reader"',
-    permissions: ['bigquery.tables.getData', 'bigquery.jobs.create'],
-    scope: 'GKE service costs filtered by cluster label',
-    note: 'BigQuery billing export — read-only. No Compute/Storage access.',
+    permissions: ['roles/bigquery.dataViewer (billing export dataset only)', 'roles/bigquery.jobs.user'],
+    scope: 'The BigQuery billing export table you specify, read-only',
+    note: 'Queries your BigQuery billing export directly — no Compute/Storage access, no key stored in plaintext.',
   },
   {
     id: 'Azure',
     label: 'Azure',
-    comingSoon: true,
+    usesServicePrincipal: true,
     logo: '🔷',
     placeholder_key: 'client_secret_xxxxxxxxxxxxxxxx',
     placeholder_account: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
     placeholder_tag: 'aks-cluster-name',
+    placeholder_tenant: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
+    placeholder_client: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx',
     setup_cmd: "az role assignment create --role 'Cost Management Reader' --assignee <service-principal>",
-    permissions: ['Cost Management Reader'],
-    scope: 'AKS resource group costs only',
+    permissions: ['Cost Management Reader (scoped to one subscription)'],
+    scope: 'Cost Management API only, scoped to the subscription you assign the role on',
     note: 'Azure Cost Management Reader role — read-only. No VM/Storage access.',
   },
 ];
@@ -114,6 +135,12 @@ const CloudDiscovery: React.FC = () => {
   // Connect form state
   const [provider,    setProvider]    = useState('IBM Cloud');
   const [apiKey,      setApiKey]      = useState('');
+  const [roleArn,     setRoleArn]     = useState('');
+  const [awsSetup,    setAwsSetup]    = useState<{ platform_account_id: string; external_id: string; cli_setup: string } | null>(null);
+  const [loadingAwsSetup, setLoadingAwsSetup] = useState(false);
+  const [billingTable, setBillingTable] = useState('');   // GCP
+  const [tenantId,    setTenantId]    = useState('');     // Azure
+  const [clientId,    setClientId]    = useState('');     // Azure
   const [accountId,   setAccountId]   = useState('');
   const [clusterTag,  setClusterTag]  = useState('');
   const [step,        setStep]        = useState(0);   // 0=pick provider 1=enter creds 2=done
@@ -150,16 +177,44 @@ const CloudDiscovery: React.FC = () => {
     }
   }, [activeClusterId, clusterTag]);
 
+  // ── AWS: fetch the trust-policy/ExternalId this cluster needs ─────────────
+  const fetchAwsSetup = useCallback(async () => {
+    if (!activeClusterId || activeClusterId === 'all') return;
+    setLoadingAwsSetup(true);
+    try {
+      const r = await fetch(`${API_BASE_URL}/v1/discovery/aws/setup?cluster_name=${activeClusterId}`);
+      if (r.ok) setAwsSetup(await r.json());
+    } catch { /* ignore */ }
+    finally { setLoadingAwsSetup(false); }
+  }, [activeClusterId]);
+
+  // ── Per-provider credential payload + readiness check ──────────────────────
+  const credentialFields = (): Record<string, string> => {
+    if (provMeta.usesRole) return { role_arn: roleArn, external_id: awsSetup?.external_id ?? '' };
+    if (provMeta.usesServiceAccount) return { service_account_json: apiKey, billing_table: billingTable };
+    if (provMeta.usesServicePrincipal) return { api_key: apiKey, tenant_id: tenantId, client_id: clientId };
+    return { api_key: apiKey };
+  };
+  const credentialsReady = (): boolean => {
+    if (provMeta.usesRole) return !!(roleArn && awsSetup);
+    if (provMeta.usesServiceAccount) return !!(apiKey && billingTable);
+    if (provMeta.usesServicePrincipal) return !!(apiKey && tenantId && clientId);
+    return !!apiKey;
+  };
+
   // ── Validate credentials ────────────────────────────────────────────────────
   const handleValidate = async () => {
-    if (!apiKey || !accountId) { setFormError('API Key and Account ID are required'); return; }
+    if (!credentialsReady() || !accountId) {
+      setFormError('All credential fields are required');
+      return;
+    }
     setValidating(true);
     setFormError(null);
     try {
       const r = await fetch(`${API_BASE_URL}/v1/discovery/validate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider, api_key: apiKey, account_id: accountId }),
+        body: JSON.stringify({ provider, account_id: accountId, ...credentialFields() }),
       });
       const d = await r.json();
       if (!r.ok || !d.valid) {
@@ -177,7 +232,10 @@ const CloudDiscovery: React.FC = () => {
   // ── Connect ─────────────────────────────────────────────────────────────────
   const handleConnect = async () => {
     if (!activeClusterId || activeClusterId === 'all') return;
-    if (!apiKey || !accountId || !clusterTag) { setFormError('All fields required'); return; }
+    if (!clusterTag || !credentialsReady() || !accountId) {
+      setFormError('All fields required');
+      return;
+    }
     setConnecting(true);
     setFormError(null);
     try {
@@ -187,9 +245,9 @@ const CloudDiscovery: React.FC = () => {
         body: JSON.stringify({
           cluster_name: activeClusterId,
           provider,
-          api_key: apiKey,
           account_id: accountId,
           cluster_tag: clusterTag,
+          ...credentialFields(),
         }),
       });
       const d = await r.json();
@@ -197,6 +255,10 @@ const CloudDiscovery: React.FC = () => {
       await fetchStatus();
       setStep(0);
       setApiKey('');
+      setRoleArn('');
+      setBillingTable('');
+      setTenantId('');
+      setClientId('');
     } catch (e: any) {
       setFormError(e?.message ?? 'Connection failed');
     } finally {
@@ -229,7 +291,7 @@ const CloudDiscovery: React.FC = () => {
   };
 
   const copyCmd = () => {
-    navigator.clipboard.writeText(provMeta.setup_cmd);
+    navigator.clipboard.writeText(provMeta.setup_cmd ?? awsSetup?.cli_setup ?? '');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -457,8 +519,10 @@ const CloudDiscovery: React.FC = () => {
                           Security: Read-only billing scope only
                         </Typography>
                         <Typography sx={{ color: DK.muted, fontSize: '0.72rem', lineHeight: 1.5 }}>
-                          {provMeta.scope}. {provMeta.note}.
-                          API keys are encrypted (AES-256-GCM) at rest and never returned in API responses.
+                          {provMeta.scope}. {provMeta.note}.{' '}
+                          {provMeta.usesRole
+                            ? 'No credentials are ever stored — we only keep the role ARN, revocable anytime from your AWS account.'
+                            : 'API keys are encrypted (AES-256-GCM) at rest and never returned in API responses.'}
                         </Typography>
                       </Box>
                     </Box>
@@ -466,7 +530,7 @@ const CloudDiscovery: React.FC = () => {
                     <Button
                       variant="contained"
                       fullWidth
-                      onClick={() => setStep(1)}
+                      onClick={() => { setStep(1); if (provMeta.usesRole) fetchAwsSetup(); }}
                       sx={{ bgcolor: ACCENT, color: colors.background, fontWeight: 700, textTransform: 'none', '&:hover': { bgcolor: colors.info } }}
                     >
                       Continue with {provMeta.label} →
@@ -482,26 +546,111 @@ const CloudDiscovery: React.FC = () => {
                     </Typography>
 
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {provMeta.usesRole ? (
+                        <>
+                          {loadingAwsSetup && <CircularProgress size={20} sx={{ color: ACCENT, alignSelf: 'center' }} />}
+                          {awsSetup && (
+                            <Box sx={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 1.5, p: 1.75 }}>
+                              <Typography sx={{ color: DK.text, fontSize: '0.78rem', fontWeight: 700, mb: 1 }}>
+                                1. Create the role in your AWS account
+                              </Typography>
+                              <Typography sx={{ color: DK.muted, fontSize: '0.7rem', mb: 1 }}>
+                                No API keys — this role can only be assumed by our platform account
+                                ({awsSetup.platform_account_id}) and only when it presents this exact
+                                ExternalId. Run:
+                              </Typography>
+                              <Box sx={{ bgcolor: DK.bg, borderRadius: 1, p: 1.25, fontFamily: 'monospace', fontSize: '0.68rem', color: ACCENT, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                                {awsSetup.cli_setup}
+                              </Box>
+                              <Typography sx={{ color: DK.muted, fontSize: '0.68rem', mt: 1 }}>
+                                ExternalId: <span style={{ color: DK.text, fontFamily: 'monospace' }}>{awsSetup.external_id}</span>
+                              </Typography>
+                            </Box>
+                          )}
+                          <TextField
+                            label="Role ARN"
+                            value={roleArn}
+                            onChange={e => { setRoleArn(e.target.value); setFormError(null); }}
+                            placeholder="arn:aws:iam::123456789012:role/k8s-optimization-billing-reader"
+                            fullWidth size="small" sx={fieldSx}
+                          />
+                        </>
+                      ) : provMeta.usesServiceAccount ? (
+                        <>
+                          <TextField
+                            label="Service Account Key (JSON)"
+                            value={apiKey}
+                            onChange={e => { setApiKey(e.target.value); setFormError(null); }}
+                            placeholder={provMeta.placeholder_key}
+                            fullWidth size="small" multiline minRows={4}
+                            sx={fieldSx}
+                            helperText={<span style={{ color: DK.muted, fontSize: '0.7rem' }}>Paste the full key.json contents — scoped to bigquery.dataViewer on your billing export dataset only</span>}
+                          />
+                          <TextField
+                            label="Billing Export Table"
+                            value={billingTable}
+                            onChange={e => { setBillingTable(e.target.value); setFormError(null); }}
+                            placeholder={provMeta.placeholder_billing_table}
+                            fullWidth size="small" sx={fieldSx}
+                            helperText={<span style={{ color: DK.muted, fontSize: '0.7rem' }}>project.dataset.table — find it under Billing → Billing export in GCP Console</span>}
+                          />
+                        </>
+                      ) : provMeta.usesServicePrincipal ? (
+                        <>
+                          <TextField
+                            label="Tenant ID"
+                            value={tenantId}
+                            onChange={e => { setTenantId(e.target.value); setFormError(null); }}
+                            placeholder={provMeta.placeholder_tenant}
+                            fullWidth size="small" sx={fieldSx}
+                          />
+                          <TextField
+                            label="Client (Application) ID"
+                            value={clientId}
+                            onChange={e => { setClientId(e.target.value); setFormError(null); }}
+                            placeholder={provMeta.placeholder_client}
+                            fullWidth size="small" sx={fieldSx}
+                          />
+                          <TextField
+                            label="Client Secret"
+                            type={showKey ? 'text' : 'password'}
+                            value={apiKey}
+                            onChange={e => { setApiKey(e.target.value); setFormError(null); }}
+                            placeholder={provMeta.placeholder_key}
+                            fullWidth size="small"
+                            InputProps={{
+                              endAdornment: (
+                                <Button size="small" onClick={() => setShowKey(v => !v)}
+                                  sx={{ color: DK.muted, fontSize: '0.65rem', minWidth: 'unset', textTransform: 'none' }}>
+                                  {showKey ? 'Hide' : 'Show'}
+                                </Button>
+                              ),
+                            }}
+                            sx={fieldSx}
+                          />
+                        </>
+                      ) : (
+                        <TextField
+                          label="API Key / Secret"
+                          type={showKey ? 'text' : 'password'}
+                          value={apiKey}
+                          onChange={e => { setApiKey(e.target.value); setFormError(null); }}
+                          placeholder={provMeta.placeholder_key}
+                          fullWidth
+                          size="small"
+                          InputProps={{
+                            endAdornment: (
+                              <Button size="small" onClick={() => setShowKey(v => !v)}
+                                sx={{ color: DK.muted, fontSize: '0.65rem', minWidth: 'unset', textTransform: 'none' }}>
+                                {showKey ? 'Hide' : 'Show'}
+                              </Button>
+                            ),
+                          }}
+                          sx={fieldSx}
+                        />
+                      )}
                       <TextField
-                        label="API Key / Secret"
-                        type={showKey ? 'text' : 'password'}
-                        value={apiKey}
-                        onChange={e => { setApiKey(e.target.value); setFormError(null); }}
-                        placeholder={provMeta.placeholder_key}
-                        fullWidth
-                        size="small"
-                        InputProps={{
-                          endAdornment: (
-                            <Button size="small" onClick={() => setShowKey(v => !v)}
-                              sx={{ color: DK.muted, fontSize: '0.65rem', minWidth: 'unset', textTransform: 'none' }}>
-                              {showKey ? 'Hide' : 'Show'}
-                            </Button>
-                          ),
-                        }}
-                        sx={fieldSx}
-                      />
-                      <TextField
-                        label="Account / Project ID"
+                        label="Account ID"
                         value={accountId}
                         onChange={e => { setAccountId(e.target.value); setFormError(null); }}
                         placeholder={provMeta.placeholder_account}
@@ -513,7 +662,7 @@ const CloudDiscovery: React.FC = () => {
                         onChange={e => { setClusterTag(e.target.value); setFormError(null); }}
                         placeholder={provMeta.placeholder_tag}
                         fullWidth size="small" sx={fieldSx}
-                        helperText={<span style={{ color: DK.muted, fontSize: '0.7rem' }}>Usually the cluster name or ID used as a billing tag</span>}
+                        helperText={<span style={{ color: DK.muted, fontSize: '0.7rem' }}>Usually the cluster name or ID used as a billing tag{provMeta.usesRole ? ' — the eks:cluster-name tag AWS puts on your cluster\'s resources' : ''}</span>}
                       />
                     </Box>
 
@@ -534,7 +683,7 @@ const CloudDiscovery: React.FC = () => {
                       <Button
                         variant="outlined"
                         onClick={handleValidate}
-                        disabled={validating || !apiKey || !accountId}
+                        disabled={validating || !credentialsReady() || !accountId}
                         startIcon={validating ? <CircularProgress size={14} sx={{ color: ACCENT }} /> : null}
                         sx={{ borderColor: ACCENT, color: ACCENT, textTransform: 'none', flex: 1, '&:hover': { bgcolor: `${ACCENT}11` } }}
                       >

@@ -40,6 +40,9 @@ httpx==0.26.0
 aiohttp==3.9.1
 requests==2.31.0
 
+# Cloud billing integrations
+boto3==1.34.144
+
 # Utilities
 python-dotenv==1.0.0
 pyyaml==6.0.1

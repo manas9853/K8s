@@ -169,6 +169,23 @@ class DatabaseManager:
                 ON agent_network_flows(cluster_name, received_at DESC)
             """)
 
+            # ── node_image_scans — node-local Trivy scans (node_scanner.py) ────
+            # One row per (cluster, image): each new scan replaces the old one,
+            # same as trivy_scanner.py's in-memory cache but persisted/shared.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS node_image_scans (
+                    cluster_name  TEXT NOT NULL,
+                    image         TEXT NOT NULL,
+                    node_name     TEXT NOT NULL,
+                    scan_status   TEXT NOT NULL,
+                    parsed_report JSONB,
+                    error_message TEXT,
+                    scanned_at    DOUBLE PRECISION NOT NULL,
+                    received_at   TEXT NOT NULL,
+                    PRIMARY KEY (cluster_name, image)
+                )
+            """)
+
             # ── cis_control_exceptions ─────────────────────────────────────────
             cur.execute("""
                 CREATE TABLE IF NOT EXISTS cis_control_exceptions (
@@ -222,6 +239,34 @@ class DatabaseManager:
                     updated_at    TEXT NOT NULL
                 )
             """)
+            # AWS uses cross-account IAM role assumption instead of a stored
+            # API key — neither value is secret on its own (only our
+            # platform's own AWS identity assuming the role can use them),
+            # so no encryption needed, unlike api_key_enc.
+            cur.execute("""
+                ALTER TABLE cloud_discovery_config
+                ADD COLUMN IF NOT EXISTS role_arn TEXT
+            """)
+            cur.execute("""
+                ALTER TABLE cloud_discovery_config
+                ADD COLUMN IF NOT EXISTS external_id TEXT
+            """)
+            # GCP (billing_table) and Azure (tenant_id, client_id) — none of
+            # these are secret on their own; the actual GCP service-account
+            # key / Azure client_secret goes in api_key_enc (same encrypted
+            # column IBM's key already uses — one secret column, not three).
+            cur.execute("""
+                ALTER TABLE cloud_discovery_config
+                ADD COLUMN IF NOT EXISTS billing_table TEXT
+            """)
+            cur.execute("""
+                ALTER TABLE cloud_discovery_config
+                ADD COLUMN IF NOT EXISTS tenant_id TEXT
+            """)
+            cur.execute("""
+                ALTER TABLE cloud_discovery_config
+                ADD COLUMN IF NOT EXISTS client_id TEXT
+            """)
 
             # ── cluster_billing_cache — hourly billing data from cloud APIs ───
             cur.execute("""
@@ -239,6 +284,62 @@ class DatabaseManager:
                     fetched_at     TEXT NOT NULL,
                     PRIMARY KEY (cluster_name, billing_month)
                 )
+            """)
+
+            # ── cicd_integrations — Jenkins/GitHub Actions/GitLab CI credentials ──
+            # Composite key (not single-provider-per-cluster like
+            # cloud_discovery_config) — a cluster can have GitHub Actions AND
+            # Jenkins connected at once. token_enc uses the same Fernet
+            # encryption as cloud_discovery_config.api_key_enc.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cicd_integrations (
+                    cluster_name  TEXT NOT NULL REFERENCES agent_clusters(cluster_name),
+                    provider      TEXT NOT NULL,   -- 'GitHub Actions' | 'GitLab CI' | 'Jenkins'
+                    base_url      TEXT,            -- self-hosted GitLab/Jenkins; null = gitlab.com
+                    username      TEXT,            -- Jenkins basic auth
+                    token_enc     TEXT,
+                    project_ref   TEXT,             -- "owner/repo" (GH) | project path/ID (GL)
+                    status        TEXT NOT NULL DEFAULT 'pending',
+                    last_sync_at  TEXT,
+                    last_sync_ok  BOOLEAN DEFAULT FALSE,
+                    last_error    TEXT,
+                    created_at    TEXT NOT NULL,
+                    updated_at    TEXT NOT NULL,
+                    PRIMARY KEY (cluster_name, provider)
+                )
+            """)
+
+            # ── cicd_pipeline_cache — last-polled runs per integration ────────
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS cicd_pipeline_cache (
+                    cluster_name TEXT NOT NULL,
+                    provider     TEXT NOT NULL,
+                    runs         JSONB NOT NULL DEFAULT '[]',
+                    fetched_at   TEXT NOT NULL,
+                    PRIMARY KEY (cluster_name, provider)
+                )
+            """)
+
+            # ── falco_alerts — real runtime/behavioral events (Phase 6) ───────
+            # Pushed directly by Falco's own http_output — see
+            # docs/falco-setup.md. Falco can't send custom auth headers, so
+            # the per-cluster token travels in the URL path instead (same
+            # trick Slack/GitHub webhooks use), see /falco-alerts/{cluster}/{token}.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS falco_alerts (
+                    id           BIGSERIAL PRIMARY KEY,
+                    cluster_name TEXT NOT NULL,
+                    rule         TEXT NOT NULL,
+                    priority     TEXT NOT NULL,
+                    output       TEXT NOT NULL,
+                    fields       JSONB NOT NULL DEFAULT '{}',
+                    alert_time   TEXT NOT NULL,
+                    received_at  TEXT NOT NULL
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_falco_alerts_cluster_time
+                ON falco_alerts(cluster_name, received_at DESC)
             """)
 
             conn.commit()
@@ -353,6 +454,15 @@ class DatabaseManager:
                 cur = conn.cursor()
                 cur.execute(
                     "DELETE FROM agent_metrics WHERE cluster_name = %s", (cluster_name,)
+                )
+                cur.execute(
+                    "DELETE FROM cloud_discovery_config WHERE cluster_name = %s", (cluster_name,)
+                )
+                cur.execute(
+                    "DELETE FROM cicd_integrations WHERE cluster_name = %s", (cluster_name,)
+                )
+                cur.execute(
+                    "DELETE FROM cicd_pipeline_cache WHERE cluster_name = %s", (cluster_name,)
                 )
                 cur.execute(
                     "DELETE FROM agent_clusters WHERE cluster_name = %s", (cluster_name,)
@@ -520,6 +630,164 @@ class DatabaseManager:
             ]
         except Exception as e:
             logger.error(f"Error getting network flows: {e}")
+            return []
+
+    def upsert_cicd_pipeline_cache(self, cluster_name: str, provider: str, runs: List[Dict[str, Any]]) -> bool:
+        """Store one poll cycle's runs for one CI/CD integration, replacing the previous cache."""
+        now = datetime.utcnow().isoformat()
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO cicd_pipeline_cache (cluster_name, provider, runs, fetched_at)
+                       VALUES (%s, %s, %s, %s)
+                       ON CONFLICT (cluster_name, provider) DO UPDATE SET
+                         runs = EXCLUDED.runs, fetched_at = EXCLUDED.fetched_at""",
+                    (cluster_name, provider, json.dumps(runs), now),
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error storing CI/CD pipeline cache ({cluster_name}/{provider}): {e}")
+            return False
+
+    def get_cicd_pipeline_cache(self, cluster_name: str, provider: str) -> List[Dict[str, Any]]:
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "SELECT runs FROM cicd_pipeline_cache WHERE cluster_name = %s AND provider = %s",
+                    (cluster_name, provider),
+                )
+                row = cur.fetchone()
+                if not row:
+                    return []
+                runs = row["runs"] if isinstance(row, dict) else row[0]
+                return runs if isinstance(runs, list) else json.loads(runs or "[]")
+        except Exception as e:
+            logger.error(f"Error reading CI/CD pipeline cache ({cluster_name}/{provider}): {e}")
+            return []
+
+    def upsert_node_image_scans(self, cluster_name: str, node_name: str,
+                                 scanned_at: float, results: List[Dict[str, Any]]) -> bool:
+        """Store one node_scanner.py cycle's results — one row per image,
+        replacing that image's previous scan (upsert on cluster+image)."""
+        try:
+            now = datetime.utcnow().isoformat()
+            with self._conn() as conn:
+                cur = conn.cursor()
+                for r in results:
+                    cur.execute(
+                        """INSERT INTO node_image_scans
+                           (cluster_name, image, node_name, scan_status,
+                            parsed_report, error_message, scanned_at, received_at)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                           ON CONFLICT (cluster_name, image) DO UPDATE SET
+                             node_name     = EXCLUDED.node_name,
+                             scan_status   = EXCLUDED.scan_status,
+                             parsed_report = EXCLUDED.parsed_report,
+                             error_message = EXCLUDED.error_message,
+                             scanned_at    = EXCLUDED.scanned_at,
+                             received_at   = EXCLUDED.received_at""",
+                        (
+                            cluster_name, r["image"], node_name, r["scan_status"],
+                            json.dumps(r.get("parsed_report")) if r.get("parsed_report") else None,
+                            r.get("error_message"), scanned_at, now,
+                        ),
+                    )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error storing node image scans: {e}")
+            return False
+
+    def get_node_image_scans(self, cluster_name: str) -> Dict[str, Dict[str, Any]]:
+        """All node-local scans for a cluster, keyed by image ref — this is
+        real data (scanned from the node's local containerd store, works
+        for private registries) and should be preferred over the
+        network-pull-based trivy_scanner.py path whenever present."""
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT image, node_name, scan_status, parsed_report,
+                              error_message, scanned_at
+                       FROM node_image_scans WHERE cluster_name = %s""",
+                    (cluster_name,),
+                )
+                rows = cur.fetchall()
+            out = {}
+            for row in rows:
+                d = dict(row) if isinstance(row, dict) else {
+                    "image": row[0], "node_name": row[1], "scan_status": row[2],
+                    "parsed_report": row[3], "error_message": row[4], "scanned_at": row[5],
+                }
+                report = d["parsed_report"]
+                if isinstance(report, str):
+                    report = json.loads(report) if report else None
+                out[d["image"]] = {**d, "parsed_report": report}
+            return out
+        except Exception as e:
+            logger.error(f"Error reading node image scans: {e}")
+            return {}
+
+    # ── falco_alerts — real runtime events pushed by Falco's http_output ────
+
+    def insert_falco_alert(self, cluster_name: str, rule: str, priority: str,
+                            output: str, fields: Dict[str, Any], alert_time: str) -> bool:
+        """One alert = one Falco http_output POST. Trims to the most recent
+        2000 rows per cluster on every insert so this table can't grow
+        unbounded — ponytail: fixed cap, add a Celery-scheduled prune if a
+        customer's alert volume makes per-insert trimming too slow."""
+        try:
+            now = datetime.utcnow().isoformat()
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO falco_alerts
+                       (cluster_name, rule, priority, output, fields, alert_time, received_at)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s)""",
+                    (cluster_name, rule, priority, output, json.dumps(fields), alert_time, now),
+                )
+                cur.execute(
+                    """DELETE FROM falco_alerts WHERE cluster_name = %s AND id NOT IN (
+                           SELECT id FROM falco_alerts WHERE cluster_name = %s
+                           ORDER BY received_at DESC LIMIT 2000
+                       )""",
+                    (cluster_name, cluster_name),
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error inserting falco alert: {e}")
+            return False
+
+    def get_falco_alerts(self, cluster_name: str, hours: int = 24, limit: int = 500) -> List[Dict[str, Any]]:
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT rule, priority, output, fields, alert_time, received_at
+                       FROM falco_alerts
+                       WHERE cluster_name = %s
+                         AND received_at > (NOW() AT TIME ZONE 'utc' - INTERVAL '1 hour' * %s)::text
+                       ORDER BY received_at DESC LIMIT %s""",
+                    (cluster_name, hours, limit),
+                )
+                rows = cur.fetchall()
+            out = []
+            for row in rows:
+                d = dict(row) if isinstance(row, dict) else {
+                    "rule": row[0], "priority": row[1], "output": row[2],
+                    "fields": row[3], "alert_time": row[4], "received_at": row[5],
+                }
+                fields = d["fields"]
+                if isinstance(fields, str):
+                    fields = json.loads(fields) if fields else {}
+                out.append({**d, "fields": fields})
+            return out
+        except Exception as e:
+            logger.error(f"Error reading falco alerts: {e}")
             return []
 
     def get_pod_utilization_history(self, cluster_name: str, namespace: str,
