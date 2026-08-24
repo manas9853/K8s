@@ -71,6 +71,15 @@ rules:
       - deployments
       - replicasets
     verbs: ["patch", "update"]
+  # scale_statefulset / restart_daemonset (agent.py:_run_k8s_command) need
+  # write verbs here too — these were previously get/list-only, a real gap
+  # that made those two commands 403 at runtime (found in the Phase 6
+  # audit, fixed here as part of Phase C's remediation-path hardening).
+  - apiGroups: ["apps"]
+    resources:
+      - statefulsets
+      - daemonsets
+    verbs: ["patch"]
 
   # Batch: jobs, cronjobs
   - apiGroups: ["batch"]
@@ -78,6 +87,16 @@ rules:
       - jobs
       - cronjobs
     verbs: ["get", "list"]
+  # delete_job / suspend_cronjob / trigger_cronjob need write verbs — same
+  # kind of gap as above (jobs/cronjobs were get/list-only).
+  - apiGroups: ["batch"]
+    resources:
+      - jobs
+    verbs: ["create", "delete"]
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+    verbs: ["patch"]
 
   # Networking: services (covered above), ingresses, network policies,
   #             ingress classes

@@ -74,6 +74,30 @@ interface Summary {
   total_throttling_events: number;
 }
 
+// RCA engine (Phase A) — multi-hypothesis root cause analysis, evidence-ranked
+interface RcaHypothesis {
+  cause: string;
+  confidence: number;
+  evidence: { signal: string; detail: string }[];
+  recommendation: string;
+  steps: string[];
+  validated: boolean;
+  fix_confidence?: number;
+  fix_confidence_sample_size?: number;
+}
+
+interface RcaFinding {
+  failure_class: string;
+  hypotheses: RcaHypothesis[];
+}
+
+interface RcaResult {
+  pod_name: string;
+  namespace: string;
+  healthy: boolean;
+  findings: RcaFinding[];
+}
+
 // ─── Design tokens ─────────────────────────────────────────────────────────
 
 const DK = {
@@ -100,6 +124,14 @@ const TYPE_COLOR: Record<string, string> = {
 };
 
 const PIE_COLORS = [colors.danger, colors.warning, colors.info, colors.purple, colors.success, colors.info];
+
+const FAILURE_CLASS_LABEL: Record<string, string> = {
+  image_pull: 'Image Pull Failure',
+  oom_killed: 'OOM Killed',
+  crash_loop: 'Crash Loop',
+  pending_unschedulable: 'Pending / Unschedulable',
+  config_error: 'Container Config Error',
+};
 
 // ─── Reusable mini-components ──────────────────────────────────────────────
 
@@ -147,6 +179,9 @@ const IncidentsInner: React.FC = () => {
   const [correlations, setCorrelations] = useState<Correlation[]>([]);
   const [patterns, setPatterns]       = useState<Pattern[]>([]);
   const [summary, setSummary]         = useState<Summary | null>(null);
+  const [rcaResults, setRcaResults]   = useState<RcaResult[]>([]);
+  const [verifyLoading, setVerifyLoading] = useState<string | null>(null);
+  const [applyLoading, setApplyLoading] = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
   const [tab, setTab]                 = useState(0);
   const [fixLoading, setFixLoading]   = useState<string | null>(null);
@@ -158,16 +193,18 @@ const IncidentsInner: React.FC = () => {
   const fetchAll = async () => {
     setLoading(true);
     try {
-      const [incR, corR, patR, sumR] = await Promise.all([
+      const [incR, corR, patR, sumR, rcaR] = await Promise.all([
         fetch(`${API_BASE_URL}/v1/incidents/incidents${clusterParam}`),
         fetch(`${API_BASE_URL}/v1/incidents/correlations${clusterParam}`),
         fetch(`${API_BASE_URL}/v1/incidents/patterns${clusterParam}`),
         fetch(`${API_BASE_URL}/v1/incidents/summary${clusterParam}`),
+        fetch(`${API_BASE_URL}/v1/rca/cluster${clusterParam}`),
       ]);
       if (incR.ok) setIncidents(await incR.json());
       if (corR.ok) setCorrelations(await corR.json());
       if (patR.ok) setPatterns(await patR.json());
       if (sumR.ok) setSummary(await sumR.json());
+      if (rcaR.ok) setRcaResults((await rcaR.json()).results ?? []);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   };
@@ -219,6 +256,56 @@ const IncidentsInner: React.FC = () => {
       setToast({ open: true, msg: e?.message ?? 'Network error', sev: 'error' });
     } finally {
       setFixLoading(null);
+    }
+  };
+
+  // Phase B — actively verify an image_pull finding via the agent's real
+  // registry/DNS/pull-secret probe (Networking agent cross-domain handoff).
+  const handleVerifyNetwork = async (r: RcaResult) => {
+    setVerifyLoading(r.pod_name);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/rca/pod/${encodeURIComponent(r.pod_name)}/verify-network?namespace=${encodeURIComponent(r.namespace)}${clusterParam ? '&' + clusterParam.slice(1) : ''}`,
+        { method: 'POST' },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ open: true, msg: body?.detail ?? `Verification failed (HTTP ${res.status})`, sev: 'error' });
+        return;
+      }
+      setRcaResults(prev => prev.map(x => (x.pod_name === r.pod_name && x.namespace === r.namespace ? body : x)));
+      setToast({ open: true, msg: `✅ Verified against the real registry for ${r.pod_name}`, sev: 'success' });
+    } catch (e: any) {
+      setToast({ open: true, msg: e?.message ?? 'Network error', sev: 'error' });
+    } finally {
+      setVerifyLoading(null);
+    }
+  };
+
+  // Phase C — validated apply: agent dry-runs the patch, applies it for
+  // real, re-reads the Deployment to confirm, then the backend pushes a
+  // live SSE update. Only wired for oom_killed (the one hypothesis with a
+  // mechanical, well-defined fix) — see api/rca.py's apply-fix endpoint.
+  const handleApplyFix = async (r: RcaResult) => {
+    setApplyLoading(r.pod_name);
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/v1/rca/pod/${encodeURIComponent(r.pod_name)}/apply-fix?namespace=${encodeURIComponent(r.namespace)}${clusterParam ? '&' + clusterParam.slice(1) : ''}`,
+        { method: 'POST' },
+      );
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setToast({ open: true, msg: body?.detail ?? `Apply failed (HTTP ${res.status})`, sev: 'error' });
+        return;
+      }
+      const verified = body?.result?.verified;
+      const verifiedMsg = verified?.limits?.memory ? ` — confirmed live: ${verified.limits.memory}` : '';
+      setToast({ open: true, msg: `✅ Applied to ${body.deployment}/${body.container}${verifiedMsg}`, sev: 'success' });
+      await fetchAll();
+    } catch (e: any) {
+      setToast({ open: true, msg: e?.message ?? 'Network error', sev: 'error' });
+    } finally {
+      setApplyLoading(null);
     }
   };
 
@@ -331,6 +418,7 @@ const IncidentsInner: React.FC = () => {
             <Tab label={`Correlations (${correlations.length})`} sx={tabSx} />
             <Tab label={`Patterns (${patterns.length})`} sx={tabSx} />
             <Tab label="Timeline" sx={tabSx} />
+            <Tab label={`Root Cause AI (${rcaResults.length})`} sx={tabSx} />
           </Tabs>
         </Box>
 
@@ -534,6 +622,113 @@ const IncidentsInner: React.FC = () => {
               ))}
               {incidents.length === 0 && <Typography sx={{ color: DK.muted, py: 4, textAlign: 'center', fontSize: '0.85rem' }}>No incidents in timeline</Typography>}
             </List>
+          </Box>
+        )}
+
+        {/* Tab 4 — Root Cause AI */}
+        {tab === 4 && (
+          <Box p={2}>
+            <Typography sx={{ color: DK.muted, fontSize: '0.8rem', mb: 2 }}>
+              Multi-hypothesis root cause analysis — each cause is ranked by evidence gathered from real pod events,
+              not a fixed confidence number. Image-pull failures can be actively verified against the real registry
+              (DNS + manifest + pull-secret checks) — a "Validated" badge means it was confirmed, not just ranked.
+            </Typography>
+            {rcaResults.map((r, i) => {
+              const topConfidence = Math.max(
+                0, ...r.findings.flatMap(f => f.hypotheses.map(h => h.confidence))
+              );
+              return (
+                <Accordion key={i} disableGutters
+                  sx={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, mb: 1, borderRadius: '6px !important', '&:before': { display: 'none' }, '& .MuiAccordionSummary-root': { minHeight: 48 } }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ color: DK.muted }} />}>
+                    <Box display="flex" alignItems="center" gap={1.5} width="100%">
+                      <Box flexGrow={1}>
+                        <Typography sx={{ color: DK.text, fontWeight: 600, fontSize: '0.85rem', fontFamily: 'monospace' }}>{r.pod_name}</Typography>
+                        <Typography sx={{ color: DK.muted, fontSize: '0.72rem' }}>{r.namespace} · {r.findings.map(f => FAILURE_CLASS_LABEL[f.failure_class] ?? f.failure_class).join(', ')}</Typography>
+                      </Box>
+                      <Chip label={`${Math.round(topConfidence * 100)}% conf.`} size="small"
+                        sx={{ bgcolor: topConfidence > 0.7 ? `${colors.success}22` : `${colors.warning}22`, color: topConfidence > 0.7 ? colors.success : colors.warning, border: `1px solid ${topConfidence > 0.7 ? `${colors.success}44` : `${colors.warning}44`}`, fontWeight: 700, fontSize: '0.68rem' }} />
+                    </Box>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ bgcolor: DK.bg, borderTop: `1px solid ${DK.border}`, p: 2 }}>
+                    {r.findings.map((f, fi) => (
+                      <Box key={fi} mb={fi < r.findings.length - 1 ? 2.5 : 0}>
+                        <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                          <Typography sx={{ color: DK.muted, fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                            {FAILURE_CLASS_LABEL[f.failure_class] ?? f.failure_class}
+                          </Typography>
+                          {f.failure_class === 'image_pull' && !f.hypotheses.some(h => h.validated) && (
+                            <Button size="small" variant="outlined"
+                              disabled={verifyLoading === r.pod_name}
+                              onClick={() => handleVerifyNetwork(r)}
+                              sx={{ fontSize: '0.65rem', px: 1, py: 0.2, textTransform: 'none', minWidth: 0,
+                                borderColor: colors.info, color: colors.info }}>
+                              {verifyLoading === r.pod_name ? 'Verifying…' : 'Verify against real registry'}
+                            </Button>
+                          )}
+                          {f.failure_class === 'oom_killed' && (
+                            <Button size="small" variant="contained"
+                              disabled={applyLoading === r.pod_name}
+                              onClick={() => handleApplyFix(r)}
+                              sx={{ fontSize: '0.65rem', px: 1, py: 0.2, textTransform: 'none', minWidth: 0,
+                                bgcolor: colors.success, color: '#fff', '&:hover': { bgcolor: colors.success } }}>
+                              {applyLoading === r.pod_name ? 'Applying…' : 'Apply Fix'}
+                            </Button>
+                          )}
+                        </Box>
+                        {f.hypotheses.map((h, hi) => (
+                          <Box key={hi} sx={{ bgcolor: DK.surface2, border: `1px solid ${DK.border}`, borderRadius: 1.5, p: 1.5, mb: 1 }}>
+                            <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1} mb={0.75}>
+                              <Typography sx={{ color: DK.text, fontSize: '0.82rem', fontWeight: 600 }}>{h.cause}</Typography>
+                              <Box display="flex" gap={0.5} flexShrink={0}>
+                                {h.validated && (
+                                  <Chip label="Validated" size="small"
+                                    sx={{ bgcolor: `${colors.success}22`, color: colors.success, border: `1px solid ${colors.success}44`, fontWeight: 700, fontSize: '0.6rem' }} />
+                                )}
+                                <Chip label={`${Math.round(h.confidence * 100)}%`} size="small"
+                                  sx={{ bgcolor: `${colors.info}22`, color: colors.info, border: `1px solid ${colors.info}44`, fontWeight: 700, fontSize: '0.65rem' }} />
+                              </Box>
+                            </Box>
+                            {h.evidence.length > 0 && (
+                              <Box mb={0.75}>
+                                {h.evidence.map((e, ei) => (
+                                  <Typography key={ei} sx={{ color: DK.muted, fontSize: '0.72rem', fontFamily: 'monospace', mb: 0.25 }}>
+                                    · [{e.signal}] {e.detail}
+                                  </Typography>
+                                ))}
+                              </Box>
+                            )}
+                            <Box sx={{ bgcolor: `${colors.success}11`, border: `1px solid ${colors.success}33`, borderRadius: 1, p: 1, mb: h.steps.length > 0 ? 0.75 : 0 }}>
+                              <Typography sx={{ color: colors.success, fontSize: '0.78rem' }}>{h.recommendation}</Typography>
+                            </Box>
+                            {h.steps.length > 0 && (
+                              <List disablePadding>
+                                {h.steps.map((step, si) => (
+                                  <ListItem key={si} disablePadding sx={{ py: 0.3 }}>
+                                    <Box display="flex" gap={1} alignItems="flex-start">
+                                      <Chip label={`${si + 1}`} size="small"
+                                        sx={{ bgcolor: `${colors.info}22`, color: colors.info, border: `1px solid ${colors.info}44`, fontWeight: 700, fontSize: '0.6rem', minWidth: 20, height: 18 }} />
+                                      <Typography sx={{ color: DK.muted, fontSize: '0.76rem' }}>{step}</Typography>
+                                    </Box>
+                                  </ListItem>
+                                ))}
+                              </List>
+                            )}
+                            {h.fix_confidence !== undefined && (
+                              <Typography sx={{ color: DK.muted, fontSize: '0.7rem', mt: 0.75, fontStyle: 'italic' }}>
+                                This fix has resolved the issue {Math.round(h.fix_confidence * 100)}% of the time it's
+                                been applied ({h.fix_confidence_sample_size} prior application{h.fix_confidence_sample_size === 1 ? '' : 's'}).
+                              </Typography>
+                            )}
+                          </Box>
+                        ))}
+                      </Box>
+                    ))}
+                  </AccordionDetails>
+                </Accordion>
+              );
+            })}
+            {rcaResults.length === 0 && <Typography sx={{ color: DK.muted, py: 4, textAlign: 'center', fontSize: '0.85rem' }}>No failing pods detected — cluster looks healthy</Typography>}
           </Box>
         )}
       </Card>

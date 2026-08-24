@@ -31,6 +31,7 @@ from api import (
     simulation,
     guardrails,
     incidents,
+    rca,
     predictive,
     carbon,
     benchmarking,
@@ -226,6 +227,7 @@ app.include_router(root_cause.router, prefix="/api/v1/root-cause", tags=["Root C
 app.include_router(simulation.router, prefix="/api/v1/simulation", tags=["Simulation"])
 app.include_router(guardrails.router, prefix="/api/v1/guardrails", tags=["CI/CD Guardrails"])
 app.include_router(incidents.router, prefix="/api/v1/incidents", tags=["Incident Correlation"])
+app.include_router(rca.router, prefix="/api/v1/rca", tags=["Root Cause Analysis"])
 app.include_router(predictive.router, prefix="/api/v1/predictive", tags=["Predictive Scaling"])
 app.include_router(carbon.router, prefix="/api/v1/carbon", tags=["Carbon Footprint"])
 app.include_router(benchmarking.router, prefix="/api/v1/benchmarking", tags=["Benchmarking"])

@@ -103,6 +103,15 @@ sys.modules["services.cost_service"] = _cost_service_mod
 _cost_service_spec.loader.exec_module(_cost_service_mod)
 _svc.cost_service = _cost_service_mod  # type: ignore
 
+# rca_engine also has zero external deps — load the real module (Phase A RCA engine)
+_rca_engine_spec = _importlib_util.spec_from_file_location(
+    "services.rca_engine", os.path.join(_backend_dir, "services", "rca_engine.py")
+)
+_rca_engine_mod = _importlib_util.module_from_spec(_rca_engine_spec)
+sys.modules["services.rca_engine"] = _rca_engine_mod
+_rca_engine_spec.loader.exec_module(_rca_engine_mod)
+_svc.rca_engine = _rca_engine_mod  # type: ignore
+
 # redis / aioredis
 sys.modules.setdefault("redis", MagicMock())
 sys.modules.setdefault("aioredis", MagicMock())

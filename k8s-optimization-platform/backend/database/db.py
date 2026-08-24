@@ -342,6 +342,35 @@ class DatabaseManager:
                 ON falco_alerts(cluster_name, received_at DESC)
             """)
 
+            # ── rca_fix_outcomes — Phase D outcome tracking ────────────────────
+            # One row per apply-fix event. Resolved (pending -> recovered/
+            # not_recovered/unknown) opportunistically whenever fresh metrics
+            # arrive for that cluster (see agent_receiver.py's /metrics),
+            # rather than a separate scheduled poller — the metrics pipeline
+            # already runs every collection cycle, no need to duplicate it.
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS rca_fix_outcomes (
+                    id                 BIGSERIAL PRIMARY KEY,
+                    cluster_name       TEXT NOT NULL,
+                    pod_name           TEXT NOT NULL,
+                    namespace          TEXT NOT NULL,
+                    failure_class      TEXT NOT NULL,
+                    fix_detail         JSONB NOT NULL DEFAULT '{}',
+                    applied_at         TEXT NOT NULL,
+                    baseline_restarts  INTEGER NOT NULL DEFAULT 0,
+                    outcome            TEXT NOT NULL DEFAULT 'pending',
+                    checked_at         TEXT
+                )
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_rca_fix_outcomes_pending
+                ON rca_fix_outcomes(cluster_name, outcome)
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS idx_rca_fix_outcomes_class
+                ON rca_fix_outcomes(failure_class, outcome)
+            """)
+
             conn.commit()
             logger.info("Schema init/migration complete")
 
@@ -789,6 +818,90 @@ class DatabaseManager:
         except Exception as e:
             logger.error(f"Error reading falco alerts: {e}")
             return []
+
+    # ── rca_fix_outcomes — Phase D outcome tracking ─────────────────────────
+
+    def record_rca_fix_applied(self, cluster_name: str, pod_name: str, namespace: str,
+                                failure_class: str, fix_detail: Dict[str, Any],
+                                baseline_restarts: int) -> bool:
+        try:
+            now = datetime.utcnow().isoformat()
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """INSERT INTO rca_fix_outcomes
+                       (cluster_name, pod_name, namespace, failure_class, fix_detail,
+                        applied_at, baseline_restarts, outcome)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending')""",
+                    (cluster_name, pod_name, namespace, failure_class,
+                     json.dumps(fix_detail), now, baseline_restarts),
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error recording RCA fix outcome: {e}")
+            return False
+
+    def get_pending_rca_outcomes(self, cluster_name: str, older_than_minutes: int) -> List[Dict[str, Any]]:
+        """Fixes applied at least `older_than_minutes` ago that haven't
+        been resolved yet — old enough that a real restart/recovery would
+        already be visible in the latest metrics."""
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT id, pod_name, namespace, failure_class, baseline_restarts
+                       FROM rca_fix_outcomes
+                       WHERE cluster_name = %s AND outcome = 'pending'
+                         AND applied_at < (NOW() AT TIME ZONE 'utc' - INTERVAL '1 minute' * %s)::text""",
+                    (cluster_name, older_than_minutes),
+                )
+                return [dict(r) for r in cur.fetchall()]
+        except Exception as e:
+            logger.error(f"Error reading pending RCA outcomes: {e}")
+            return []
+
+    def resolve_rca_outcome(self, outcome_id: int, outcome: str) -> bool:
+        try:
+            now = datetime.utcnow().isoformat()
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    "UPDATE rca_fix_outcomes SET outcome = %s, checked_at = %s WHERE id = %s",
+                    (outcome, now, outcome_id),
+                )
+                conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Error resolving RCA outcome: {e}")
+            return False
+
+    def get_rca_fix_success_rate(self, failure_class: str, min_samples: int = 3) -> Optional[Dict[str, Any]]:
+        """Empirical success rate for a failure class's fix, across all
+        clusters — None until enough resolved outcomes exist (Phase D:
+        this is what eventually calibrates confidence instead of a fixed
+        formula; too few samples would just be noise dressed up as data)."""
+        try:
+            with self._conn() as conn:
+                cur = conn.cursor()
+                cur.execute(
+                    """SELECT outcome, COUNT(*) as n FROM rca_fix_outcomes
+                       WHERE failure_class = %s AND outcome IN ('recovered', 'not_recovered')
+                       GROUP BY outcome""",
+                    (failure_class,),
+                )
+                counts = {r["outcome"] if isinstance(r, dict) else r[0]:
+                          r["n"] if isinstance(r, dict) else r[1] for r in cur.fetchall()}
+            total = sum(counts.values())
+            if total < min_samples:
+                return None
+            return {
+                "sample_size": total,
+                "success_rate": round(counts.get("recovered", 0) / total, 3),
+            }
+        except Exception as e:
+            logger.error(f"Error computing RCA fix success rate: {e}")
+            return None
 
     def get_pod_utilization_history(self, cluster_name: str, namespace: str,
                                      pod_name: str, days: int = 7) -> Dict[str, Any]:

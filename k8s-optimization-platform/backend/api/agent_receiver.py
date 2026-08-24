@@ -17,6 +17,30 @@ from api.tokens import get_token_org
 
 logger = logging.getLogger(__name__)
 
+# ── Phase D: RCA fix outcome tracking ────────────────────────────────────────
+RCA_OUTCOME_CHECK_DELAY_MINUTES = 5
+
+
+def _resolve_pending_rca_outcomes(cluster_name: str, pods_domain: Dict[str, Any]) -> None:
+    """Check any RCA fixes applied >= RCA_OUTCOME_CHECK_DELAY_MINUTES ago
+    against the fresh pod data that just arrived — did the pod actually
+    recover? Piggybacks on the existing metrics pipeline (runs every
+    collection cycle already) instead of adding a separate scheduled
+    poller for something this infrequent."""
+    from services.rca_engine import determine_recovery
+
+    pending = db_manager.get_pending_rca_outcomes(cluster_name, RCA_OUTCOME_CHECK_DELAY_MINUTES)
+    if not pending:
+        return
+
+    pod_list = (pods_domain or {}).get("items", [])
+    by_key = {(p.get("namespace"), p.get("name")): p for p in pod_list}
+
+    for row in pending:
+        pod = by_key.get((row["namespace"], row["pod_name"]))
+        outcome = determine_recovery(pod, row["baseline_restarts"])
+        db_manager.resolve_rca_outcome(row["id"], outcome)
+
 router = APIRouter(prefix="/api/agents", tags=["agent"])
 
 # ── SSE broadcast bus ─────────────────────────────────────────────────────────
@@ -224,6 +248,7 @@ async def receive_metrics(
 
         db_manager.update_cluster_heartbeat(cluster_name, "active")
         logger.debug(f"Metrics received from {cluster_name} (agent_v={metrics.agent_version})")
+        _resolve_pending_rca_outcomes(cluster_name, metrics.pods)
         # Notify all connected SSE clients that fresh data is available
         _broadcast(cluster_name)
         return {"status": "success", "message": "Metrics received"}

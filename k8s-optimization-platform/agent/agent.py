@@ -256,6 +256,116 @@ def _parse_hubble_metrics(text: str) -> List[Dict[str, Any]]:
     return entries
 
 
+def _parse_image_ref(image: str) -> Tuple[str, str, str]:
+    """
+    Standard Docker image reference parsing: (registry_host, repository, tag).
+    'nginx:1.25' -> (docker.io, library/nginx, 1.25)
+    'myorg/app:v1' -> (docker.io, myorg/app, v1)
+    'ghcr.io/org/app:v1' -> (ghcr.io, org/app, v1)
+    'private.registry:5000/app' -> (private.registry:5000, app, latest)
+    Same "does the first path segment look like a host" heuristic every
+    Docker-compatible tool uses (a dot, a colon, or literal 'localhost').
+    """
+    ref = image
+    digest = None
+    if "@" in ref:
+        ref, digest = ref.split("@", 1)
+
+    tag = "latest"
+    # Split off the tag (colon after the last slash only — a port's colon
+    # comes before the last slash, e.g. "host:5000/repo").
+    last_slash = ref.rfind("/")
+    last_colon = ref.rfind(":")
+    if last_colon > last_slash:
+        ref, tag = ref[:last_colon], ref[last_colon + 1:]
+
+    parts = ref.split("/", 1)
+    if len(parts) == 2 and ("." in parts[0] or ":" in parts[0] or parts[0] == "localhost"):
+        registry_host, repo = parts
+    else:
+        registry_host = "registry-1.docker.io"
+        repo = ref if "/" in ref else f"library/{ref}"
+
+    return registry_host, repo, (digest or tag)
+
+
+def _interpret_manifest_response(status_code: int) -> str:
+    """Pure classification of a registry manifest-check's FINAL HTTP response
+    (after any anonymous-token retry has already happened) — split from the
+    actual request (_check_registry_manifest) so this is testable without
+    hitting a real registry."""
+    if status_code == 200:
+        return "exists"
+    if status_code == 404:
+        return "not_found"
+    if status_code in (401, 403):
+        return "auth_required"
+    if status_code == 429:
+        return "rate_limited"
+    return "unreachable"
+
+
+def _check_registry_manifest(registry_host: str, repo: str, tag: str, timeout: float = 8) -> Dict[str, Any]:
+    """
+    Anonymous (unauthenticated) check of whether an image:tag exists on its
+    registry — real evidence for the ImagePullInvestigator's "doesn't
+    exist" vs "needs auth" hypotheses, instead of leaving them unverified.
+
+    Uses a bare `requests` call (deliberately NOT self._session, which
+    carries this agent's own platform Authorization header — that must
+    never be sent to a third-party registry). Handles the standard Docker
+    Registry v2 Bearer-token anonymous-pull challenge (RFC-ish, used by
+    Docker Hub, ghcr.io, and most others) so public images resolve
+    correctly instead of reporting a false "auth_required".
+    """
+    url = f"https://{registry_host}/v2/{repo}/manifests/{tag}"
+    headers = {"Accept": "application/vnd.docker.distribution.manifest.v2+json, "
+                         "application/vnd.oci.image.manifest.v1+json"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=timeout)
+    except requests.exceptions.RequestException as e:
+        return {"status": "unreachable", "http_status": None, "detail": str(e)}
+
+    if resp.status_code in (401, 403):
+        www_auth = resp.headers.get("Www-Authenticate", "")
+        challenge = dict(re.findall(r'(\w+)="([^"]*)"', www_auth))
+        realm = challenge.get("realm")
+        if realm:
+            try:
+                token_resp = requests.get(realm, params={
+                    k: v for k, v in challenge.items() if k in ("service", "scope")
+                }, timeout=timeout)
+                token = (token_resp.json() or {}).get("token") or (token_resp.json() or {}).get("access_token")
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+                    resp = requests.get(url, headers=headers, timeout=timeout)
+            except requests.exceptions.RequestException:
+                pass  # fall through with the original 401/403 — real auth is genuinely required
+
+    return {
+        "status": _interpret_manifest_response(resp.status_code),
+        "http_status": resp.status_code,
+        "detail": f"GET {url} -> {resp.status_code}",
+    }
+
+
+def _check_registry_dns(registry_host: str, timeout: float = 3) -> Dict[str, Any]:
+    """Real DNS resolution of the registry host from this agent's network —
+    doesn't prove the FAILING pod's exact network path (different namespace,
+    possibly different NetworkPolicy), but a cluster-wide DNS failure here
+    is strong real corroboration, not a guess."""
+    host = registry_host.split(":")[0]
+    import socket
+    try:
+        socket.setdefaulttimeout(timeout)
+        addrs = socket.getaddrinfo(host, 443)
+        return {"resolved": True, "addresses": sorted({a[4][0] for a in addrs})}
+    except socket.gaierror as e:
+        return {"resolved": False, "error": str(e)}
+    finally:
+        socket.setdefaulttimeout(None)
+
+
 def _parse_argocd_apps(raw: List[Dict]) -> List[Dict[str, Any]]:
     apps = []
     for a in raw:
@@ -2396,6 +2506,63 @@ class ClusterAgent:
             logger.error("Command id=%d failed: %s", cmd_id, exc)
             self._ack_command(cmd_id, success=False, result={"error": str(exc)})
 
+    def _diagnose_image_pull(self, pod_name: str, namespace: str) -> Dict[str, Any]:
+        """
+        Read-only diagnostic probe for the RCA engine's ImagePullInvestigator
+        (backend/services/rca_engine.py) — Phase B. Re-reads the pod LIVE
+        (not from the periodic collection cache) so the diagnosis reflects
+        its current real state, then actively verifies rather than guesses:
+        does the image:tag really exist on its registry, is the DNS
+        resolvable, and does the pod's ServiceAccount actually have a
+        pull secret valid for that registry. Zero cluster mutations.
+        """
+        pod = self.core.read_namespaced_pod(name=pod_name, namespace=namespace)
+        containers = pod.spec.containers or []
+        image = containers[0].image if containers else "unknown"
+        sa_name = pod.spec.service_account_name or "default"
+
+        registry_host, repo, tag = _parse_image_ref(image)
+        registry_check = _check_registry_manifest(registry_host, repo, tag)
+        dns_check = _check_registry_dns(registry_host)
+
+        pull_secret_names = {s.name for s in (pod.spec.image_pull_secrets or [])}
+        try:
+            sa = self.core.read_namespaced_service_account(name=sa_name, namespace=namespace)
+            pull_secret_names |= {s.name for s in (sa.image_pull_secrets or [])}
+        except ApiException:
+            pass
+
+        has_matching_secret = False
+        secrets_checked = []
+        for secret_name in pull_secret_names:
+            try:
+                secret = self.core.read_namespaced_secret(name=secret_name, namespace=namespace)
+                raw = (secret.data or {}).get(".dockerconfigjson") or (secret.data or {}).get(".dockercfg")
+                if not raw:
+                    continue
+                import base64 as _b64
+                cfg = json.loads(_b64.b64decode(raw))
+                auths = cfg.get("auths", cfg)  # .dockercfg has no "auths" wrapper
+                secrets_checked.append(secret_name)
+                for host in auths:
+                    # docker.io credentials are commonly stored under the legacy
+                    # "https://index.docker.io/v1/" key, not the real API host.
+                    normalized = host.replace("https://", "").replace("http://", "").rstrip("/")
+                    if normalized == registry_host or (registry_host == "registry-1.docker.io" and "docker.io" in normalized):
+                        has_matching_secret = True
+            except Exception:
+                continue
+
+        return {
+            "image": image,
+            "registry_host": registry_host,
+            "registry_check": registry_check,
+            "dns_check": dns_check,
+            "service_account": sa_name,
+            "pull_secrets_checked": secrets_checked,
+            "has_matching_pull_secret": has_matching_secret,
+        }
+
     def _run_k8s_command(self, command: str, params: Dict[str, Any]) -> Dict[str, Any]:
         """Execute a single kubectl-style command and return a result dict."""
         ns   = params["namespace"]
@@ -2434,10 +2601,31 @@ class ClusterAgent:
             container_entry: Dict[str, Any] = {"resources": resources}
             if params.get("container_name"):
                 container_entry["name"] = params["container_name"]
-            self.apps.patch_namespaced_deployment(
-                name=name, namespace=ns,
-                body={"spec": {"template": {"spec": {"containers": [container_entry]}}}})
-            return {"patched": resources}
+            body = {"spec": {"template": {"spec": {"containers": [container_entry]}}}}
+
+            # Validate before applying — server-side dry-run catches a bad
+            # patch (invalid quantity, admission-webhook rejection, etc.)
+            # without ever touching the real object. See docs on Phase C's
+            # validate -> apply -> re-verify pipeline (RCA engine).
+            self.apps.patch_namespaced_deployment(name=name, namespace=ns, body=body, dry_run="All")
+
+            self.apps.patch_namespaced_deployment(name=name, namespace=ns, body=body)
+
+            # Re-verify immediately — confirm the real object reflects the
+            # change rather than trusting "the API call didn't error".
+            updated = self.apps.read_namespaced_deployment(name=name, namespace=ns)
+            verified: Dict[str, Any] = {}
+            for c in (updated.spec.template.spec.containers or []):
+                if params.get("container_name") and c.name != params["container_name"]:
+                    continue
+                verified = {
+                    "container": c.name,
+                    "requests": dict(c.resources.requests or {}),
+                    "limits":   dict(c.resources.limits or {}),
+                }
+                break
+
+            return {"patched": resources, "verified": verified}
 
         if command == "patch_deployment_security_context":
             deployment = self.apps.read_namespaced_deployment(name=name, namespace=ns)
@@ -2570,6 +2758,9 @@ class ClusterAgent:
                 timestamps=False,
             )
             return {"logs": logs or ""}
+
+        if command == "diagnose_image_pull":
+            return self._diagnose_image_pull(name, ns)
 
         if command == "delete_network_policy":
             self.net.delete_namespaced_network_policy(name=name, namespace=ns)
